@@ -178,9 +178,9 @@ struct CandleChart: View {
         let start = min(end - 1, max(0, Int((anchor - chart.visibleBars).rounded(.down))))
         let visible = bars[start..<end]
 
-        // Price area takes the top 80%, volume the bottom 20%.
+        // Candles use the full height; volume fills the bottom 18% behind them and doesn't squeeze them.
         let volumeHeight = plot.height * 0.18
-        let priceRect = CGRect(x: plot.minX, y: plot.minY, width: plot.width, height: plot.height - volumeHeight - 4)
+        let priceRect = plot
 
         var lo = visible.map(\.low).min() ?? 0
         var hi = visible.map(\.high).max() ?? 1
