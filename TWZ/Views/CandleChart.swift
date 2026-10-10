@@ -294,14 +294,10 @@ struct CandleChart: View {
             drawLine(in: &ctx, y: y(last), plot: plot, color: color, dashed: false, tag: Fmt.price(last))
         }
 
-        // Crosshair + OHLCV readout.
-        var readout = bars[min(end, max(start + 1, Int(anchor.rounded(.up)))) - 1]
+        // Crosshair (horizontal only).
         if let hover, plot.contains(hover) {
-            let index = min(end - 1, max(start, Int((anchor - Double((anchorX - hover.x) / barWidth)).rounded(.down))))
-            readout = bars[index]
             var cross = Path()
             cross.move(to: CGPoint(x: plot.minX, y: hover.y)); cross.addLine(to: CGPoint(x: plot.maxX, y: hover.y))
-            cross.move(to: CGPoint(x: x(index), y: plot.minY)); cross.addLine(to: CGPoint(x: x(index), y: plot.maxY))
             ctx.stroke(cross, with: .color(.secondary.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
             if priceRect.contains(hover) {
                 let hoverPrice = v.price(at: hover.y)
@@ -319,11 +315,6 @@ struct CandleChart: View {
                         color: optionHeld && onAltClick != nil ? .purple : .gray)
             }
         }
-        let change = readout.open > 0 ? (readout.close - readout.open) / readout.open * 100 : 0
-        var info = "O \(Fmt.price(readout.open))  H \(Fmt.price(readout.high))  L \(Fmt.price(readout.low))  C \(Fmt.price(readout.close))  \(Fmt.percent(change))  V \(Fmt.volume(readout.volume))"
-        if chart.timeframe.isIntraday, readout.phase != .regular { info += "  · \(readout.phase.rawValue)" }
-        ctx.draw(Text(info).font(.system(size: 10).monospacedDigit()).foregroundStyle(.secondary),
-                 at: CGPoint(x: plot.minX + 6, y: plot.minY + 2), anchor: .topLeading)
     }
 
     private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, tag: String) {
