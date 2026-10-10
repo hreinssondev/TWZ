@@ -46,7 +46,7 @@ struct AccountBar: View {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.borderless)
-            .help("Connection settings")
+            .help("Settings")
         }
         .padding(.leading, Self.trafficLightsWidth)
         .padding(.trailing, 12)
@@ -105,73 +105,5 @@ private struct WindowControlsProbe: NSViewRepresentable {
                 onChange((window.frame.height - frame.midY).rounded())
             }
         }
-    }
-}
-
-struct SettingsView: View {
-    @Environment(Broker.self) private var broker
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var host = ""
-    @State private var port = 4002
-    @State private var clientId = 1
-    @State private var allowDelayed = true
-    @State private var confirmLive = false
-
-    private let presets: [(String, Int)] = [
-        ("IB Gateway – Paper", 4002), ("IB Gateway – Live", 4001),
-        ("TWS – Paper", 7497), ("TWS – Live", 7496),
-    ]
-
-    var body: some View {
-        Form {
-            Section("IB Gateway") {
-                TextField("Host", text: $host)
-                Picker("Port", selection: $port) {
-                    ForEach(presets, id: \.1) { name, p in Text("\(name) (\(String(p)))").tag(p) }
-                }
-                TextField("Client ID", value: $clientId, format: .number.grouping(.never))
-            }
-            Section("Market data") {
-                Toggle("Fall back to delayed data when not subscribed", isOn: $allowDelayed)
-            }
-            if port == 4001 || port == 7496 {
-                Text("⚠︎ Live trading: hotkeys will send real orders.")
-                    .foregroundStyle(.red)
-            }
-        }
-        .formStyle(.grouped)
-        .frame(width: 420)
-        .onAppear {
-            host = broker.host
-            port = broker.port
-            clientId = broker.clientId
-            allowDelayed = broker.allowDelayedData
-        }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save & Reconnect") {
-                    let goingLive = (port == 4001 || port == 7496) && !broker.isLivePort
-                    if goingLive { confirmLive = true } else { apply() }
-                }
-            }
-        }
-        .alert("Switch to LIVE trading?", isPresented: $confirmLive) {
-            Button("Cancel", role: .cancel) {}
-            Button("Go Live", role: .destructive) { apply() }
-        } message: {
-            Text("Orders placed from hotkeys will be sent to your real account.")
-        }
-    }
-
-    private func apply() {
-        broker.host = host.trimmingCharacters(in: .whitespaces)
-        broker.port = port
-        broker.clientId = clientId
-        broker.allowDelayedData = allowDelayed
-        broker.disconnect()
-        broker.connect()
-        dismiss()
     }
 }

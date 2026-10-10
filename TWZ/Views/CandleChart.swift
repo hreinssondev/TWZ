@@ -21,6 +21,9 @@ struct CandleChart: View {
     var lastPrice: Double?
     var lines: [PriceLine] = []
 
+    @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
+    @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
+    @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
     @State private var hover: CGPoint?
     @State private var dragStartScroll: Double?
 
@@ -142,8 +145,7 @@ struct CandleChart: View {
 
         let gridColor = Color.primary.opacity(0.07)
         let labelColor = Color.secondary
-        let up = Color(red: 0.15, green: 0.65, blue: 0.60)
-        let down = Color(red: 0.94, green: 0.33, blue: 0.31)
+        let (up, down) = candleTheme.colors(customUp: customUp, customDown: customDown)
 
         // Horizontal grid + price labels.
         for tick in Self.niceTicks(lo: lo, hi: hi, count: max(3, Int(priceRect.height / 45))) {
