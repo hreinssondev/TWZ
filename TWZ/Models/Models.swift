@@ -296,17 +296,23 @@ enum MarketSession {
         case preMarket = "Pre-market"
         case regular = "Regular hours"
         case afterHours = "After hours"
+        case overnight = "Overnight"
         case closed = "Closed"
     }
 
-    /// US equity session: pre 04:00–09:30, regular 09:30–16:00, after 16:00–20:00 ET, Mon–Fri.
+    /// US equity session: pre 04:00–09:30, regular 09:30–16:00, after 16:00–20:00 ET, Mon–Fri;
+    /// IBKR's overnight session runs 20:00–03:50 ET from Sunday evening to Friday morning.
     static func phase(_ date: Date = Date()) -> Phase {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = eastern
         let c = cal.dateComponents([.weekday, .hour, .minute], from: date)
-        guard let weekday = c.weekday, (2...6).contains(weekday),
-              let h = c.hour, let m = c.minute else { return .closed }
-        switch h * 60 + m {
+        guard let weekday = c.weekday, let h = c.hour, let m = c.minute else { return .closed }
+        let minutes = h * 60 + m
+        let isWeekday = (2...6).contains(weekday)                         // Mon–Fri
+        if minutes >= 20 * 60, (1...5).contains(weekday) { return .overnight }   // Sun–Thu evening
+        if minutes < 3 * 60 + 50, isWeekday { return .overnight }               // Mon–Fri early morning
+        guard isWeekday else { return .closed }
+        switch minutes {
         case 4 * 60..<(9 * 60 + 30): return .preMarket
         case (9 * 60 + 30)..<(16 * 60): return .regular
         case (16 * 60)..<(20 * 60): return .afterHours

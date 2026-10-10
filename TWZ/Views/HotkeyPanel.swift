@@ -237,7 +237,7 @@ private struct HotkeyFields: View {
                 Toggle("Allow outside regular hours", isOn: $hotkey.outsideRth)
             }
             Text(hotkey.orderType == .market
-                 ? "Fills at the best available price. Outside regular hours it's sent as a limit 0.5% through the ask (buys) or bid (sells), since IB doesn't fill market orders then."
+                 ? "Regular hours: market order. Pre-market / after hours: limit 0.5% through the ask (buys) or bid (sells). Overnight / closed: limit at the bid (buys) or ask (sells)."
                  : "Buys: price + offset · Sells: price − offset. A positive offset fills more easily; a negative one waits for a better price.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
