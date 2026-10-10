@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct HotkeyPanel: View {
     @Environment(Broker.self) private var broker
@@ -261,20 +262,23 @@ private struct OrderAmountBox: View {
     }
 }
 
-/// Popover for editing every hotkey: pick a slot in the 6 × 2 preview, edit it below.
-/// Changes apply (and are saved) immediately.
+/// Popover for editing every hotkey: pick a slot in the 6 × 2 preview, edit it below; drag a slot
+/// onto another to reorder them. Changes apply (and are saved) immediately.
 private struct HotkeyCustomizer: View {
     @Environment(Workspace.self) private var workspace
-    @State private var selected = 0
+    @State private var selectedID: UUID?
+    @State private var draggingID: UUID?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 6)
 
     var body: some View {
         @Bindable var workspace = workspace
-        let count = min(12, workspace.hotkeys.count)
+        let slots = Array(workspace.hotkeys.prefix(12))
+        let selected = slots.firstIndex { $0.id == selectedID } ?? 0
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Customize Hotkeys").font(.headline)
+                Text("Drag to reorder").font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Reset to Defaults") {
                     workspace.hotkeys = Hotkey.defaults
@@ -282,19 +286,49 @@ private struct HotkeyCustomizer: View {
                 .controlSize(.small)
             }
             LazyVGrid(columns: columns, spacing: 6) {
-                ForEach(Array(workspace.hotkeys.prefix(12).enumerated()), id: \.element.id) { index, hotkey in
+                ForEach(Array(slots.enumerated()), id: \.element.id) { index, hotkey in
                     HotkeyButton(hotkey: hotkey, height: 36, selected: index == selected) {
-                        selected = index
+                        selectedID = hotkey.id
                     }
+                    .onDrag {
+                        draggingID = hotkey.id
+                        return NSItemProvider(object: hotkey.id.uuidString as NSString)
+                    }
+                    .onDrop(of: [.text], delegate: HotkeyReorder(target: hotkey.id, hotkeys: $workspace.hotkeys,
+                                                                  draggingID: $draggingID))
                 }
             }
-            if selected < count {
+            if selected < slots.count {
                 HotkeyFields(hotkey: $workspace.hotkeys[selected])
                     .id(workspace.hotkeys[selected].id)
             }
         }
         .padding(14)
         .frame(width: 560)
+    }
+}
+
+/// Moves the dragged hotkey into a slot as soon as it's dragged over it, so the grid shows the
+/// new order while dragging.
+private struct HotkeyReorder: DropDelegate {
+    let target: UUID
+    @Binding var hotkeys: [Hotkey]
+    @Binding var draggingID: UUID?
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingID, draggingID != target,
+              let from = hotkeys.firstIndex(where: { $0.id == draggingID }),
+              let to = hotkeys.firstIndex(where: { $0.id == target }) else { return }
+        withAnimation(.snappy(duration: 0.2)) {
+            hotkeys.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingID = nil
+        return true
     }
 }
 
