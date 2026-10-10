@@ -104,9 +104,13 @@ struct ChartPane: View {
             lines.append(PriceLine(price: p.avgCost, color: .yellow, label: "Avg"))
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
+            let side = "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"
             if let lmt = o.limitPrice {
-                lines.append(PriceLine(price: lmt, color: o.action == "BUY" ? .blue : .orange,
-                                       label: "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"))
+                lines.append(PriceLine(price: lmt, color: o.action == "BUY" ? .blue : .orange, label: side))
+            }
+            // Stop / trigger price (TRAIL's aux is a distance, not a price).
+            if let aux = o.auxPrice, !o.orderType.hasPrefix("TRAIL"), o.orderType != "REL" {
+                lines.append(PriceLine(price: aux, color: .purple, label: "\(o.orderType) \(side)"))
             }
         }
         return lines

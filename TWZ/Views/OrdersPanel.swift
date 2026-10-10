@@ -68,7 +68,7 @@ struct OrdersPanel: View {
                 }
                 HStack(spacing: 4) {
                     Text("\(Fmt.shares(o.filled))/\(Fmt.shares(o.quantity))")
-                    Text(o.orderType == "MKT" ? "MKT" : "@ \(Fmt.price(o.limitPrice))")
+                    Text(o.priceSummary)
                     Spacer(minLength: 2)
                     Text(o.status).foregroundStyle(.secondary)
                 }
@@ -135,6 +135,14 @@ struct OrdersPanel: View {
     private func empty(_ text: String) -> some View {
         Text(text).foregroundStyle(.secondary).padding(6)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private extension OrderRow {
+    /// "LMT 12.30", "STP 12.10", "STP LMT 12.10/12.05", "MKT" …
+    var priceSummary: String {
+        let prices = [auxPrice, limitPrice].compactMap { $0 }.map { Fmt.price($0) }
+        return prices.isEmpty ? orderType : "\(orderType) \(prices.joined(separator: "/"))"
     }
 }
 

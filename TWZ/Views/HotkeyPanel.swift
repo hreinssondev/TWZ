@@ -95,12 +95,26 @@ private extension Hotkey {
         }
     }
 
+    /// Compact description of what the button sends, e.g. "LMT Ask +0.02 · GTC".
     var subtitle: String {
-        guard action.needsPrice else { return action.rawValue }
-        if priceType == .market { return "MKT" }
-        let side = (action == .buy) ? "Ask" : "Bid"
-        let sign = (action == .buy) ? "+" : "−"
-        return "LMT \(side) \(sign)\(offset.formatted(.number.precision(.fractionLength(2))))"
+        guard action.placesOrder else { return action.rawValue }
+        let buy = action == .buy
+        func money(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(2))) }
+        let away = buy ? "Ask +" : "Bid −"      // toward a worse price (limits, stops)
+        let toward = buy ? "Bid −" : "Ask +"    // toward a better price (touched orders)
+        var text: String
+        switch orderType {
+        case .limit, .limitOnOpen, .limitOnClose: text = "\(orderType.short) \(away)\(money(offset))"
+        case .stop, .stopLimit: text = "\(orderType.short) \(away)\(money(triggerOffset))"
+        case .marketIfTouched, .limitIfTouched: text = "\(orderType.short) \(toward)\(money(triggerOffset))"
+        case .trailingStop, .trailingStopLimit:
+            text = "\(orderType.short) " + (trailUnit == .percent ? "\(trailAmount.formatted())%" : "$\(money(trailAmount))")
+        case .relative: text = "REL \(money(offset))"
+        default: text = orderType.short
+        }
+        if adaptive != .off && orderType.supportsAdaptive { text += " · Adaptive" }
+        if orderType.fixedTIF == nil && tif != .day { text += " · \(tif.rawValue)" }
+        return text
     }
 }
 
@@ -186,19 +200,106 @@ private struct HotkeyFields: View {
                 TextField(hotkey.sizing == .shares ? "Shares" : "Dollar amount",
                           value: $hotkey.amount, format: .number)
             }
-            if hotkey.action.needsPrice || hotkey.action == .flattenAll {
-                Picker("Order type", selection: $hotkey.priceType) {
-                    ForEach(Hotkey.PriceType.allCases) { Text($0.rawValue).tag($0) }
-                }
-                if hotkey.priceType == .limit {
-                    TextField("Limit offset ($)", value: $hotkey.offset, format: .number.precision(.fractionLength(2...4)))
-                }
-                Text("Buys: ask + offset · Sells: bid − offset. Outside regular hours, market orders are sent as marketable limits.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if hotkey.action.placesOrder {
+                orderSection
             }
         }
         .formStyle(.grouped)
+    }
+
+    @ViewBuilder private var orderSection: some View {
+        let kind = hotkey.orderType
+        Section("Order") {
+            Picker("Order type", selection: $hotkey.orderType) {
+                ForEach(OrderKind.groups, id: \.0) { group in
+                    Section(group.0) {
+                        ForEach(group.1) { Text($0.rawValue).tag($0) }
+                    }
+                }
+            }
+            if kind.usesTrigger {
+                money(kind == .stop || kind == .stopLimit ? "Stop offset ($)" : "Trigger offset ($)",
+                      $hotkey.triggerOffset)
+            }
+            if kind.usesLimitOffset {
+                money(kind.usesTrigger ? "Limit beyond trigger ($)" : "Limit offset ($)", $hotkey.offset)
+            }
+            if kind.isTrailing {
+                HStack {
+                    TextField("Trail by", value: $hotkey.trailAmount, format: .number.precision(.fractionLength(0...4)))
+                    Picker("", selection: $hotkey.trailUnit) {
+                        ForEach(Hotkey.TrailUnit.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                if kind == .trailingStopLimit {
+                    money("Limit offset from stop ($)", $hotkey.offset)
+                }
+            }
+            if kind == .relative {
+                money("Peg offset ($)", $hotkey.offset)
+            }
+            if kind.fixedTIF == nil {
+                Picker("Time in force", selection: $hotkey.tif) {
+                    ForEach(TimeInForce.selectable) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            }
+            if kind.allowsOutsideRth {
+                Toggle("Allow outside regular hours", isOn: $hotkey.outsideRth)
+            }
+            if kind.supportsAdaptive {
+                Picker("Adaptive algo", selection: $hotkey.adaptive) {
+                    ForEach(AdaptivePriority.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            }
+            Text(Self.explanation(kind))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func money(_ title: String, _ value: Binding<Double>) -> some View {
+        TextField(title, value: value, format: .number.precision(.fractionLength(2...4)))
+    }
+
+    private static func explanation(_ kind: OrderKind) -> String {
+        switch kind {
+        case .market:
+            "Fills at the best available price. Outside regular hours it's sent as a marketable limit (bid/ask ± max(offset, 0.5%))."
+        case .limit:
+            "Buys at ask + offset, sells at bid − offset, or better."
+        case .stop:
+            "Becomes a market order when price reaches the stop: buys at ask + offset, sells at bid − offset."
+        case .stopLimit:
+            "When the stop (ask + offset for buys, bid − offset for sells) is hit, a limit order is placed that far beyond it."
+        case .trailingStop:
+            "Stop follows the price by a fixed amount or percent and becomes a market order when hit."
+        case .trailingStopLimit:
+            "Trailing stop that places a limit order (stop ± limit offset) when hit."
+        case .marketIfTouched:
+            "Becomes a market order when price touches the trigger: buys at bid − offset, sells at ask + offset."
+        case .limitIfTouched:
+            "Places a limit order when price touches the trigger: buys at bid − offset, sells at ask + offset."
+        case .marketToLimit:
+            "Executes at market; any unfilled part rests as a limit at the first fill price."
+        case .midprice:
+            "IBKR prices it at or better than the NBBO midpoint."
+        case .relative:
+            "Pegged to the NBBO: buys at bid + offset, sells at ask − offset, and follows the quote."
+        case .marketOnOpen:
+            "Executes at market in the opening auction (TIF OPG)."
+        case .limitOnOpen:
+            "Limit order for the opening auction (TIF OPG): ask + offset for buys, bid − offset for sells."
+        case .marketOnClose:
+            "Executes at market in the closing auction."
+        case .limitOnClose:
+            "Limit order for the closing auction: ask + offset for buys, bid − offset for sells."
+        }
     }
 }
 
@@ -209,7 +310,7 @@ struct HotkeyEditor: View {
 
     var body: some View {
         HotkeyFields(hotkey: $hotkey)
-            .frame(width: 380)
+            .frame(width: 420)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {

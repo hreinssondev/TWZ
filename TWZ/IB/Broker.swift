@@ -14,9 +14,23 @@ import Observation
 final class Broker {
     enum ConnectionState { case disconnected, connecting, connected }
 
-    enum OrderPrice {
-        case market
-        case limit(Double)
+    /// Everything placeOrder needs beyond symbol/side/size. Unset prices are sent as empty fields.
+    struct OrderSpec {
+        var orderType = "MKT"
+        var limitPrice: Double?
+        var auxPrice: Double?           // stop / trigger price, trailing amount, or REL offset
+        var trailStopPrice: Double?
+        var trailingPercent: Double?
+        var limitPriceOffset: Double?   // TRAIL LIMIT: limit distance from the trailing stop
+        var tif = "DAY"
+        var outsideRth = false
+        var algoStrategy = ""
+        var algoParams: [(String, String)] = []
+
+        static let market = OrderSpec()
+        static func limit(_ price: Double) -> OrderSpec {
+            OrderSpec(orderType: "LMT", limitPrice: price, outsideRth: true)
+        }
     }
 
     // MARK: Connection settings (persisted)
@@ -309,7 +323,7 @@ final class Broker {
     // MARK: - Orders
 
     @discardableResult
-    func placeOrder(symbol: String, action: String, quantity: Double, price: OrderPrice) -> Bool {
+    func placeOrder(symbol: String, action: String, quantity: Double, spec: OrderSpec) -> Bool {
         guard apiReady, let orderId = nextOrderId else {
             lastMessage = "Not connected"
             return false
@@ -320,35 +334,31 @@ final class Broker {
         }
         nextOrderId = orderId + 1
 
-        var orderType = "MKT"
-        var limit: Double?
-        var outsideRth = false
-        switch price {
-        case .market:
-            break
-        case .limit(let p):
-            orderType = "LMT"
-            limit = p
-            outsideRth = true   // lets limit orders work pre-market and after hours
-        }
-
+        let unset = Self.unsetDouble
         var f: [Any] = [3, orderId]
         f += contract(symbol)
         f += ["", ""]                                                     // secIdType, secId
-        f += [action, quantity, orderType, limit ?? Self.unsetDouble, Self.unsetDouble, "DAY", "", account, "", 0, "TWZ"]
-        f += [true, 0, false, false, 0, 0, outsideRth, false]             // transmit … hidden
+        f += [action, quantity, spec.orderType, spec.limitPrice ?? unset, spec.auxPrice ?? unset,
+              spec.tif, "", account, "", 0, "TWZ"]                        // … tif, ocaGroup, account, openClose, origin, orderRef
+        f += [true, 0, false, false, 0, 0, spec.outsideRth, false]        // transmit … hidden
         f += ["", 0.0, "", "", "", "", ""]                                // sharesAlloc, discretionary, GAT, GTD, FA
         if serverVersion < 177 { f += [""] }                              // faProfile
         f += ["", 0, "", -1, 0, "", "", false, Int.unset, Self.unsetDouble, false, false, Self.unsetDouble]
         f += [0, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble]
         f += [false, Self.unsetDouble, Int.unset, "", Self.unsetDouble]   // override%, volatility, volType, deltaNeutral
-        f += [false, Int.unset, Self.unsetDouble, Self.unsetDouble, Int.unset, Int.unset, Self.unsetDouble]
+        f += [false, Int.unset, spec.trailStopPrice ?? unset, spec.trailingPercent ?? unset]  // continuousUpdate, refPriceType
+        f += [Int.unset, Int.unset, Self.unsetDouble]                     // scale init/subs size, price increment
         f += ["", "", "", ""]                                             // scaleTable, activeStart/Stop, hedgeType
         f += [false, "", "", false]                                       // optOutSmart, clearing, notHeld
-        f += [false, ""]                                                  // deltaNeutralContract, algoStrategy
+        f += [false, spec.algoStrategy]                                   // deltaNeutralContract, algoStrategy
+        if !spec.algoStrategy.isEmpty {
+            f += [spec.algoParams.count]
+            for (tag, value) in spec.algoParams { f += [tag, value] }
+        }
         f += ["", false, "", false, false, false]                         // algoId, whatIf, misc, solicited, randomize
         f += [0]                                                          // conditions
-        f += ["", Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, 0, ""]
+        // adjustedOrderType, triggerPrice, lmtPriceOffset, adjusted stop/stopLimit/trailing, trailing unit, extOperator
+        f += ["", Self.unsetDouble, spec.limitPriceOffset ?? unset, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, 0, ""]
         f += ["", "", Self.unsetDouble, "", "", "", "", false, false, false, Int.unset]
         if serverVersion >= 158 { f += [Int.unset] }                      // duration
         if serverVersion >= 160 { f += [Int.unset] }                      // postToAts
@@ -359,7 +369,7 @@ final class Broker {
 
         orders[orderId] = OrderRow(
             id: orderId, symbol: symbol, action: action, quantity: quantity,
-            orderType: orderType, limitPrice: limit, status: "PendingSubmit"
+            orderType: spec.orderType, limitPrice: spec.limitPrice, auxPrice: spec.auxPrice, status: "PendingSubmit"
         )
         return true
     }
@@ -404,7 +414,7 @@ final class Broker {
                 return
             }
             let action = hotkey.action == .buy ? "BUY" : "SELL"
-            guard let price = orderPrice(symbol: symbol, action: action, hotkey: hotkey) else { return }
+            guard let spec = orderSpec(symbol: symbol, action: action, hotkey: hotkey) else { return }
             let quantity: Double
             switch hotkey.sizing {
             case .shares:
@@ -420,7 +430,7 @@ final class Broker {
                 lastMessage = "Size too small for \(symbol)"
                 return
             }
-            placeOrder(symbol: symbol, action: action, quantity: quantity, price: price)
+            placeOrder(symbol: symbol, action: action, quantity: quantity, spec: spec)
         }
     }
 
@@ -428,8 +438,8 @@ final class Broker {
         let action = p.quantity > 0 ? "SELL" : "BUY"
         var quantity = (abs(p.quantity) * fraction).rounded(.down)
         if quantity < 1 { quantity = abs(p.quantity) }
-        guard let price = orderPrice(symbol: p.symbol, action: action, hotkey: hotkey) else { return }
-        placeOrder(symbol: p.symbol, action: action, quantity: quantity, price: price)
+        guard let spec = orderSpec(symbol: p.symbol, action: action, hotkey: hotkey) else { return }
+        placeOrder(symbol: p.symbol, action: action, quantity: quantity, spec: spec)
     }
 
     /// Buys reference the ask, sells the bid; falls back to last.
@@ -438,17 +448,81 @@ final class Broker {
         return (action == "BUY" ? q?.ask : q?.bid) ?? q?.last
     }
 
-    private func orderPrice(symbol: String, action: String, hotkey: Hotkey) -> OrderPrice? {
-        // Market orders don't execute outside regular hours, so convert them to marketable limits.
-        if hotkey.priceType == .market && MarketSession.isRegularHours() { return .market }
-        guard let ref = referencePrice(symbol: symbol, action: action), ref > 0 else {
-            lastMessage = "No bid/ask for \(symbol) yet — can't price a limit order"
-            return nil
+    /// Turns a hotkey's order settings into concrete prices from the current bid/ask.
+    /// Offsets move prices in the direction that makes sense for the side: e.g. a buy limit is
+    /// ask + offset, a sell stop is bid − offset, a buy MIT triggers at bid − offset.
+    private func orderSpec(symbol: String, action: String, hotkey: Hotkey) -> OrderSpec? {
+        let kind = hotkey.orderType
+        let isBuy = action == "BUY"
+        let sign = isBuy ? 1.0 : -1.0
+        let regularHours = MarketSession.isRegularHours()
+
+        var spec = OrderSpec(orderType: kind.ibType, tif: (kind.fixedTIF ?? hotkey.tif).rawValue,
+                             outsideRth: hotkey.outsideRth && kind.allowsOutsideRth)
+
+        func ref() -> Double? {
+            guard let r = referencePrice(symbol: symbol, action: action), r > 0 else {
+                lastMessage = "No bid/ask for \(symbol) yet — can't price a \(kind.short) order"
+                return nil
+            }
+            return r
         }
-        var offset = hotkey.offset
-        if hotkey.priceType == .market { offset = max(offset, ref * 0.005) }
-        let raw = action == "BUY" ? ref + offset : ref - offset
-        return .limit(Self.roundToTick(max(raw, 0.0001)))
+        func tick(_ p: Double) -> Double { Self.roundToTick(max(p, 0.0001)) }
+
+        switch kind {
+        case .market:
+            // Market orders don't execute outside regular hours, so convert them to marketable limits.
+            if !regularHours {
+                guard let r = ref() else { return nil }
+                let offset = max(hotkey.offset, r * 0.005)
+                spec = .limit(tick(r + sign * offset))
+                spec.tif = hotkey.tif == .opening ? "DAY" : hotkey.tif.rawValue
+            }
+        case .limit, .limitOnOpen, .limitOnClose:
+            guard let r = ref() else { return nil }
+            spec.limitPrice = tick(r + sign * hotkey.offset)
+        case .stop:
+            guard let r = ref() else { return nil }
+            spec.auxPrice = tick(r + sign * hotkey.triggerOffset)
+        case .stopLimit:
+            guard let r = ref() else { return nil }
+            let stop = tick(r + sign * hotkey.triggerOffset)
+            spec.auxPrice = stop
+            spec.limitPrice = tick(stop + sign * hotkey.offset)
+        case .marketIfTouched:
+            guard let r = ref() else { return nil }
+            spec.auxPrice = tick(r - sign * hotkey.triggerOffset)
+        case .limitIfTouched:
+            guard let r = ref() else { return nil }
+            let trigger = tick(r - sign * hotkey.triggerOffset)
+            spec.auxPrice = trigger
+            spec.limitPrice = tick(trigger + sign * hotkey.offset)
+        case .trailingStop, .trailingStopLimit:
+            guard let r = ref() else { return nil }
+            // A sell stop trails below the market, a buy stop above it.
+            let distance: Double
+            switch hotkey.trailUnit {
+            case .amount:
+                spec.auxPrice = hotkey.trailAmount
+                distance = hotkey.trailAmount
+            case .percent:
+                spec.trailingPercent = hotkey.trailAmount
+                distance = r * hotkey.trailAmount / 100
+            }
+            spec.trailStopPrice = tick(r + sign * distance)
+            if kind == .trailingStopLimit { spec.limitPriceOffset = hotkey.offset }
+        case .relative:
+            spec.auxPrice = hotkey.offset
+        case .marketToLimit, .midprice, .marketOnOpen, .marketOnClose:
+            break
+        }
+
+        // Adaptive only runs in regular hours and on plain MKT/LMT orders.
+        if hotkey.adaptive != .off, kind.supportsAdaptive, regularHours {
+            spec.algoStrategy = "Adaptive"
+            spec.algoParams = [("adaptivePriority", hotkey.adaptive.rawValue)]
+        }
+        return spec
     }
 
     static func roundToTick(_ p: Double) -> Double {
@@ -520,6 +594,7 @@ final class Broker {
         guard f.count > 25 else { return }
         let id = Self.orderKey(orderId: f.int(1), permId: f.int(25))
         let lmt = f.double(16)
+        let aux = f.double(17)
         var o = orders[id] ?? OrderRow(
             id: id, symbol: f.str(3), action: f.str(13), quantity: 0,
             orderType: f.str(15), limitPrice: nil, status: "Submitted"
@@ -529,6 +604,7 @@ final class Broker {
         o.quantity = f.double(14)
         o.orderType = f.str(15)
         o.limitPrice = (lmt > 0 && lmt < Self.unsetDouble) ? lmt : nil
+        o.auxPrice = (aux > 0 && aux < Self.unsetDouble) ? aux : nil
         orders[id] = o
     }
 
