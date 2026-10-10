@@ -258,6 +258,12 @@ struct Hotkey: Codable, Identifiable, Equatable {
                action: action, sizing: sizing, amount: amount, orderType: orderType)
     }
 
+    /// Most buttons the two-row grid takes.
+    static let maxCount = 24
+
+    /// Grid columns for `count` buttons in two rows; with an odd count the top row has the extra one.
+    static func columns(for count: Int) -> Int { max(1, (count + 1) / 2) }
+
     static let defaults: [Hotkey] = [
         make(.buy, amount: 100),
         make(.buy, amount: 500),

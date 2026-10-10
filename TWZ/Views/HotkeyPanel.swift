@@ -2,7 +2,7 @@
 //  HotkeyPanel.swift
 //  TWZ
 //
-//  6 × 2 grid of configurable order buttons acting on the selected chart's symbol.
+//  Two-row grid (6 × 2 by default) of configurable order buttons acting on the selected chart's symbol.
 //  Click the "Hotkeys" title to customize them all, or right-click a button to edit just that one.
 //  Beside them, the NOK amount that ⌥-clicking a chart buys.
 //
@@ -15,8 +15,6 @@ struct HotkeyPanel: View {
     @Environment(Workspace.self) private var workspace
     @State private var editing: Int?
     @State private var showingCustomizer = false
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 6)
 
     static let buttonHeight: CGFloat = 44
     private static let spacing: CGFloat = 6
@@ -53,13 +51,14 @@ struct HotkeyPanel: View {
                 }
             }
             .frame(height: Self.headerHeight)
-            // Seven equal columns: the 6 × 2 hotkeys, then the order amount box two buttons tall.
+            // The order amount box, two buttons tall, keeps a seventh of the width; the hotkeys share
+            // the rest in two rows, narrowing as buttons are added beyond 6 × 2.
             // Buttons keep a fixed height; any extra height becomes space above and below them.
             GeometryReader { geo in
                 let column = (geo.size.width - Self.spacing * 6) / 7
                 HStack(spacing: Self.spacing) {
-                    LazyVGrid(columns: columns, spacing: Self.spacing) {
-                        ForEach(Array(workspace.hotkeys.prefix(12).enumerated()), id: \.element.id) { index, hotkey in
+                    LazyVGrid(columns: Self.gridColumns(workspace.hotkeys.count), spacing: Self.spacing) {
+                        ForEach(Array(workspace.hotkeys.enumerated()), id: \.element.id) { index, hotkey in
                             HotkeyButton(hotkey: hotkey) {
                                 broker.run(hotkey, symbol: workspace.selectedChart.symbol)
                             }
@@ -88,6 +87,10 @@ struct HotkeyPanel: View {
                 workspace.hotkeys[target.index] = updated
             }
         }
+    }
+
+    static func gridColumns(_ count: Int) -> [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: spacing), count: Hotkey.columns(for: count))
     }
 
     private struct EditTarget: Identifiable {
@@ -253,30 +256,43 @@ private struct OrderAmountBox: View {
     }
 }
 
-/// Popover for editing every hotkey: pick a slot in the 6 × 2 preview, edit it below; drag a slot
-/// onto another to reorder them. Changes apply (and are saved) immediately.
+/// Popover for editing every hotkey: pick a slot in the two-row preview, edit it below; drag a slot
+/// onto another to reorder them, + adds a button and − removes the selected one.
+/// Changes apply (and are saved) immediately.
 private struct HotkeyCustomizer: View {
     @Environment(Workspace.self) private var workspace
     @State private var selectedID: UUID?
     @State private var draggingID: UUID?
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 6)
-
     var body: some View {
         @Bindable var workspace = workspace
-        let slots = Array(workspace.hotkeys.prefix(12))
+        let slots = workspace.hotkeys
         let selected = slots.firstIndex { $0.id == selectedID } ?? 0
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Customize Hotkeys").font(.headline)
                 Text("Drag to reorder").font(.caption).foregroundStyle(.secondary)
                 Spacer()
+                Button {
+                    if selected < slots.count { workspace.removeHotkey(slots[selected].id) }
+                } label: {
+                    Image(systemName: "minus")
+                }
+                .disabled(slots.count <= 1)
+                .help("Remove the selected hotkey")
+                Button {
+                    if let id = workspace.addHotkey() { selectedID = id }
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .disabled(slots.count >= Hotkey.maxCount)
+                .help("Add a hotkey")
                 Button("Reset to Defaults") {
                     workspace.hotkeys = Hotkey.defaults
                 }
                 .controlSize(.small)
             }
-            LazyVGrid(columns: columns, spacing: 6) {
+            LazyVGrid(columns: HotkeyPanel.gridColumns(slots.count), spacing: 6) {
                 ForEach(Array(slots.enumerated()), id: \.element.id) { index, hotkey in
                     HotkeyButton(hotkey: hotkey, height: 36, selected: index == selected) {
                         selectedID = hotkey.id
@@ -296,6 +312,23 @@ private struct HotkeyCustomizer: View {
         }
         .padding(14)
         .frame(width: 560)
+    }
+}
+
+extension Workspace {
+    /// Adds a "Buy 100" button as a new column (end of the top row) or, when the top row is already
+    /// the longer one, at the end of the bottom row, so neither row's buttons shift. Returns its id.
+    @discardableResult
+    func addHotkey() -> UUID? {
+        guard hotkeys.count < Hotkey.maxCount else { return nil }
+        let hotkey = Hotkey(label: Hotkey.autoLabel(action: .buy, sizing: .shares, amount: 100), action: .buy)
+        hotkeys.insert(hotkey, at: hotkeys.count.isMultiple(of: 2) ? hotkeys.count / 2 : hotkeys.count)
+        return hotkey.id
+    }
+
+    func removeHotkey(_ id: UUID) {
+        guard hotkeys.count > 1 else { return }
+        hotkeys.removeAll { $0.id == id }
     }
 }
 
