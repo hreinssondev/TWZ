@@ -5,14 +5,23 @@
 //  ┌──────────────── account bar ────────────────┐
 //  │  chart 1  │  chart 2  │  list A  │  list B  │
 //  │  chart 3  │  chart 4  │          │          │
+//  ╞═══════════ drag handle (resizes) ═══════════╡
 //  ├────────── hotkeys (6×2) ─────────┬─ orders ─┤
 //  └──────────────────────────────────┴──────────┘
+//
+//  Dragging the handle moves the bottom row up or down. Hotkeys keep a fixed height;
+//  the orders panel takes up the rest of the row. The row can't get shorter than the hotkeys.
 //
 
 import SwiftUI
 
 struct ContentView: View {
     @Environment(Workspace.self) private var workspace
+    @AppStorage("bottomRowHeight") private var bottomHeight: Double = ContentView.hotkeyHeight
+    @State private var dragStartHeight: Double?
+
+    static let hotkeyHeight: CGFloat = 170
+    private static let minTopHeight: CGFloat = 240
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,8 +29,9 @@ struct ContentView: View {
             Divider()
             GeometryReader { geo in
                 let gap: CGFloat = 6
-                let bottomHeight = min(190, max(140, geo.size.height * 0.2))
-                VStack(spacing: gap) {
+                let maxBottom = max(Self.hotkeyHeight, geo.size.height - gap * 3 - Self.minTopHeight)
+                let rowHeight = min(maxBottom, max(Self.hotkeyHeight, bottomHeight))
+                VStack(spacing: 0) {
                     HStack(spacing: gap) {
                         Grid(horizontalSpacing: gap, verticalSpacing: gap) {
                             GridRow {
@@ -39,16 +49,39 @@ struct ContentView: View {
                         }
                         .frame(width: (geo.size.width - gap * 3) / 3)
                     }
-                    HStack(spacing: gap) {
+                    resizeHandle(height: gap, current: rowHeight, range: Self.hotkeyHeight...maxBottom)
+                    HStack(alignment: .top, spacing: gap) {
                         HotkeyPanel()
+                            .frame(height: Self.hotkeyHeight)
                         OrdersPanel()
                             .frame(width: (geo.size.width - gap * 3) / 3)
                     }
-                    .frame(height: bottomHeight)
+                    .frame(height: rowHeight)
                 }
                 .padding(gap)
             }
         }
         .frame(minWidth: 1200, minHeight: 760)
+    }
+
+    /// Thin grab strip in the gap between the charts and the bottom row.
+    private func resizeHandle(height: CGFloat, current: CGFloat, range: ClosedRange<CGFloat>) -> some View {
+        Capsule()
+            .fill(Color.primary.opacity(dragStartHeight == nil ? 0.15 : 0.35))
+            .frame(width: 36, height: 3)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .contentShape(Rectangle())
+            .pointerStyle(.rowResize)
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = dragStartHeight ?? current
+                        dragStartHeight = start
+                        bottomHeight = min(range.upperBound, max(range.lowerBound, start - value.translation.height))
+                    }
+                    .onEnded { _ in dragStartHeight = nil }
+            )
+            .onTapGesture(count: 2) { bottomHeight = Self.hotkeyHeight }
     }
 }
