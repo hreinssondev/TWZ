@@ -5,12 +5,13 @@
 //  ┌──────────────── account bar ────────────────┐
 //  │  chart 1  │  chart 2  │  list A  │  list B  │
 //  │  chart 3  │  chart 4  │          │          │
-//  ╞═══════════ drag handle (resizes) ═══════════╡
-//  ├────────── hotkeys (6×2) ─────────┬─ orders ─┤
-//  └──────────────────────────────────┴──────────┘
+//  ╞═══ drag handle (resizes) ═══╡   │          │
+//  │      hotkeys (6×2)       ├────── orders ─────┤
+//  └──────────────────────────┴──────────────────┘
 //
-//  Dragging the handle moves the bottom row up or down. The hotkey buttons keep a fixed size;
-//  only the free space around them changes. The row can't get shorter than the buttons need.
+//  The handle only splits the left column: charts above, hotkeys below. The hotkey buttons
+//  keep a fixed size; only the free space around them changes, down to the height they need.
+//  The right column (lists above a fixed-height orders panel) is unaffected.
 //
 
 import SwiftUI
@@ -21,6 +22,7 @@ struct ContentView: View {
     @State private var dragStartHeight: Double?
 
     private static let minTopHeight: CGFloat = 240
+    private static let ordersHeight: CGFloat = 190
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,8 +33,9 @@ struct ContentView: View {
                 let minBottom = HotkeyPanel.minHeight
                 let maxBottom = max(minBottom, geo.size.height - gap * 3 - Self.minTopHeight)
                 let rowHeight = min(maxBottom, max(minBottom, bottomHeight))
-                VStack(spacing: 0) {
-                    HStack(spacing: gap) {
+                let sideWidth = (geo.size.width - gap * 3) / 3
+                HStack(spacing: gap) {
+                    VStack(spacing: 0) {
                         Grid(horizontalSpacing: gap, verticalSpacing: gap) {
                             GridRow {
                                 ChartPane(chart: workspace.charts[0])
@@ -43,19 +46,19 @@ struct ContentView: View {
                                 ChartPane(chart: workspace.charts[3])
                             }
                         }
+                        resizeHandle(height: gap, current: rowHeight, range: minBottom...maxBottom)
+                        HotkeyPanel()
+                            .frame(height: rowHeight)
+                    }
+                    VStack(spacing: gap) {
                         HStack(spacing: gap) {
                             ListPanel(panelId: "list-left", defaultList: "Watchlist 1")
                             ListPanel(panelId: "list-right", defaultList: "Watchlist 2")
                         }
-                        .frame(width: (geo.size.width - gap * 3) / 3)
-                    }
-                    resizeHandle(height: gap, current: rowHeight, range: minBottom...maxBottom)
-                    HStack(spacing: gap) {
-                        HotkeyPanel()
                         OrdersPanel()
-                            .frame(width: (geo.size.width - gap * 3) / 3)
+                            .frame(height: Self.ordersHeight)
                     }
-                    .frame(height: rowHeight)
+                    .frame(width: sideWidth)
                 }
                 .padding(gap)
             }
@@ -63,7 +66,7 @@ struct ContentView: View {
         .frame(minWidth: 1200, minHeight: 760)
     }
 
-    /// Thin grab strip in the gap between the charts and the bottom row.
+    /// Thin grab strip in the gap between the charts and the hotkeys.
     private func resizeHandle(height: CGFloat, current: CGFloat, range: ClosedRange<CGFloat>) -> some View {
         Capsule()
             .fill(Color.primary.opacity(dragStartHeight == nil ? 0.15 : 0.35))
