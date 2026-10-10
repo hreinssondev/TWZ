@@ -45,7 +45,7 @@ struct AccountBar: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 34)
-        .background(.bar)
+        .background(.bar, ignoresSafeAreaEdges: .top)
         .sheet(isPresented: $showSettings) { SettingsView() }
     }
 

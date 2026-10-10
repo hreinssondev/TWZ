@@ -63,6 +63,8 @@ struct ContentView: View {
                 .padding(gap)
             }
         }
+        // Let the account bar's background show through the title bar, so both read as one band.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .frame(minWidth: 1200, minHeight: 760)
     }
 
