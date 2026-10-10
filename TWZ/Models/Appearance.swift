@@ -37,6 +37,19 @@ enum CandleTheme: String, CaseIterable, Identifiable {
     }
 }
 
+/// Every stored Appearance setting. Add new keys here so Settings' "Reset to Defaults" covers them.
+enum AppearanceDefaults {
+    static let keys = [
+        CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
+        LineColors.avgCostKey, LineColors.altClickKey,
+    ]
+
+    /// Removing the stored values makes every @AppStorage fall back to its default.
+    static func reset() {
+        keys.forEach(UserDefaults.standard.removeObject(forKey:))
+    }
+}
+
 /// Chart line colors picked in Settings, stored as "RRGGBB"; empty means the default.
 enum LineColors {
     static let avgCostKey = "avgCostLineColor"

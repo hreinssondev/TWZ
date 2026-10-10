@@ -170,6 +170,10 @@ private struct AppearanceSettings: View {
                 lineColorRow("Average position", hex: $avgCostHex, default: LineColors.defaultAvgCost)
                 lineColorRow("⌥-click orders", hex: $altClickHex, default: LineColors.defaultAltClick)
             }
+            HStack {
+                Spacer()
+                Button("Reset to Defaults") { AppearanceDefaults.reset() }
+            }
         }
         .formStyle(.grouped)
     }
