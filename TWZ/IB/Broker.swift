@@ -99,7 +99,6 @@ final class Broker {
     @ObservationIgnored private var fxReq: Int?
     @ObservationIgnored private var fxBid: Double?
     @ObservationIgnored private var fxAsk: Double?
-    @ObservationIgnored private var fxClose: Double?
 
     @ObservationIgnored private let accountSummaryReq = 1
     @ObservationIgnored private let pnlReq = 2
@@ -160,7 +159,6 @@ final class Broker {
         fxReq = nil
         fxBid = nil
         fxAsk = nil
-        fxClose = nil
         usdNokIsLive = false
         netLiquidation = nil
         grossPositionValue = nil
@@ -279,15 +277,15 @@ final class Broker {
                     false, "", false, false, ""])                                  // reqMktData
     }
 
+    /// Live bid/ask mid only; without both, the last saved live rate stays in use.
     private func fxTick(type: Int, price: Double) {
         guard price > 0 else { return }
         switch type {
         case 1, 66: fxBid = price
         case 2, 67: fxAsk = price
-        case 9, 75: fxClose = price
         default: return
         }
-        guard let rate = fxBid.flatMap({ b in fxAsk.map { (b + $0) / 2 } }) ?? fxClose else { return }
+        guard let rate = fxBid.flatMap({ b in fxAsk.map { (b + $0) / 2 } }) else { return }
         usdNok = rate
         usdNokIsLive = true
         defaults.set(rate, forKey: "fx.usdNok")
@@ -502,7 +500,7 @@ final class Broker {
     }
 
     /// Where an alt-click buy rests: at the clicked price, or at the bid when the click is above the
-    /// current price (last trade, falling back to the close / chart). `fallback` names the price
+    /// current price (last trade, falling back to the chart's last bar). `fallback` names the price
     /// used when there is no live bid.
     func chartBuyLimit(symbol rawSymbol: String, clicked: Double)
         -> (limit: Double, atBid: Bool, fallback: String?) {
@@ -567,7 +565,7 @@ final class Broker {
     }
 
     /// The quote a price reference points at. When it's missing (market closed, no data yet) this
-    /// falls back to the last trade, then the previous close, then the chart's last bar, and
+    /// falls back to the last trade, then the chart's last bar (never the previous close), and
     /// names the fallback so the caller can say so.
     private func quote(_ symbol: String, _ reference: PriceReference, isBuy: Bool)
         -> (price: Double, fallback: String?)? {
@@ -583,7 +581,6 @@ final class Broker {
         }
         if let live { return (live, nil) }
         if let last = valid(q?.last) { return (last, "last \(Fmt.price(last))") }
-        if let close = valid(q?.prevClose) { return (close, "close \(Fmt.price(close))") }
         if let bar = valid(charts.first(where: { $0.symbol == symbol })?.bars.last?.close) {
             return (bar, "chart close \(Fmt.price(bar))")
         }
@@ -608,7 +605,7 @@ final class Broker {
         let phase = MarketSession.phase()
         func tick(_ p: Double) -> Double { Self.roundToTick(max(p, 0.0001)) }
         func missing() -> HotkeyPrice? {
-            lastMessage = "No price for \(symbol) at all yet (no quote, close or chart) — can't price the order"
+            lastMessage = "No price for \(symbol) at all yet (no quote or chart) — can't price the order"
             return nil
         }
 
