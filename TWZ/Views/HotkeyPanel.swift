@@ -181,9 +181,6 @@ private struct OrderAmountBox: View {
             Spacer(minLength: 0)
             Text(sizeText)
                 .font(.system(size: 10).monospacedDigit())
-            Text(rateText)
-                .font(.system(size: 9).monospacedDigit())
-                .foregroundStyle(broker.usdNokIsLive ? Color.secondary : Color.orange)
         }
         .lineLimit(1)
         .minimumScaleFactor(0.7)
@@ -232,12 +229,6 @@ private struct OrderAmountBox: View {
             text += " · \(Fmt.shares(shares)) \(symbol)"
         }
         return text
-    }
-
-    private var rateText: String {
-        guard let rate = broker.usdNok else { return "Connect for USD.NOK" }
-        let value = rate.formatted(.number.precision(.fractionLength(4)))
-        return "USD/NOK \(value)" + (broker.usdNokIsLive ? "" : " (saved)")
     }
 
     private func stepButton(up: Bool) -> some View {
