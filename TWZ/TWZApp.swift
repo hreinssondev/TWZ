@@ -16,6 +16,7 @@ struct TWZApp: App {
         WindowGroup {
             ContentView()
                 .modifier(TradingShortcuts())
+                .modifier(ClickToUnfocus())
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)

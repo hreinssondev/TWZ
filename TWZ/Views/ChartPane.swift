@@ -69,6 +69,10 @@ struct ChartPane: View {
         .onChange(of: chart.symbol) { _, new in
             if !symbolFocused { symbolText = new }
         }
+        // Leaving the field without pressing Return drops the edit.
+        .onChange(of: symbolFocused) { _, focused in
+            if !focused { symbolText = chart.symbol }
+        }
     }
 
     private var timeframe: Binding<Timeframe> {
