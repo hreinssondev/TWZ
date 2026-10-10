@@ -40,11 +40,11 @@ struct ChartPane: View {
                     broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
                 },
                 altClickPreview: { price in
-                    let limit = Broker.roundToTick(price)
+                    let (limit, atBid, _) = broker.chartBuyLimit(symbol: chart.symbol, clicked: price)
                     guard let shares = broker.shares(forNOK: OrderAmount.clamp(orderNOK), at: limit) else {
                         return "No USD.NOK rate"
                     }
-                    return "BUY \(Fmt.shares(shares)) @ \(Fmt.price(limit))"
+                    return "BUY \(Fmt.shares(shares)) @ \(atBid ? "bid " : "")\(Fmt.price(limit))"
                 }
             )
         }
