@@ -200,19 +200,50 @@ struct Hotkey: Codable, Identifiable, Equatable {
         try c.encode(outsideRth, forKey: .outsideRth)
     }
 
+    /// What a hotkey for these settings is called automatically, e.g. "Buy 100" or "Sell 1000$".
+    static func autoLabel(action: Action, sizing: Sizing, amount: Double) -> String {
+        switch action {
+        case .buy, .sell:
+            let n = amount.formatted(.number.grouping(.never).precision(.fractionLength(0...2)))
+            return "\(action.rawValue) \(n)\(sizing == .dollars ? "$" : "")"
+        case .closeHalf, .closeAll: return action.rawValue
+        case .cancelSymbol: return "Cancel Symbol"
+        case .cancelAll: return "Cancel All"
+        case .flattenAll: return "Flatten All"
+        }
+    }
+
+    /// Labels that count as automatic for these settings (including the older "$1K" style),
+    /// so they follow amount/action changes; anything else is a custom label and is kept.
+    static func isAutoLabel(_ label: String, action: Action, sizing: Sizing, amount: Double) -> Bool {
+        if label.trimmingCharacters(in: .whitespaces).isEmpty { return true }
+        if label == autoLabel(action: action, sizing: sizing, amount: amount) { return true }
+        if (action == .buy || action == .sell), sizing == .dollars, amount >= 1_000,
+           amount.truncatingRemainder(dividingBy: 1_000) == 0 {
+            return label == "\(action.rawValue) $\(Int(amount / 1_000))K"
+        }
+        return false
+    }
+
+    private static func make(_ action: Action, sizing: Sizing = .shares, amount: Double = 100,
+                             orderType: OrderType = .limit) -> Hotkey {
+        Hotkey(label: autoLabel(action: action, sizing: sizing, amount: amount),
+               action: action, sizing: sizing, amount: amount, orderType: orderType)
+    }
+
     static let defaults: [Hotkey] = [
-        Hotkey(label: "Buy 100", action: .buy, amount: 100),
-        Hotkey(label: "Buy 500", action: .buy, amount: 500),
-        Hotkey(label: "Buy $1K", action: .buy, sizing: .dollars, amount: 1_000),
-        Hotkey(label: "Buy $5K", action: .buy, sizing: .dollars, amount: 5_000),
-        Hotkey(label: "Close 50%", action: .closeHalf),
-        Hotkey(label: "Close 100%", action: .closeAll),
-        Hotkey(label: "Sell 100", action: .sell, amount: 100),
-        Hotkey(label: "Sell 500", action: .sell, amount: 500),
-        Hotkey(label: "Sell $1K", action: .sell, sizing: .dollars, amount: 1_000),
-        Hotkey(label: "Sell $5K", action: .sell, sizing: .dollars, amount: 5_000),
-        Hotkey(label: "Cancel All", action: .cancelAll),
-        Hotkey(label: "Flatten All", action: .flattenAll, orderType: .market),
+        make(.buy, amount: 100),
+        make(.buy, amount: 500),
+        make(.buy, sizing: .dollars, amount: 1_000),
+        make(.buy, sizing: .dollars, amount: 5_000),
+        make(.closeHalf),
+        make(.closeAll),
+        make(.sell, amount: 100),
+        make(.sell, amount: 500),
+        make(.sell, sizing: .dollars, amount: 1_000),
+        make(.sell, sizing: .dollars, amount: 5_000),
+        make(.cancelAll),
+        make(.flattenAll, orderType: .market),
     ]
 }
 

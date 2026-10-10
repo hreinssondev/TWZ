@@ -180,7 +180,7 @@ private struct HotkeyFields: View {
 
     var body: some View {
         Form {
-            TextField("Label", text: $hotkey.label)
+            TextField("Label", text: $hotkey.label, prompt: Text("Automatic"))
             Picker("Action", selection: $hotkey.action) {
                 ForEach(Hotkey.Action.allCases) { Text($0.rawValue).tag($0) }
             }
@@ -197,6 +197,22 @@ private struct HotkeyFields: View {
             }
         }
         .formStyle(.grouped)
+        .onChange(of: labelInputs) { old, new in
+            // Keep an automatic label in sync ("Buy 100" → "Buy 1000$"); leave custom labels alone.
+            if Hotkey.isAutoLabel(hotkey.label, action: old.action, sizing: old.sizing, amount: old.amount) {
+                hotkey.label = Hotkey.autoLabel(action: new.action, sizing: new.sizing, amount: new.amount)
+            }
+        }
+    }
+
+    private struct LabelInputs: Equatable {
+        var action: Hotkey.Action
+        var sizing: Hotkey.Sizing
+        var amount: Double
+    }
+
+    private var labelInputs: LabelInputs {
+        LabelInputs(action: hotkey.action, sizing: hotkey.sizing, amount: hotkey.amount)
     }
 
     @ViewBuilder private var orderSection: some View {
