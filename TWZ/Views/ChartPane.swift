@@ -26,6 +26,7 @@ struct ChartPane: View {
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
+    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .segmented
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
 
@@ -70,6 +71,13 @@ struct ChartPane: View {
         }
     }
 
+    private var timeframe: Binding<Timeframe> {
+        Binding(
+            get: { chart.timeframe },
+            set: { chart.timeframe = $0; broker.loadChart(chart); workspace.saveCharts() }
+        )
+    }
+
     private var header: some View {
         HStack(spacing: 8) {
             TextField("Symbol", text: $symbolText)
@@ -92,10 +100,18 @@ struct ChartPane: View {
 
             Spacer(minLength: 4)
 
-            TimeframePicker(selection: Binding(
-                get: { chart.timeframe },
-                set: { chart.timeframe = $0; broker.loadChart(chart); workspace.saveCharts() }
-            ))
+            switch pickerStyle {
+            case .segmented:
+                Picker("", selection: timeframe) {
+                    ForEach(Timeframe.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.mini)
+                .frame(width: 170)
+            case .minimal:
+                TimeframePicker(selection: timeframe)
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: 26)

@@ -42,13 +42,22 @@ enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey,
-        SelectedOutline.widthKey,
+        SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
     ]
 
     /// Removing the stored values makes every @AppStorage fall back to its default.
     static func reset() {
         keys.forEach(UserDefaults.standard.removeObject(forKey:))
     }
+}
+
+/// How each chart's timeframe switch looks: the system segmented control or quiet monochrome labels.
+enum TimeframePickerStyle: String, CaseIterable, Identifiable {
+    case segmented = "Segmented"
+    case minimal = "Minimal"
+    var id: String { rawValue }
+
+    static let storageKey = "timeframePickerStyle"
 }
 
 /// Thickness of the accent outline around the selected chart.

@@ -140,6 +140,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
+    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .segmented
 
     var body: some View {
         Form {
@@ -172,6 +173,12 @@ private struct AppearanceSettings: View {
                 lineColorRow("Last price", hex: $lastPriceHex, default: LineColors.defaultLastPrice)
                 lineColorRow("Average position", hex: $avgCostHex, default: LineColors.defaultAvgCost)
                 lineColorRow("⌥-click orders", hex: $altClickHex, default: LineColors.defaultAltClick)
+            }
+            Section("Chart header") {
+                Picker("Timeframe picker", selection: $pickerStyle) {
+                    ForEach(TimeframePickerStyle.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
             }
             Section("Selected chart") {
                 LabeledContent("Outline thickness") {
