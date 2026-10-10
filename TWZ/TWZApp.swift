@@ -9,9 +9,20 @@ import SwiftUI
 
 @main
 struct TWZApp: App {
+    @State private var broker = Broker()
+    @State private var workspace = Workspace()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(broker)
+                .environment(workspace)
+                .preferredColorScheme(.dark)
+                .onAppear {
+                    broker.registerCharts(workspace.charts)
+                    broker.connect()
+                }
         }
+        .defaultSize(width: 1600, height: 1000)
     }
 }
