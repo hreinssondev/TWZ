@@ -5,7 +5,7 @@
 //  Lightweight candlestick + volume chart drawn with a single SwiftUI Canvas.
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
 //  around the cursor; a diagonal swipe does both. Mouse: wheel zooms, shift-wheel pans.
-//  Drag pans, double-click resets.
+//  Drag pans. Double-click an order line to cancel that order; anywhere else resets the view.
 //  Intraday charts shade the sessions outside regular hours: pre-market and after hours in grey,
 //  overnight in indigo.
 //
@@ -18,6 +18,8 @@ struct PriceLine {
     var color: Color
     var label: String
     var dashed = true
+    /// The order the line belongs to; double-clicking the line cancels it.
+    var orderId: Int?
 }
 
 struct CandleChart: View {
@@ -30,6 +32,8 @@ struct CandleChart: View {
     var onControlClick: ((Double) -> Void)?
     /// Price tag color while ⌃ is held: what a ⌃-click there would place (nil: nothing).
     var controlClickColor: ((Double) -> Color?)?
+    /// Double-click on an order line: called with its order id.
+    var onCancelOrder: ((Int) -> Void)?
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
@@ -62,9 +66,13 @@ struct CandleChart: View {
                 }
             }
             .gesture(panGesture(plotWidth: plotWidth))
-            .onTapGesture(count: 2) {
-                chart.scrollBack = 0
-                chart.visibleBars = 120
+            .onTapGesture(count: 2) { location in
+                if let id = orderLine(near: location, size: geo.size) {
+                    onCancelOrder?(id)
+                } else {
+                    chart.scrollBack = 0
+                    chart.visibleBars = 120
+                }
             }
             .background(ScrollCatcher(
                 onScroll: { dx, dy, location in
@@ -182,6 +190,20 @@ struct CandleChart: View {
         lo -= pad; hi += pad
         return Viewport(plot: plot, priceRect: priceRect, volumeHeight: volumeHeight, barWidth: barWidth,
                         anchor: anchor, anchorX: anchorX, start: start, end: end, lo: lo, hi: hi)
+    }
+
+    /// The order line closest to `point` vertically, if one is within a few points of it.
+    private func orderLine(near point: CGPoint, size: CGSize) -> Int? {
+        guard onCancelOrder != nil, let v = viewport(size: size),
+              point.y >= v.plot.minY, point.y <= v.plot.maxY else { return nil }
+        return lines
+            .compactMap { line in
+                line.orderId.flatMap { id in
+                    line.price > v.lo && line.price < v.hi ? (id, abs(v.y(line.price) - point.y)) : nil
+                }
+            }
+            .filter { $0.1 <= 8 }
+            .min { $0.1 < $1.1 }?.0
     }
 
     /// The price under a point in the price area, or nil outside it.

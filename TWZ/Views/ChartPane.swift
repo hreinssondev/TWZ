@@ -47,8 +47,11 @@ struct ChartPane: View {
                     broker.placeProtective(symbol: chart.symbol, at: price)
                 },
                 controlClickColor: { price in
-                    broker.protectiveKind(symbol: chart.symbol, at: price).map { $0 == .stopLoss ? .red : .green }
-                }
+                    guard let kind = broker.protectiveKind(symbol: chart.symbol, at: price),
+                          !broker.protectiveFillsNow(symbol: chart.symbol, kind: kind, at: price) else { return nil }
+                    return kind == .stopLoss ? .red : .green
+                },
+                onCancelOrder: { id in broker.cancelOrder(id) }
             )
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
@@ -129,7 +132,7 @@ struct ChartPane: View {
                 let isStop = p.kind == .stopLoss
                 if let price = isStop ? o.auxPrice : o.limitPrice {
                     lines.append(PriceLine(price: price, color: isStop ? .red : .green,
-                                           label: "\(isStop ? "SL" : "TP") \(side)", dashed: false))
+                                           label: "\(isStop ? "SL" : "TP") \(side)", dashed: false, orderId: o.id))
                 }
                 continue
             }
@@ -138,16 +141,16 @@ struct ChartPane: View {
                 if let price = o.auxPrice ?? o.limitPrice {
                     let label = o.orderType.hasPrefix("STP") ? "STP \(side)" : side
                     lines.append(PriceLine(price: price, color: LineColors.resolve(altClickHex, default: LineColors.defaultAltClick),
-                                           label: label, dashed: false))
+                                           label: label, dashed: false, orderId: o.id))
                 }
                 continue
             }
             if let lmt = o.limitPrice {
-                lines.append(PriceLine(price: lmt, color: o.action == "BUY" ? .blue : .orange, label: side))
+                lines.append(PriceLine(price: lmt, color: o.action == "BUY" ? .blue : .orange, label: side, orderId: o.id))
             }
             // Stop / trigger price (TRAIL's aux is a distance, not a price).
             if let aux = o.auxPrice, !o.orderType.hasPrefix("TRAIL"), o.orderType != "REL" {
-                lines.append(PriceLine(price: aux, color: .purple, label: "\(o.orderType) \(side)"))
+                lines.append(PriceLine(price: aux, color: .purple, label: "\(o.orderType) \(side)", orderId: o.id))
             }
         }
         return lines

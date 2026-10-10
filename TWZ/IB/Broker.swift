@@ -681,13 +681,12 @@ final class Broker {
         var ocaGroup: String
     }
 
-    /// What a ⌃-click at `price` places: a stop loss on the losing side of the last trade, a take
-    /// profit on the winning side. nil without a position or a live price.
+    /// What a ⌃-click at `price` places: a stop loss on the losing side of the position's average
+    /// cost, a take profit on the winning side. nil without a position.
     func protectiveKind(symbol rawSymbol: String, at price: Double) -> Protective.Kind? {
         let symbol = rawSymbol.uppercased()
-        guard let qty = positions[symbol]?.quantity, qty != 0,
-              let last = quotes[symbol]?.last, last > 0 else { return nil }
-        return (qty > 0) == (price < last) ? .stopLoss : .takeProfit
+        guard let p = positions[symbol], p.quantity != 0 else { return nil }
+        return (p.quantity > 0) == (price < p.avgCost) ? .stopLoss : .takeProfit
     }
 
     /// ⌃-click on a chart: a GTC order closing the whole position at the clicked price. A second
@@ -703,11 +702,23 @@ final class Broker {
             lastMessage = "No position in \(symbol) to put a stop loss or take profit on"
             return
         }
-        guard let kind = protectiveKind(symbol: symbol, at: clickedPrice) else {
-            lastMessage = "No live price for \(symbol) yet, so the order wasn't sent"
+        guard let kind = protectiveKind(symbol: symbol, at: clickedPrice) else { return }
+        let price = Self.roundToTick(clickedPrice)
+        if protectiveFillsNow(symbol: symbol, kind: kind, at: price), let last = quotes[symbol]?.last {
+            lastMessage = "\(symbol): a \(kind == .stopLoss ? "stop loss" : "take profit") at \(Fmt.price(price)) "
+                + "would fill right away (last \(Fmt.price(last))), so it wasn't sent"
             return
         }
-        placeProtective(kind, symbol: symbol, price: Self.roundToTick(clickedPrice))
+        placeProtective(kind, symbol: symbol, price: price)
+    }
+
+    /// True between the average cost and the last trade, where the order would fill as soon as it's placed.
+    func protectiveFillsNow(symbol rawSymbol: String, kind: Protective.Kind, at price: Double) -> Bool {
+        let symbol = rawSymbol.uppercased()
+        guard let qty = positions[symbol]?.quantity, qty != 0,
+              let last = quotes[symbol]?.last, last > 0 else { return false }
+        let belowLast = price <= last, aboveLast = price >= last
+        return kind == .stopLoss ? (qty > 0 ? aboveLast : belowLast) : (qty > 0 ? belowLast : aboveLast)
     }
 
     /// Stop loss: a stop-limit with the limit 1% (at least 2¢) past the stop, so it can fill
