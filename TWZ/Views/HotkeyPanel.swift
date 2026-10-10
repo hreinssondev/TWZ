@@ -48,7 +48,7 @@ struct HotkeyPanel: View {
                     .font(.system(size: 11, weight: .bold))
                 Spacer()
                 if let msg = broker.lastMessage {
-                    Text(msg).font(.system(size: 10)).foregroundStyle(.orange).lineLimit(1)
+                    MessageLabel(text: msg, color: .orange)
                 }
             }
             .frame(height: Self.headerHeight)

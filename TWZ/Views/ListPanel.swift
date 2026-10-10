@@ -102,14 +102,9 @@ struct ListPanel: View {
         } else {
             text = "Scanning…"
         }
-        return Text(text)
-            .font(.system(size: 10))
-            .foregroundStyle(scan?.error == nil ? Color.secondary : Color.red)
-            .lineLimit(1)
-            .truncationMode(.tail)
+        return MessageLabel(text: text, color: scan?.error == nil ? Color.secondary : Color.red)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(6)
-            .help(text)
     }
 
     /// After hours, the AH scanner measures change from today's regular-session close.

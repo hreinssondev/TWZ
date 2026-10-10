@@ -32,7 +32,7 @@ struct AccountBar: View {
 
             HStack(spacing: 6) {
                 Circle().fill(statusColor).frame(width: 8, height: 8)
-                Text(broker.statusText).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                MessageLabel(text: broker.statusText, size: 11)
             }
 
             Button(broker.state == .disconnected ? "Connect" : "Disconnect") {
