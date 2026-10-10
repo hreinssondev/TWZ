@@ -51,7 +51,7 @@ enum AppearanceDefaults {
     }
 }
 
-/// How each chart's timeframe switch looks: the system segmented control or quiet monochrome labels.
+/// How each chart's timeframe switch looks: quiet monochrome labels (default) or the system segmented control.
 enum TimeframePickerStyle: String, CaseIterable, Identifiable {
     case segmented = "Segmented"
     case minimal = "Minimal"

@@ -26,7 +26,7 @@ struct ChartPane: View {
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
-    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .segmented
+    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
 
