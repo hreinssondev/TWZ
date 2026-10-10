@@ -139,6 +139,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
+    @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
 
     var body: some View {
         Form {
@@ -171,6 +172,16 @@ private struct AppearanceSettings: View {
                 lineColorRow("Last price", hex: $lastPriceHex, default: LineColors.defaultLastPrice)
                 lineColorRow("Average position", hex: $avgCostHex, default: LineColors.defaultAvgCost)
                 lineColorRow("⌥-click orders", hex: $altClickHex, default: LineColors.defaultAltClick)
+            }
+            Section("Selected chart") {
+                LabeledContent("Outline thickness") {
+                    HStack {
+                        Slider(value: $outlineWidth, in: SelectedOutline.range, step: 0.25)
+                        Text("\(outlineWidth.formatted(.number.precision(.fractionLength(0...2)))) pt")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
             }
             HStack {
                 Spacer()

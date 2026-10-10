@@ -42,12 +42,20 @@ enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey,
+        SelectedOutline.widthKey,
     ]
 
     /// Removing the stored values makes every @AppStorage fall back to its default.
     static func reset() {
         keys.forEach(UserDefaults.standard.removeObject(forKey:))
     }
+}
+
+/// Thickness of the accent outline around the selected chart.
+enum SelectedOutline {
+    static let widthKey = "selectedChartOutlineWidth"
+    static let defaultWidth = 1.5
+    static let range = 0.5...4.0
 }
 
 /// Chart line colors picked in Settings, stored as "RRGGBB"; empty means the default.
