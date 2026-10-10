@@ -455,8 +455,9 @@ final class Broker {
     // MARK: - Orders
 
     @discardableResult
-    /// Places a stock order and returns its id; `limit == nil` sends a market order.
-    func placeOrder(symbol: String, action: String, quantity: Double, limit: Double?,
+    /// Places a stock order and returns its id; `limit == nil` sends a market order. With a `stop`
+    /// it's a stop-limit (STP LMT) that triggers when the last trade reaches the stop.
+    func placeOrder(symbol: String, action: String, quantity: Double, limit: Double?, stop: Double? = nil,
                     tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART") -> Int? {
         guard apiReady, let orderId = nextOrderId else {
             lastMessage = "Not connected"
@@ -468,12 +469,14 @@ final class Broker {
         }
         nextOrderId = orderId + 1
 
-        let orderType = limit == nil ? "MKT" : "LMT"
+        let orderType = stop != nil && limit != nil ? "STP LMT" : (limit == nil ? "MKT" : "LMT")
+        let triggerMethod = stop != nil ? 2 : 0                           // 2 = last trade
         var f: [Any] = [3, orderId]
         f += contract(symbol, exchange: exchange)
         f += ["", ""]                                                     // secIdType, secId
-        f += [action, quantity, orderType, limit ?? Self.unsetDouble, Self.unsetDouble, tif.rawValue, "", account, "", 0, "TWZ"]
-        f += [true, 0, false, false, 0, 0, outsideRth && limit != nil, false]  // transmit … hidden
+        f += [action, quantity, orderType, limit ?? Self.unsetDouble, stop ?? Self.unsetDouble,
+              tif.rawValue, "", account, "", 0, "TWZ"]
+        f += [true, 0, false, false, 0, triggerMethod, outsideRth && limit != nil, false]  // transmit … hidden
         f += ["", 0.0, "", "", "", "", ""]                                // sharesAlloc, discretionary, GAT, GTD, FA
         if serverVersion < 177 { f += [""] }                              // faProfile
         f += ["", 0, "", -1, 0, "", "", false, Int.unset, Self.unsetDouble, false, false, Self.unsetDouble]
@@ -496,7 +499,7 @@ final class Broker {
 
         orders[orderId] = OrderRow(
             id: orderId, symbol: symbol, action: action, quantity: quantity,
-            orderType: orderType, limitPrice: limit, status: "PendingSubmit"
+            orderType: orderType, limitPrice: limit, auxPrice: stop, status: "PendingSubmit"
         )
         return orderId
     }
@@ -578,18 +581,47 @@ final class Broker {
         return (nok / usdNok / price).rounded(.down)
     }
 
-    /// Where an alt-click buy rests: at the bid when the click is above the live last trade and
-    /// there is a live bid, otherwise exactly at the clicked price. No fallback prices.
-    func chartBuyLimit(symbol rawSymbol: String, clicked: Double) -> (limit: Double, atBid: Bool) {
-        let q = quotes[rawSymbol.uppercased()]
-        if let last = q?.last, last > 0, clicked > last, let bid = q?.bid, bid > 0 {
-            return (Self.roundToTick(bid), true)
+    /// What an alt-click buy places, decided from the live last trade only (no fallback prices).
+    enum ChartBuy {
+        /// At or below the last trade: a limit at the clicked price.
+        case limit(Double)
+        /// Above it: a stop-limit that triggers when the last trade reaches the clicked price and
+        /// buys at that price or better.
+        case stopLimit(Double)
+        /// Can't place one; the reason.
+        case unavailable(String)
+
+        var price: Double? {
+            switch self {
+            case .limit(let p), .stopLimit(let p): p
+            case .unavailable: nil
+            }
         }
-        return (Self.roundToTick(clicked), false)
+
+        /// "BUY 45 @ 10.00" or "BUY STP 45 @ 10.00".
+        func label(shares: Double) -> String? {
+            switch self {
+            case .limit(let p): "BUY \(Fmt.shares(shares)) @ \(Fmt.price(p))"
+            case .stopLimit(let p): "BUY STP \(Fmt.shares(shares)) @ \(Fmt.price(p))"
+            case .unavailable: nil
+            }
+        }
     }
 
-    /// Alt-click on a chart: a DAY limit buy for `nok` worth of `symbol` at the clicked price,
-    /// or at the bid when clicked above the current price.
+    func chartBuy(symbol rawSymbol: String, clicked: Double) -> ChartBuy {
+        let symbol = rawSymbol.uppercased()
+        let price = Self.roundToTick(clicked)
+        guard let last = quotes[symbol]?.last, last > 0 else {
+            return .unavailable("No live price for \(symbol) yet")
+        }
+        guard price > last else { return .limit(price) }
+        // IBKR's overnight venue takes plain limit orders only.
+        if MarketSession.phase() == .overnight { return .unavailable("No stop orders overnight") }
+        return .stopLimit(price)
+    }
+
+    /// Alt-click on a chart: a DAY buy for `nok` worth of `symbol` at the clicked price; a limit
+    /// below the last trade, a stop-limit above it.
     func buyNOK(_ nok: Double, symbol rawSymbol: String, at clickedPrice: Double) {
         let symbol = rawSymbol.uppercased()
         guard apiReady else {
@@ -600,18 +632,23 @@ final class Broker {
             lastMessage = "Load a symbol into the chart first"
             return
         }
-        let (limit, atBid) = chartBuyLimit(symbol: symbol, clicked: clickedPrice)
-        guard let quantity = shares(forNOK: nok, at: limit) else {
+        let plan = chartBuy(symbol: symbol, clicked: clickedPrice)
+        if case .unavailable(let reason) = plan {
+            lastMessage = "\(reason), so the order wasn't sent"
+            return
+        }
+        guard let limit = plan.price, let quantity = shares(forNOK: nok, at: limit) else {
             lastMessage = "No USD.NOK rate yet, so the order can't be sized"
             return
         }
-        guard quantity >= 1 else {
+        guard quantity >= 1, let label = plan.label(shares: quantity) else {
             lastMessage = "\(OrderAmount.format(nok)) NOK is less than one share of \(symbol) at \(Fmt.price(limit))"
             return
         }
         var price = HotkeyPrice(limit: limit, outsideRth: true)
+        if case .stopLimit(let stop) = plan { price.stop = stop }
         if MarketSession.phase() == .overnight { price.exchange = "OVERNIGHT" }
-        let summary = "BUY \(Fmt.shares(quantity)) @ \(atBid ? "bid " : "")\(Fmt.price(limit)) (\(OrderAmount.format(nok)) NOK)"
+        let summary = "\(label) (\(OrderAmount.format(nok)) NOK)"
         guard let id = submit(symbol: symbol, action: "BUY", quantity: quantity, price: price, tif: .day,
                               summary: summary) else { return }
         chartOrderIds.insert(id)
@@ -625,7 +662,7 @@ final class Broker {
                         tif: TimeInForce, summary: String? = nil) -> Int? {
         let overnight = price.exchange == "OVERNIGHT"
         guard let id = placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
-                                  tif: overnight ? .day : tif, outsideRth: price.outsideRth,
+                                  stop: price.stop, tif: overnight ? .day : tif, outsideRth: price.outsideRth,
                                   exchange: price.exchange) else { return nil }
         var notes = summary.map { [$0] } ?? []
         if let source = price.fallback, let limit = price.limit {
@@ -669,6 +706,8 @@ final class Broker {
         var outsideRth: Bool
         var exchange = "SMART"
         var fallback: String?
+        /// Stop trigger for a stop-limit order.
+        var stop: Double?
     }
 
     /// Market, by session: regular hours → MKT; pre-market / after hours → limit 0.5% through the
