@@ -2,19 +2,23 @@
 //  OrdersPanel.swift
 //  TWZ
 //
+//  Orders, Filled and Positions side by side as three always-visible columns.
+//  Rows are two lines so they fit the narrow columns.
+//
 
 import SwiftUI
 
 struct OrdersPanel: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
+
     var body: some View {
-        VStack(spacing: 0) {
-            section("Orders", count: activeOrders.count) { activeRows }
+        HStack(spacing: 0) {
+            column("Orders", count: activeOrders.count) { activeRows }
             Divider()
-            section("Filled", count: broker.fills.count) { filledRows }
+            column("Filled", count: broker.fills.count) { filledRows }
             Divider()
-            section("Positions", count: broker.positions.count) { positionRows }
+            column("Positions", count: broker.positions.count) { positionRows }
         }
         .font(.system(size: 11).monospacedDigit())
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
@@ -22,24 +26,23 @@ struct OrdersPanel: View {
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
     }
 
-    /// One always-visible section: a compact header and its own scrolling rows, sharing height equally.
-    private func section<Rows: View>(_ title: String, count: Int, @ViewBuilder rows: () -> Rows) -> some View {
+    /// One always-visible column: a compact header and its own scrolling rows, sharing width equally.
+    private func column<Rows: View>(_ title: String, count: Int, @ViewBuilder rows: () -> Rows) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
                 Text(title).fontWeight(.semibold)
                 Text("\(count)").foregroundStyle(.secondary)
-                Spacer()
+                Spacer(minLength: 0)
             }
             .font(.system(size: 10))
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 6)
             .frame(height: 16)
             .background(Color.primary.opacity(0.05))
             ScrollView {
                 LazyVStack(spacing: 0) { rows() }
             }
-            .frame(maxHeight: .infinity)
         }
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var activeOrders: [OrderRow] {
@@ -49,21 +52,27 @@ struct OrdersPanel: View {
     @ViewBuilder private var activeRows: some View {
         if activeOrders.isEmpty { empty("No working orders") }
         ForEach(activeOrders) { o in
-            HStack(spacing: 6) {
-                side(o.action == "BUY")
-                symbolButton(o.symbol)
-                Text("\(Fmt.shares(o.filled))/\(Fmt.shares(o.quantity))")
-                Spacer()
-                Text(o.orderType == "MKT" ? "MKT" : Fmt.price(o.limitPrice))
-                Text(o.status).foregroundStyle(.secondary).frame(width: 74, alignment: .trailing)
-                Button {
-                    broker.cancelOrder(o.id)
-                } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    side(o.action == "BUY")
+                    symbolButton(o.symbol)
+                    Spacer(minLength: 2)
+                    Button {
+                        broker.cancelOrder(o.id)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Cancel order")
+                    .disabled(o.id <= 0)
                 }
-                .buttonStyle(.plain)
-                .help("Cancel order")
-                .disabled(o.id <= 0)
+                HStack(spacing: 4) {
+                    Text("\(Fmt.shares(o.filled))/\(Fmt.shares(o.quantity))")
+                    Text(o.orderType == "MKT" ? "MKT" : "@ \(Fmt.price(o.limitPrice))")
+                    Spacer(minLength: 2)
+                    Text(o.status).foregroundStyle(.secondary)
+                }
+                .font(.system(size: 10).monospacedDigit())
             }
             .rowStyle()
         }
@@ -73,13 +82,15 @@ struct OrdersPanel: View {
         let fills = broker.fills.values.sorted { $0.time > $1.time }
         if fills.isEmpty { empty("No fills today") }
         ForEach(fills) { f in
-            HStack(spacing: 6) {
-                side(f.side == "BOT")
-                symbolButton(f.symbol)
-                Text(Fmt.shares(f.shares))
-                Text("@ \(Fmt.price(f.price))")
-                Spacer()
-                Text(f.time, format: .dateTime.hour().minute().second()).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    side(f.side == "BOT")
+                    symbolButton(f.symbol)
+                    Spacer(minLength: 2)
+                    Text(f.time, format: .dateTime.hour().minute().second()).foregroundStyle(.secondary)
+                }
+                Text("\(Fmt.shares(f.shares)) @ \(Fmt.price(f.price))")
+                    .font(.system(size: 10).monospacedDigit())
             }
             .rowStyle()
         }
@@ -91,13 +102,18 @@ struct OrdersPanel: View {
         ForEach(positions) { p in
             let last = broker.quotes[p.symbol]?.last
             let pnl = last.map { ($0 - p.avgCost) * p.quantity }
-            HStack(spacing: 6) {
-                side(p.quantity > 0, long: true)
-                symbolButton(p.symbol)
-                Text(Fmt.shares(p.quantity))
-                Text("@ \(Fmt.price(p.avgCost))").foregroundStyle(.secondary)
-                Spacer()
-                Text(Fmt.money(pnl, signed: true)).foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 4) {
+                    side(p.quantity > 0, long: true)
+                    symbolButton(p.symbol)
+                    Spacer(minLength: 2)
+                    Text(Fmt.money(pnl, signed: true)).foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
+                }
+                HStack(spacing: 4) {
+                    Text(Fmt.shares(p.quantity))
+                    Text("@ \(Fmt.price(p.avgCost))").foregroundStyle(.secondary)
+                }
+                .font(.system(size: 10).monospacedDigit())
             }
             .rowStyle()
         }
@@ -117,12 +133,14 @@ struct OrdersPanel: View {
     }
 
     private func empty(_ text: String) -> some View {
-        Text(text).foregroundStyle(.secondary).padding(.vertical, 4)
+        Text(text).foregroundStyle(.secondary).padding(6)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 private extension View {
     func rowStyle() -> some View {
-        padding(.horizontal, 8).padding(.vertical, 3).lineLimit(1)
+        padding(.horizontal, 6).padding(.vertical, 3).lineLimit(1)
+            .overlay(alignment: .bottom) { Divider().opacity(0.4) }
     }
 }
