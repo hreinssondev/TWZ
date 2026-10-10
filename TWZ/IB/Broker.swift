@@ -240,7 +240,7 @@ final class Broker {
 
     // MARK: - Scanners
 
-    /// Each list panel declares the scanner it shows (nil for a watchlist).
+    /// Each list panel declares the scanner it shows (nil to stop it).
     func setScanner(_ spec: ScanSpec?, owner: String) {
         guard scanSpecs[owner] != spec else { return }
         stopScan(owner)

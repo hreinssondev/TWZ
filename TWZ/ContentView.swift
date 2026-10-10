@@ -52,8 +52,8 @@ struct ContentView: View {
                     }
                     VStack(spacing: gap) {
                         HStack(spacing: gap) {
-                            ListPanel(panelId: "list-left", defaultList: "Watchlist 1")
-                            ListPanel(panelId: "list-right", defaultList: "Watchlist 2")
+                            ListPanel(panelId: "list-left", defaultScanner: .gainers)
+                            ListPanel(panelId: "list-right", defaultScanner: .losers)
                         }
                         OrdersPanel()
                             .frame(height: Self.ordersHeight)

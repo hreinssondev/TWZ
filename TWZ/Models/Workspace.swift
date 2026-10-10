@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  UI state that survives relaunches: chart symbols/timeframes,
-//  watchlists, scanner filters and hotkey configuration.
+//  scanner filters and hotkey configuration.
 //
 
 import Foundation
@@ -31,12 +31,9 @@ final class ChartModel: Identifiable {
 
 @Observable
 final class Workspace {
-    static let watchlistNames = ["Watchlist 1", "Watchlist 2", "Watchlist 3", "Watchlist 4"]
-
     let charts: [ChartModel]
     var selectedChartIndex = 0
 
-    var watchlists: [String: [String]] { didSet { save() } }
     var hotkeys: [Hotkey] { didSet { save() } }
     /// Scanner filters per list panel and scanner, keyed "panelId|scanner".
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
@@ -56,16 +53,6 @@ final class Workspace {
                 symbol: i < symbols.count ? symbols[i] : "",
                 timeframe: i < frames.count ? frames[i] : defaultFrames[i]
             )
-        }
-
-        if let data = defaults.data(forKey: "watchlists"),
-           let lists = try? JSONDecoder().decode([String: [String]].self, from: data) {
-            watchlists = lists
-        } else {
-            watchlists = [
-                "Watchlist 1": ["SPY", "QQQ", "IWM", "DIA"],
-                "Watchlist 2": ["AAPL", "MSFT", "NVDA", "TSLA", "AMD", "META", "AMZN", "GOOGL"],
-            ]
         }
 
         if let data = defaults.data(forKey: "hotkeys"),
@@ -91,25 +78,12 @@ final class Workspace {
         scanFilters["\(panel)|\(kind.rawValue)"] = filter
     }
 
-    func symbols(in list: String) -> [String] { watchlists[list] ?? [] }
-
-    func add(_ symbol: String, to list: String) {
-        let s = symbol.trimmingCharacters(in: .whitespaces).uppercased()
-        guard !s.isEmpty, !symbols(in: list).contains(s) else { return }
-        watchlists[list, default: []].append(s)
-    }
-
-    func remove(_ symbol: String, from list: String) {
-        watchlists[list]?.removeAll { $0 == symbol }
-    }
-
     func saveCharts() {
         defaults.set(charts.map(\.symbol), forKey: "chartSymbols")
         defaults.set(charts.map(\.timeframe.rawValue), forKey: "chartTimeframes")
     }
 
     private func save() {
-        if let data = try? JSONEncoder().encode(watchlists) { defaults.set(data, forKey: "watchlists") }
         if let data = try? JSONEncoder().encode(hotkeys) { defaults.set(data, forKey: "hotkeys") }
         if let data = try? JSONEncoder().encode(scanFilters) { defaults.set(data, forKey: "scanFilters") }
     }

@@ -2,9 +2,8 @@
 //  ListPanel.swift
 //  TWZ
 //
-//  Selectable symbol list: a watchlist or a live IB scanner (gainers, losers,
-//  after-hours gainers, most active by dollar volume). Clicking a row loads it
-//  into the selected chart.
+//  Live IB scanner list (gainers, losers, after-hours gainers, most active by
+//  dollar volume). Clicking a row loads it into the selected chart.
 //
 
 import SwiftUI
@@ -14,52 +13,40 @@ struct ListPanel: View {
     @Environment(Workspace.self) private var workspace
 
     let panelId: String
-    @AppStorage private var listName: String
-    @State private var newSymbol = ""
+    @AppStorage private var scanner: ScannerKind
     @State private var showFilter = false
 
-    init(panelId: String, defaultList: String) {
+    init(panelId: String, defaultScanner: ScannerKind) {
         self.panelId = panelId
-        _listName = AppStorage(wrappedValue: defaultList, "list.\(panelId)")
+        _scanner = AppStorage(wrappedValue: defaultScanner, "scanner.\(panelId)")
     }
 
-    private var scanner: ScannerKind? { ScannerKind(rawValue: listName) }
-
-    private var scanSpec: ScanSpec? {
-        scanner.map { ScanSpec(kind: $0, filter: workspace.scanFilter(panel: panelId, $0)) }
+    private var scanSpec: ScanSpec {
+        ScanSpec(kind: scanner, filter: workspace.scanFilter(panel: panelId, scanner))
     }
 
-    private var symbols: [String] {
-        scanner == nil ? workspace.symbols(in: listName) : broker.scans[panelId]?.symbols ?? []
-    }
+    private var symbols: [String] { broker.scans[panelId]?.symbols ?? [] }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                Picker("", selection: $listName) {
-                    Section("Watchlists") {
-                        ForEach(Workspace.watchlistNames, id: \.self) { Text($0).tag($0) }
-                    }
-                    Section("Scanners") {
-                        ForEach(ScannerKind.allCases) { Text($0.rawValue).tag($0.rawValue) }
-                    }
+                Picker("", selection: $scanner) {
+                    ForEach(ScannerKind.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .labelsHidden()
                 .controlSize(.small)
 
-                if let scanner {
-                    Button {
-                        showFilter.toggle()
-                    } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Scanner filters")
-                    .popover(isPresented: $showFilter, arrowEdge: .bottom) {
-                        ScanFilterEditor(filter: workspace.scanFilter(panel: panelId, scanner)) { filter in
-                            workspace.setScanFilter(filter, panel: panelId, scanner)
-                            showFilter = false
-                        }
+                Button {
+                    showFilter.toggle()
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Scanner filters")
+                .popover(isPresented: $showFilter, arrowEdge: .bottom) {
+                    ScanFilterEditor(filter: workspace.scanFilter(panel: panelId, scanner)) { filter in
+                        workspace.setScanFilter(filter, panel: panelId, scanner)
+                        showFilter = false
                     }
                 }
             }
@@ -77,18 +64,7 @@ struct ListPanel: View {
             }
 
             Divider()
-            if scanner != nil {
-                scanStatus
-            } else {
-                TextField("Add symbol", text: $newSymbol)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .padding(6)
-                    .onSubmit {
-                        workspace.add(newSymbol, to: listName)
-                        newSymbol = ""
-                    }
-            }
+            scanStatus
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -173,18 +149,6 @@ struct ListPanel: View {
             ForEach(workspace.charts) { chart in
                 Button("Load into Chart \(chart.id + 1)") {
                     workspace.load(symbol, into: chart, broker: broker)
-                }
-            }
-            Divider()
-            if scanner != nil {
-                Menu("Add to Watchlist") {
-                    ForEach(Workspace.watchlistNames, id: \.self) { name in
-                        Button(name) { workspace.add(symbol, to: name) }
-                    }
-                }
-            } else {
-                Button("Remove \(symbol)", role: .destructive) {
-                    workspace.remove(symbol, from: listName)
                 }
             }
         }
