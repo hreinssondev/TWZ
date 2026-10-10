@@ -15,8 +15,15 @@ struct HotkeyPanel: View {
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 6)
 
+    static let buttonHeight: CGFloat = 44
+    private static let spacing: CGFloat = 6
+    private static let headerHeight: CGFloat = 14
+    private static let padding: CGFloat = 8
+    /// Height at which the buttons fit with no free space around them.
+    static let minHeight = padding * 2 + headerHeight + spacing + buttonHeight * 2 + spacing
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Self.spacing) {
             HStack {
                 Text("Hotkeys").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                 Text("→ \(workspace.selectedChart.symbol.isEmpty ? "no symbol" : workspace.selectedChart.symbol)")
@@ -26,7 +33,9 @@ struct HotkeyPanel: View {
                     Text(msg).font(.system(size: 10)).foregroundStyle(.orange).lineLimit(1)
                 }
             }
-            LazyVGrid(columns: columns, spacing: 6) {
+            .frame(height: Self.headerHeight)
+            // Buttons keep a fixed size; any extra height becomes space above and below them.
+            LazyVGrid(columns: columns, spacing: Self.spacing) {
                 ForEach(Array(workspace.hotkeys.prefix(12).enumerated()), id: \.element.id) { index, hotkey in
                     HotkeyButton(hotkey: hotkey) {
                         broker.run(hotkey, symbol: workspace.selectedChart.symbol)
@@ -38,7 +47,7 @@ struct HotkeyPanel: View {
             }
             .frame(maxHeight: .infinity)
         }
-        .padding(8)
+        .padding(Self.padding)
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
@@ -78,7 +87,8 @@ private struct HotkeyButton: View {
                 Text(hotkey.label).font(.system(size: 12, weight: .bold))
                 Text(subtitle).font(.system(size: 9)).opacity(0.75)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
+            .frame(height: HotkeyPanel.buttonHeight)
             .foregroundStyle(.white)
             .background(RoundedRectangle(cornerRadius: 5).fill(tint.opacity(0.75)))
             .contentShape(Rectangle())

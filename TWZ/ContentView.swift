@@ -9,18 +9,17 @@
 //  ├────────── hotkeys (6×2) ─────────┬─ orders ─┤
 //  └──────────────────────────────────┴──────────┘
 //
-//  Dragging the handle moves the bottom row up or down. Hotkeys keep a fixed height;
-//  the orders panel takes up the rest of the row. The row can't get shorter than the hotkeys.
+//  Dragging the handle moves the bottom row up or down. The hotkey buttons keep a fixed size;
+//  only the free space around them changes. The row can't get shorter than the buttons need.
 //
 
 import SwiftUI
 
 struct ContentView: View {
     @Environment(Workspace.self) private var workspace
-    @AppStorage("bottomRowHeight") private var bottomHeight: Double = ContentView.hotkeyHeight
+    @AppStorage("bottomRowHeight") private var bottomHeight: Double = 190
     @State private var dragStartHeight: Double?
 
-    static let hotkeyHeight: CGFloat = 170
     private static let minTopHeight: CGFloat = 240
 
     var body: some View {
@@ -29,8 +28,9 @@ struct ContentView: View {
             Divider()
             GeometryReader { geo in
                 let gap: CGFloat = 6
-                let maxBottom = max(Self.hotkeyHeight, geo.size.height - gap * 3 - Self.minTopHeight)
-                let rowHeight = min(maxBottom, max(Self.hotkeyHeight, bottomHeight))
+                let minBottom = HotkeyPanel.minHeight
+                let maxBottom = max(minBottom, geo.size.height - gap * 3 - Self.minTopHeight)
+                let rowHeight = min(maxBottom, max(minBottom, bottomHeight))
                 VStack(spacing: 0) {
                     HStack(spacing: gap) {
                         Grid(horizontalSpacing: gap, verticalSpacing: gap) {
@@ -49,10 +49,9 @@ struct ContentView: View {
                         }
                         .frame(width: (geo.size.width - gap * 3) / 3)
                     }
-                    resizeHandle(height: gap, current: rowHeight, range: Self.hotkeyHeight...maxBottom)
-                    HStack(alignment: .top, spacing: gap) {
+                    resizeHandle(height: gap, current: rowHeight, range: minBottom...maxBottom)
+                    HStack(spacing: gap) {
                         HotkeyPanel()
-                            .frame(height: Self.hotkeyHeight)
                         OrdersPanel()
                             .frame(width: (geo.size.width - gap * 3) / 3)
                     }
@@ -82,6 +81,6 @@ struct ContentView: View {
                     }
                     .onEnded { _ in dragStartHeight = nil }
             )
-            .onTapGesture(count: 2) { bottomHeight = Self.hotkeyHeight }
+            .onTapGesture(count: 2) { bottomHeight = 190 }
     }
 }
