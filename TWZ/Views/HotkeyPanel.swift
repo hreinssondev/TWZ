@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  6 × 2 grid of configurable order buttons acting on the selected chart's symbol.
-//  Right-click a button to edit it.
+//  Click the "Hotkeys" title to customize them all, or right-click a button to edit just that one.
 //
 
 import SwiftUI
@@ -12,6 +12,7 @@ struct HotkeyPanel: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     @State private var editing: Int?
+    @State private var showingCustomizer = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 6)
 
@@ -25,7 +26,23 @@ struct HotkeyPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Self.spacing) {
             HStack {
-                Text("Hotkeys").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                Button {
+                    showingCustomizer = true
+                } label: {
+                    HStack(spacing: 3) {
+                        Text("Hotkeys")
+                        Image(systemName: "slider.horizontal.3").font(.system(size: 9))
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .pointerStyle(.link)
+                .help("Customize hotkeys")
+                .popover(isPresented: $showingCustomizer, arrowEdge: .bottom) {
+                    HotkeyCustomizer()
+                }
                 Text("→ \(workspace.selectedChart.symbol.isEmpty ? "no symbol" : workspace.selectedChart.symbol)")
                     .font(.system(size: 11, weight: .bold))
                 Spacer()
@@ -67,12 +84,9 @@ struct HotkeyPanel: View {
     }
 }
 
-private struct HotkeyButton: View {
-    let hotkey: Hotkey
-    let action: () -> Void
-
-    private var tint: Color {
-        switch hotkey.action {
+private extension Hotkey {
+    var tint: Color {
+        switch action {
         case .buy: .green
         case .sell: .red
         case .closeHalf, .closeAll: .orange
@@ -81,34 +95,82 @@ private struct HotkeyButton: View {
         }
     }
 
+    var subtitle: String {
+        guard action.needsPrice else { return action.rawValue }
+        if priceType == .market { return "MKT" }
+        let side = (action == .buy) ? "Ask" : "Bid"
+        let sign = (action == .buy) ? "+" : "−"
+        return "LMT \(side) \(sign)\(offset.formatted(.number.precision(.fractionLength(2))))"
+    }
+}
+
+private struct HotkeyButton: View {
+    let hotkey: Hotkey
+    var height: CGFloat = HotkeyPanel.buttonHeight
+    var selected = false
+    let action: () -> Void
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 1) {
                 Text(hotkey.label).font(.system(size: 12, weight: .bold))
-                Text(subtitle).font(.system(size: 9)).opacity(0.75)
+                Text(hotkey.subtitle).font(.system(size: 9)).opacity(0.75)
             }
+            .lineLimit(1)
             .frame(maxWidth: .infinity)
-            .frame(height: HotkeyPanel.buttonHeight)
+            .frame(height: height)
             .foregroundStyle(.white)
-            .background(RoundedRectangle(cornerRadius: 5).fill(tint.opacity(0.75)))
+            .background(RoundedRectangle(cornerRadius: 5).fill(hotkey.tint.opacity(0.75)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(Color.accentColor, lineWidth: selected ? 2.5 : 0)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
+}
 
-    private var subtitle: String {
-        guard hotkey.action.needsPrice else { return hotkey.action.rawValue }
-        if hotkey.priceType == .market { return "MKT" }
-        let side = (hotkey.action == .buy) ? "Ask" : "Bid"
-        let sign = (hotkey.action == .buy) ? "+" : "−"
-        return "LMT \(side) \(sign)\(hotkey.offset.formatted(.number.precision(.fractionLength(2))))"
+/// Popover for editing every hotkey: pick a slot in the 6 × 2 preview, edit it below.
+/// Changes apply (and are saved) immediately.
+private struct HotkeyCustomizer: View {
+    @Environment(Workspace.self) private var workspace
+    @State private var selected = 0
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 6)
+
+    var body: some View {
+        @Bindable var workspace = workspace
+        let count = min(12, workspace.hotkeys.count)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Customize Hotkeys").font(.headline)
+                Spacer()
+                Button("Reset to Defaults") {
+                    workspace.hotkeys = Hotkey.defaults
+                }
+                .controlSize(.small)
+            }
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(Array(workspace.hotkeys.prefix(12).enumerated()), id: \.element.id) { index, hotkey in
+                    HotkeyButton(hotkey: hotkey, height: 36, selected: index == selected) {
+                        selected = index
+                    }
+                }
+            }
+            if selected < count {
+                HotkeyFields(hotkey: $workspace.hotkeys[selected])
+                    .id(workspace.hotkeys[selected].id)
+            }
+        }
+        .padding(14)
+        .frame(width: 560)
     }
 }
 
-struct HotkeyEditor: View {
-    @Environment(\.dismiss) private var dismiss
-    @State var hotkey: Hotkey
-    let onSave: (Hotkey) -> Void
+/// Editing form for a single hotkey, shared by the customizer popover and the right-click editor.
+private struct HotkeyFields: View {
+    @Binding var hotkey: Hotkey
 
     var body: some View {
         Form {
@@ -128,19 +190,31 @@ struct HotkeyEditor: View {
                 Picker("Order type", selection: $hotkey.priceType) {
                     ForEach(Hotkey.PriceType.allCases) { Text($0.rawValue).tag($0) }
                 }
-                TextField("Limit offset ($)", value: $hotkey.offset, format: .number.precision(.fractionLength(2...4)))
+                if hotkey.priceType == .limit {
+                    TextField("Limit offset ($)", value: $hotkey.offset, format: .number.precision(.fractionLength(2...4)))
+                }
                 Text("Buys: ask + offset · Sells: bid − offset. Outside regular hours, market orders are sent as marketable limits.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") { onSave(hotkey); dismiss() }
+    }
+}
+
+struct HotkeyEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State var hotkey: Hotkey
+    let onSave: (Hotkey) -> Void
+
+    var body: some View {
+        HotkeyFields(hotkey: $hotkey)
+            .frame(width: 380)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { onSave(hotkey); dismiss() }
+                }
             }
-        }
     }
 }
