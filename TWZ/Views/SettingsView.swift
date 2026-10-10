@@ -139,6 +139,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
+    @AppStorage(LineColors.hoverKey) private var hoverHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
 
@@ -173,6 +174,7 @@ private struct AppearanceSettings: View {
                 lineColorRow("Last price", hex: $lastPriceHex, default: LineColors.defaultLastPrice)
                 lineColorRow("Average position", hex: $avgCostHex, default: LineColors.defaultAvgCost)
                 lineColorRow("⌥-click orders", hex: $altClickHex, default: LineColors.defaultAltClick)
+                lineColorRow("Hover price", hex: $hoverHex, default: LineColors.defaultHover)
             }
             Section("Chart header") {
                 Picker("Timeframe picker", selection: $pickerStyle) {

@@ -40,6 +40,7 @@ struct CandleChart: View {
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
     @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
+    @AppStorage(LineColors.hoverKey) private var hoverHex = ""
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @State private var hover: CGPoint?
     @State private var dragStart: (scroll: Double, shift: Double)?
@@ -343,12 +344,13 @@ struct CandleChart: View {
         if let hover, plot.contains(hover) {
             var cross = Path()
             cross.move(to: CGPoint(x: plot.minX, y: hover.y)); cross.addLine(to: CGPoint(x: plot.maxX, y: hover.y))
-            ctx.stroke(cross, with: .color(.secondary.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            let hoverColor = LineColors.resolve(hoverHex, default: LineColors.defaultHover)
+            ctx.stroke(cross, with: .color(hoverColor.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
             if priceRect.contains(hover) {
                 let hoverPrice = v.price(at: hover.y)
                 // Holding ⌥ turns the price tag the ⌥-click order color: an alt-click buys there.
                 // Holding ⌃ turns it red or green: a ⌃-click places a stop loss or take profit there.
-                var tagColor = Color.gray
+                var tagColor = hoverColor
                 if controlHeld, let color = controlClickColor?(hoverPrice) {
                     tagColor = color
                 } else if optionHeld, onAltClick != nil {

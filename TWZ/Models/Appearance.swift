@@ -41,7 +41,7 @@ enum CandleTheme: String, CaseIterable, Identifiable {
 enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
-        LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey,
+        LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
     ]
 
@@ -72,9 +72,11 @@ enum LineColors {
     static let lastPriceKey = "lastPriceLineColor"
     static let avgCostKey = "avgCostLineColor"
     static let altClickKey = "altClickOrderColor"
+    static let hoverKey = "hoverPriceColor"
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
     static let defaultAltClick = Color.purple
+    static let defaultHover = Color.gray
 
     static func resolve(_ hex: String, default fallback: Color) -> Color {
         Color(hex: hex) ?? fallback
