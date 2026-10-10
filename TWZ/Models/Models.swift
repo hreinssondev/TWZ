@@ -373,3 +373,35 @@ enum Fmt {
         v.formatted(.number.precision(.fractionLength(0...2)))
     }
 }
+
+// MARK: - Chart order amount
+
+/// NOK amount for alt-click chart buys, set in the order entry box next to the hotkeys.
+enum OrderAmount {
+    static let storageKey = "orderAmountNOK"
+    static let initial = 50_000.0
+    static let minimum = 500.0
+    static let maximum = 300_000.0
+    static let step = 5_000.0
+
+    static func clamp(_ nok: Double) -> Double {
+        min(maximum, max(minimum, nok.rounded()))
+    }
+
+    /// One arrow-key step up or down, snapping to the next multiple of 5 000 NOK.
+    static func stepped(_ nok: Double, up: Bool) -> Double {
+        let steps = up ? (nok / step).rounded(.down) + 1 : (nok / step).rounded(.up) - 1
+        return clamp(steps * step)
+    }
+
+    /// "50 000": digits only, for the field.
+    static func format(_ nok: Double) -> String {
+        Int(nok).formatted(.number.grouping(.automatic))
+    }
+
+    /// Reads a typed amount, ignoring grouping separators and any "NOK"/"kr" suffix.
+    static func parse(_ text: String) -> Double? {
+        let digits = text.filter(\.isASCII).filter(\.isNumber)
+        return digits.isEmpty ? nil : Double(digits)
+    }
+}

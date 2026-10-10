@@ -6,7 +6,7 @@
 //  │  chart 1  │  chart 2  ┃  list A  ┃  list B  │
 //  │  chart 3  │  chart 4  ┃          ┃          │
 //  ╞═══ handle ════════════╡┃━━━━━ handle ━━━━━━━┥
-//  │      hotkeys (6×2)    ┃ orders ┃ filled ┃ pos │
+//  │  hotkeys (6×2) │ NOK  ┃ orders ┃ filled ┃ pos │
 //  └───────────────────────┴───────────────────────┘
 //
 //  Every ┃/═/━ separator is a drag handle (resize cursor on hover, double-click resets):

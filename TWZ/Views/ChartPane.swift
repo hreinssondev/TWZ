@@ -22,6 +22,7 @@ struct ChartPane: View {
     @Environment(Workspace.self) private var workspace
     let chart: ChartModel
 
+    @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
 
@@ -32,7 +33,20 @@ struct ChartPane: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            CandleChart(chart: chart, lastPrice: quote?.last, lines: priceLines)
+            CandleChart(
+                chart: chart, lastPrice: quote?.last, lines: priceLines,
+                onAltClick: { price in
+                    workspace.selectedChartIndex = chart.id
+                    broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
+                },
+                altClickPreview: { price in
+                    let limit = Broker.roundToTick(price)
+                    guard let shares = broker.shares(forNOK: OrderAmount.clamp(orderNOK), at: limit) else {
+                        return "No USD.NOK rate"
+                    }
+                    return "BUY \(Fmt.shares(shares)) @ \(Fmt.price(limit))"
+                }
+            )
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -106,7 +120,12 @@ struct ChartPane: View {
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"
             if let lmt = o.limitPrice {
-                lines.append(PriceLine(price: lmt, color: o.action == "BUY" ? .blue : .orange, label: side))
+                if broker.chartOrderIds.contains(o.id) {
+                    // Placed by ⌥-clicking the chart.
+                    lines.append(PriceLine(price: lmt, color: .purple, label: side, dashed: false))
+                } else {
+                    lines.append(PriceLine(price: lmt, color: o.action == "BUY" ? .blue : .orange, label: side))
+                }
             }
             // Stop / trigger price (TRAIL's aux is a distance, not a price).
             if let aux = o.auxPrice, !o.orderType.hasPrefix("TRAIL"), o.orderType != "REL" {

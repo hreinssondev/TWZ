@@ -14,18 +14,24 @@ struct PriceLine {
     var price: Double
     var color: Color
     var label: String
+    var dashed = true
 }
 
 struct CandleChart: View {
     let chart: ChartModel
     var lastPrice: Double?
     var lines: [PriceLine] = []
+    /// ⌥-click in the price area: called with the price under the cursor.
+    var onAltClick: ((Double) -> Void)?
+    /// Text shown by the cursor while ⌥ is held, e.g. "BUY 45 @ 101.20".
+    var altClickPreview: ((Double) -> String?)?
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
     @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
     @State private var hover: CGPoint?
     @State private var dragStartScroll: Double?
+    @State private var optionHeld = false
 
     private let axisWidth: CGFloat = 58
     private let timeAxisHeight: CGFloat = 16
@@ -39,7 +45,12 @@ struct CandleChart: View {
             }
             .contentShape(Rectangle())
             .onContinuousHover { phase in
-                if case .active(let p) = phase { hover = p } else { hover = nil }
+                if case .active(let p) = phase {
+                    hover = p
+                    optionHeld = NSEvent.modifierFlags.contains(.option)
+                } else {
+                    hover = nil
+                }
             }
             .gesture(panGesture(plotWidth: plotWidth))
             .onTapGesture(count: 2) {
@@ -53,7 +64,15 @@ struct CandleChart: View {
                 },
                 onMagnify: { magnification, location in
                     zoom(by: 1 / (1 + magnification), at: location.x, plotWidth: plotWidth)
-                }
+                },
+                onAltClick: onAltClick.map { handler in
+                    { location in
+                        guard let price = price(at: location, size: geo.size) else { return false }
+                        handler(price)
+                        return true
+                    }
+                },
+                onOptionKey: { optionHeld = $0 }
             ))
         }
     }
@@ -99,32 +118,46 @@ struct CandleChart: View {
 
     // MARK: Drawing
 
-    private func draw(in ctx: inout GraphicsContext, size: CGSize) {
-        let bars = chart.bars
-        let plot = CGRect(x: 0, y: 4, width: size.width - axisWidth, height: size.height - timeAxisHeight - 4)
-        guard plot.width > 20, plot.height > 20 else { return }
+    /// Where bars and prices sit on screen; shared by drawing and alt-click pricing.
+    private struct Viewport {
+        var plot: CGRect
+        var priceRect: CGRect
+        var volumeHeight: CGFloat
+        var barWidth: CGFloat
+        var anchor: Double        // index just past the bar at the anchor slot
+        var anchorX: CGFloat
+        var start: Int
+        var end: Int
+        var lo: Double
+        var hi: Double
 
-        guard !bars.isEmpty else {
-            let msg = chart.isLoading ? "Loading…" : (chart.error ?? (chart.symbol.isEmpty ? "Enter a symbol" : "No data"))
-            ctx.draw(Text(msg).font(.system(size: 11)).foregroundStyle(.secondary),
-                     at: CGPoint(x: size.width / 2, y: size.height / 2))
-            return
+        func y(_ price: Double) -> CGFloat {
+            priceRect.maxY - CGFloat((price - lo) / (hi - lo)) * priceRect.height
         }
+
+        func price(at yPos: CGFloat) -> Double {
+            lo + Double((priceRect.maxY - yPos) / priceRect.height) * (hi - lo)
+        }
+    }
+
+    private func plotRect(size: CGSize) -> CGRect {
+        CGRect(x: 0, y: 4, width: size.width - axisWidth, height: size.height - timeAxisHeight - 4)
+    }
+
+    /// nil while the chart is too small to draw or has no bars.
+    private func viewport(size: CGSize) -> Viewport? {
+        let bars = chart.bars
+        let plot = plotRect(size: size)
+        guard plot.width > 20, plot.height > 20, !bars.isEmpty else { return nil }
 
         // Visible window, anchored to the right edge. scrollBack is fractional so panning is smooth.
         let slots = chart.visibleBars + rightPaddingBars
         let barWidth = plot.width / slots
-        let anchor = Double(bars.count) - chart.scrollBack   // index just past the bar at the anchor slot
+        let anchor = Double(bars.count) - chart.scrollBack
         let anchorX = plot.maxX - CGFloat(rightPaddingBars) * barWidth
         let end = min(bars.count, max(1, Int((anchor + rightPaddingBars).rounded(.up))))
         let start = min(end - 1, max(0, Int((anchor - chart.visibleBars).rounded(.down))))
         let visible = bars[start..<end]
-        func x(_ index: Int) -> CGFloat {
-            anchorX - CGFloat(anchor - Double(index) - 0.5) * barWidth
-        }
-        // Bars partially scrolled past the edges are clipped; axis tags draw on the unclipped context.
-        var plotCtx = ctx
-        plotCtx.clip(to: Path(CGRect(x: 0, y: 0, width: plot.maxX, height: size.height)))
 
         // Price area takes the top 80%, volume the bottom 20%.
         let volumeHeight = plot.height * 0.18
@@ -136,12 +169,37 @@ struct CandleChart: View {
         if hi - lo < 1e-9 { hi += 0.01; lo -= 0.01 }
         let pad = (hi - lo) * 0.06
         lo -= pad; hi += pad
-        func y(_ price: Double) -> CGFloat {
-            priceRect.maxY - CGFloat((price - lo) / (hi - lo)) * priceRect.height
+        return Viewport(plot: plot, priceRect: priceRect, volumeHeight: volumeHeight, barWidth: barWidth,
+                        anchor: anchor, anchorX: anchorX, start: start, end: end, lo: lo, hi: hi)
+    }
+
+    /// The price under a point in the price area, or nil outside it.
+    private func price(at point: CGPoint, size: CGSize) -> Double? {
+        guard let v = viewport(size: size), v.priceRect.contains(point) else { return nil }
+        return v.price(at: point.y)
+    }
+
+    private func draw(in ctx: inout GraphicsContext, size: CGSize) {
+        let bars = chart.bars
+        guard let v = viewport(size: size) else {
+            let plot = plotRect(size: size)
+            guard plot.width > 20, plot.height > 20 else { return }
+            let msg = chart.isLoading ? "Loading…" : (chart.error ?? (chart.symbol.isEmpty ? "Enter a symbol" : "No data"))
+            ctx.draw(Text(msg).font(.system(size: 11)).foregroundStyle(.secondary),
+                     at: CGPoint(x: size.width / 2, y: size.height / 2))
+            return
         }
-        func price(at yPos: CGFloat) -> Double {
-            lo + Double((priceRect.maxY - yPos) / priceRect.height) * (hi - lo)
+        let plot = v.plot, priceRect = v.priceRect, volumeHeight = v.volumeHeight
+        let barWidth = v.barWidth, anchor = v.anchor, anchorX = v.anchorX
+        let start = v.start, end = v.end, lo = v.lo, hi = v.hi
+        let visible = bars[start..<end]
+        func x(_ index: Int) -> CGFloat {
+            anchorX - CGFloat(anchor - Double(index) - 0.5) * barWidth
         }
+        func y(_ price: Double) -> CGFloat { v.y(price) }
+        // Bars partially scrolled past the edges are clipped; axis tags draw on the unclipped context.
+        var plotCtx = ctx
+        plotCtx.clip(to: Path(CGRect(x: 0, y: 0, width: plot.maxX, height: size.height)))
 
         let gridColor = Color.primary.opacity(0.07)
         let labelColor = Color.secondary
@@ -208,7 +266,7 @@ struct CandleChart: View {
 
         // Position / order lines.
         for line in lines where line.price > lo && line.price < hi {
-            drawLine(in: &ctx, y: y(line.price), plot: plot, color: line.color, dashed: true,
+            drawLine(in: &ctx, y: y(line.price), plot: plot, color: line.color, dashed: line.dashed,
                      tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))")
         }
 
@@ -228,7 +286,19 @@ struct CandleChart: View {
             cross.move(to: CGPoint(x: x(index), y: plot.minY)); cross.addLine(to: CGPoint(x: x(index), y: plot.maxY))
             ctx.stroke(cross, with: .color(.secondary.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
             if priceRect.contains(hover) {
-                drawTag(in: &ctx, text: Fmt.price(price(at: hover.y)), y: hover.y, plot: plot, color: .gray)
+                let hoverPrice = v.price(at: hover.y)
+                // Holding ⌥ previews the alt-click order: what it buys, next to the cursor.
+                if optionHeld, let preview = altClickPreview?(hoverPrice) {
+                    let resolved = ctx.resolve(Text(preview).font(.system(size: 10, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(.white))
+                    let textSize = resolved.measure(in: CGSize(width: 300, height: 20))
+                    let pill = CGRect(x: min(hover.x + 10, plot.maxX - textSize.width - 10), y: hover.y - 22,
+                                      width: textSize.width + 8, height: 16)
+                    ctx.fill(Path(roundedRect: pill, cornerRadius: 3), with: .color(.purple))
+                    ctx.draw(resolved, at: CGPoint(x: pill.minX + 4, y: pill.midY), anchor: .leading)
+                }
+                drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot,
+                        color: optionHeld && onAltClick != nil ? .purple : .gray)
             }
         }
         let change = readout.open > 0 ? (readout.close - readout.open) / readout.open * 100 : 0
@@ -287,22 +357,27 @@ struct CandleChart: View {
 
 /// SwiftUI on macOS has no scroll-wheel or precise trackpad scroll gesture, so this background
 /// view watches the app's scroll and magnify events and forwards the ones over its own frame.
+/// It also takes ⌥-clicks (before SwiftUI's tap and drag gestures see them) and ⌥ key changes.
 private struct ScrollCatcher: NSViewRepresentable {
     /// (dx, dy, location): dx in points (positive = content moves right), dy in points
     /// (positive = zoom in), location in view coordinates with a top-left origin.
     var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
     var onMagnify: (CGFloat, CGPoint) -> Void
+    /// ⌥-click location; return true to consume the click.
+    var onAltClick: ((CGPoint) -> Bool)?
+    var onOptionKey: (Bool) -> Void
 
     func makeNSView(context: Context) -> CatcherView {
         let view = CatcherView()
-        view.onScroll = onScroll
-        view.onMagnify = onMagnify
+        updateNSView(view, context: context)
         return view
     }
 
     func updateNSView(_ view: CatcherView, context: Context) {
         view.onScroll = onScroll
         view.onMagnify = onMagnify
+        view.onAltClick = onAltClick
+        view.onOptionKey = onOptionKey
     }
 
     static func dismantleNSView(_ view: CatcherView, coordinator: ()) {
@@ -312,6 +387,8 @@ private struct ScrollCatcher: NSViewRepresentable {
     final class CatcherView: NSView {
         var onScroll: ((CGFloat, CGFloat, CGPoint) -> Void)?
         var onMagnify: ((CGFloat, CGPoint) -> Void)?
+        var onAltClick: ((CGPoint) -> Bool)?
+        var onOptionKey: ((Bool) -> Void)?
         private var monitor: Any?
         private enum Axis { case horizontal, vertical }
         private var lockedAxis: Axis?
@@ -323,11 +400,22 @@ private struct ScrollCatcher: NSViewRepresentable {
             super.viewDidMoveToWindow()
             removeMonitor()
             guard window != nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .magnify]) { [weak self] event in
-                guard let self, let location = self.location(of: event) else { return event }
-                if event.type == .magnify {
+            monitor = NSEvent.addLocalMonitorForEvents(
+                matching: [.scrollWheel, .magnify, .leftMouseDown, .flagsChanged]
+            ) { [weak self] event in
+                guard let self else { return event }
+                if event.type == .flagsChanged {
+                    self.onOptionKey?(event.modifierFlags.contains(.option))
+                    return event
+                }
+                guard let location = self.location(of: event) else { return event }
+                switch event.type {
+                case .magnify:
                     self.onMagnify?(event.magnification, location)
-                } else {
+                case .leftMouseDown:
+                    let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
+                    guard flags == .option, let onAltClick = self.onAltClick, onAltClick(location) else { return event }
+                default:
                     self.handleScroll(event, at: location)
                 }
                 return nil

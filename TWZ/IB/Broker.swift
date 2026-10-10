@@ -43,6 +43,12 @@ final class Broker {
     private(set) var scans: [String: ScanResult] = [:]
     /// Regular-session closes keyed "SYMBOL|yyyyMMdd", fetched for after-hours scanner rows.
     private(set) var sessionCloses: [String: Double] = [:]
+    /// NOK per USD (IDEALPRO mid), used to size alt-click chart buys. Starts at the last saved
+    /// rate; `usdNokIsLive` turns true once this connection has a quote.
+    private(set) var usdNok: Double?
+    private(set) var usdNokIsLive = false
+    /// Orders placed by alt-clicking a chart; drawn as solid purple lines.
+    private(set) var chartOrderIds: Set<Int>
 
     /// Live market value of all positions (falls back to cost when no quote yet).
     var totalPositionValue: Double? {
@@ -77,6 +83,11 @@ final class Broker {
     @ObservationIgnored private var reqByChart: [Int: Int] = [:]
     @ObservationIgnored private var pendingBars: [Int: [Bar]] = [:]
 
+    @ObservationIgnored private var fxReq: Int?
+    @ObservationIgnored private var fxBid: Double?
+    @ObservationIgnored private var fxAsk: Double?
+    @ObservationIgnored private var fxClose: Double?
+
     @ObservationIgnored private let accountSummaryReq = 1
     @ObservationIgnored private let pnlReq = 2
     @ObservationIgnored private let executionsReq = 3
@@ -92,6 +103,8 @@ final class Broker {
         host = defaults.string(forKey: "ib.host") ?? "127.0.0.1"
         port = defaults.object(forKey: "ib.port") as? Int ?? 4002          // paper gateway by default
         clientId = defaults.object(forKey: "ib.clientId") as? Int ?? 1
+        usdNok = defaults.object(forKey: "fx.usdNok") as? Double
+        chartOrderIds = Set(defaults.array(forKey: "chartOrderIds") as? [Int] ?? [])
         socket.onEvent = { [weak self] event in self?.handle(event) }
     }
 
@@ -127,6 +140,11 @@ final class Broker {
         closeKeyByReq.removeAll()
         closesRequested.removeAll()
         scans.removeAll()
+        fxReq = nil
+        fxBid = nil
+        fxAsk = nil
+        fxClose = nil
+        usdNokIsLive = false
         netLiquidation = nil
         grossPositionValue = nil
         dailyPnL = nil
@@ -186,6 +204,7 @@ final class Broker {
         for symbol in quoteOwners.values.reduce(into: Set<String>(), { $0.formUnion($1) }) {
             subscribeQuote(symbol)
         }
+        subscribeUsdNok()
         for chart in charts { loadChart(chart) }
         for owner in scanSpecs.keys { startScan(owner) }
     }
@@ -218,6 +237,29 @@ final class Broker {
         quoteReqBySymbol[symbol] = reqId
         quoteSymbolByReq[reqId] = symbol
         sendFields([1, 11, reqId] + contract(symbol) + [false, "", false, false, ""])   // reqMktData
+    }
+
+    /// USD.NOK on IDEALPRO (free forex quotes) for sizing NOK-denominated chart orders.
+    private func subscribeUsdNok() {
+        guard apiReady, fxReq == nil else { return }
+        let reqId = makeReqId()
+        fxReq = reqId
+        sendFields([1, 11, reqId, 0, "USD", "CASH", "", 0.0, "", "", "IDEALPRO", "", "NOK", "", "",
+                    false, "", false, false, ""])                                  // reqMktData
+    }
+
+    private func fxTick(type: Int, price: Double) {
+        guard price > 0 else { return }
+        switch type {
+        case 1, 66: fxBid = price
+        case 2, 67: fxAsk = price
+        case 9, 75: fxClose = price
+        default: return
+        }
+        guard let rate = fxBid.flatMap({ b in fxAsk.map { (b + $0) / 2 } }) ?? fxClose else { return }
+        usdNok = rate
+        usdNokIsLive = true
+        defaults.set(rate, forKey: "fx.usdNok")
     }
 
     // MARK: - Scanners
@@ -305,16 +347,16 @@ final class Broker {
     // MARK: - Orders
 
     @discardableResult
-    /// Places a stock order; `limit == nil` sends a market order.
+    /// Places a stock order and returns its id; `limit == nil` sends a market order.
     func placeOrder(symbol: String, action: String, quantity: Double, limit: Double?,
-                    tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART") -> Bool {
+                    tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART") -> Int? {
         guard apiReady, let orderId = nextOrderId else {
             lastMessage = "Not connected"
-            return false
+            return nil
         }
         guard quantity > 0 else {
             lastMessage = "Order quantity must be > 0"
-            return false
+            return nil
         }
         nextOrderId = orderId + 1
 
@@ -348,7 +390,7 @@ final class Broker {
             id: orderId, symbol: symbol, action: action, quantity: quantity,
             orderType: orderType, limitPrice: limit, status: "PendingSubmit"
         )
-        return true
+        return orderId
     }
 
     func cancelOrder(_ orderId: Int) {
@@ -408,7 +450,7 @@ final class Broker {
                 lastMessage = "Size too small for \(symbol)"
                 return
             }
-            submit(symbol: symbol, action: action, quantity: quantity, price: price, hotkey: hotkey)
+            submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif)
         }
     }
 
@@ -417,17 +459,56 @@ final class Broker {
         var quantity = (abs(p.quantity) * fraction).rounded(.down)
         if quantity < 1 { quantity = abs(p.quantity) }
         guard let price = orderPrice(symbol: p.symbol, action: action, hotkey: hotkey) else { return }
-        submit(symbol: p.symbol, action: action, quantity: quantity, price: price, hotkey: hotkey)
+        submit(symbol: p.symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif)
+    }
+
+    // MARK: - Chart orders
+
+    /// Shares a NOK amount buys at `price`, converted at the current USD.NOK rate.
+    func shares(forNOK nok: Double, at price: Double) -> Double? {
+        guard let usdNok, usdNok > 0, price > 0 else { return nil }
+        return (nok / usdNok / price).rounded(.down)
+    }
+
+    /// Alt-click on a chart: a DAY limit buy for `nok` worth of `symbol` at the clicked price.
+    func buyNOK(_ nok: Double, symbol rawSymbol: String, at clickedPrice: Double) {
+        let symbol = rawSymbol.uppercased()
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        guard !symbol.isEmpty else {
+            lastMessage = "Load a symbol into the chart first"
+            return
+        }
+        let limit = Self.roundToTick(clickedPrice)
+        guard let quantity = shares(forNOK: nok, at: limit) else {
+            lastMessage = "No USD.NOK rate yet, so the order can't be sized"
+            return
+        }
+        guard quantity >= 1 else {
+            lastMessage = "\(OrderAmount.format(nok)) NOK is less than one share of \(symbol) at \(Fmt.price(limit))"
+            return
+        }
+        var price = HotkeyPrice(limit: limit, outsideRth: true)
+        if MarketSession.phase() == .overnight { price.exchange = "OVERNIGHT" }
+        let summary = "BUY \(Fmt.shares(quantity)) @ \(Fmt.price(limit)) (\(OrderAmount.format(nok)) NOK)"
+        guard let id = submit(symbol: symbol, action: "BUY", quantity: quantity, price: price, tif: .day,
+                              summary: summary) else { return }
+        chartOrderIds.insert(id)
+        defaults.set(Array(chartOrderIds.sorted().suffix(500)), forKey: "chartOrderIds")
     }
 
     /// Places the order and says in the status line when it was priced off a fallback or
-    /// won't work until a later session.
-    private func submit(symbol: String, action: String, quantity: Double, price: HotkeyPrice, hotkey: Hotkey) {
+    /// won't work until a later session, after `summary` when one is given.
+    @discardableResult
+    private func submit(symbol: String, action: String, quantity: Double, price: HotkeyPrice,
+                        tif: TimeInForce, summary: String? = nil) -> Int? {
         let overnight = price.exchange == "OVERNIGHT"
-        guard placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
-                         tif: overnight ? .day : hotkey.tif, outsideRth: price.outsideRth,
-                         exchange: price.exchange) else { return }
-        var notes: [String] = []
+        guard let id = placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
+                                  tif: overnight ? .day : tif, outsideRth: price.outsideRth,
+                                  exchange: price.exchange) else { return nil }
+        var notes = summary.map { [$0] } ?? []
         if let source = price.fallback, let limit = price.limit {
             notes.append("no live quote, priced off \(source) → \(Fmt.price(limit))")
         }
@@ -437,6 +518,7 @@ final class Broker {
         default: break
         }
         if !notes.isEmpty { lastMessage = "\(symbol): " + notes.joined(separator: "; ") }
+        return id
     }
 
     /// The quote a price reference points at. When it's missing (market closed, no data yet) this
@@ -541,6 +623,7 @@ final class Broker {
     }
 
     private func tickPrice(_ f: [String]) {
+        if f.int(2) == fxReq { return fxTick(type: f.int(3), price: f.double(4)) }
         guard let symbol = quoteSymbolByReq[f.int(2)] else { return }
         let price = f.double(4)
         var q = quotes[symbol] ?? Quote()
@@ -617,6 +700,12 @@ final class Broker {
 
         // 2100-2199 are connectivity/farm status notices; 10167 = "displaying delayed data".
         if (2100...2199).contains(code) || code == 10167 || code == 399 { return }
+
+        if reqId == fxReq {
+            fxReq = nil
+            lastMessage = "USD.NOK rate: \(text)" + (usdNok.map { " (using saved \(Fmt.price($0)))" } ?? "")
+            return
+        }
 
         // No real-time subscription: go offline rather than show delayed or missing data.
         if Self.noMarketDataCodes.contains(code), quoteSymbolByReq[reqId] != nil || scanOwnerByReq[reqId] != nil {
