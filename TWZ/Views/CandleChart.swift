@@ -287,10 +287,10 @@ struct CandleChart: View {
                      tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))")
         }
 
-        // Last price.
+        // Last price: dotted soft blue.
         if let last = lastPrice ?? bars.last?.close, last > lo, last < hi {
-            let color = (bars.last.map { last >= $0.open } ?? true) ? up : down
-            drawLine(in: &ctx, y: y(last), plot: plot, color: color, dashed: false, tag: Fmt.price(last))
+            drawLine(in: &ctx, y: y(last), plot: plot, color: Color(red: 0.30, green: 0.50, blue: 0.95), dashed: true,
+                     tag: Fmt.price(last))
         }
 
         // Crosshair (horizontal only).
