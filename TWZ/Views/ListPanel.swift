@@ -125,11 +125,14 @@ struct ListPanel: View {
         let q = broker.quotes[symbol]
         let change = changePercent(symbol, q)
         let isCharted = workspace.selectedChart.symbol == symbol
+        let unavailable = broker.unavailableQuotes[symbol]
         let volume = scanner == .dollarVolume
             ? Fmt.dollars(q?.volume.flatMap { v in q?.last.map { v * $0 } })
             : Fmt.volume(q?.volume)
         return HStack(spacing: 4) {
-            Text(symbol).fontWeight(.semibold).frame(maxWidth: .infinity, alignment: .leading)
+            Text(symbol).fontWeight(.semibold)
+                .foregroundStyle(unavailable == nil ? Color.primary : Color.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text(Fmt.price(q?.last)).frame(width: 58, alignment: .trailing)
             Text(Fmt.percent(change))
                 .foregroundStyle(change == nil ? Color.secondary : (change! >= 0 ? Color.green : Color.red))
@@ -141,6 +144,7 @@ struct ListPanel: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background(isCharted ? Color.accentColor.opacity(0.18) : Color.clear)
+        .help(unavailable.map { "No real-time data: \($0)" } ?? "")
         .contentShape(Rectangle())
         .onTapGesture {
             workspace.load(symbol, into: workspace.selectedChart, broker: broker)

@@ -39,6 +39,8 @@ final class Broker {
     private(set) var orders: [Int: OrderRow] = [:]
     private(set) var fills: [String: Fill] = [:]
     private(set) var quotes: [String: Quote] = [:]
+    /// Symbols IB refused real-time data for this session, with IB's reason.
+    private(set) var unavailableQuotes: [String: String] = [:]
     /// Latest scanner results per list panel.
     private(set) var scans: [String: ScanResult] = [:]
     /// Regular-session closes keyed "SYMBOL|yyyyMMdd", fetched for after-hours scanner rows.
@@ -61,6 +63,9 @@ final class Broker {
     @ObservationIgnored private var nextOrderId: Int?
     @ObservationIgnored private var nextReqId = 900_000_000   // far above order ids so error routing is unambiguous
     @ObservationIgnored private var apiReady = false
+    @ObservationIgnored private var session = 0                 // bumped on every reset; stale timers check it
+    @ObservationIgnored private var hasLiveQuote = false        // any quote ticked this session
+    @ObservationIgnored private var noDataCheckScheduled = false
 
     @ObservationIgnored private var quoteOwners: [String: Set<String>] = [:]
     @ObservationIgnored private var quoteReqBySymbol: [String: Int] = [:]
@@ -117,6 +122,10 @@ final class Broker {
         nextOrderId = nil
         apiReady = false
         account = ""
+        session += 1
+        hasLiveQuote = false
+        noDataCheckScheduled = false
+        unavailableQuotes.removeAll()
         quoteReqBySymbol.removeAll()
         quoteSymbolByReq.removeAll()
         chartByReq.removeAll()
@@ -209,6 +218,20 @@ final class Broker {
         }
         for symbol in wanted where quoteReqBySymbol[symbol] == nil {
             subscribeQuote(symbol)
+        }
+    }
+
+    private func scheduleNoDataCheck() {
+        guard !noDataCheckScheduled else { return }
+        noDataCheckScheduled = true
+        let current = session
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            guard let self, self.session == current, self.apiReady,
+                  !self.hasLiveQuote, let symbol = self.unavailableQuotes.keys.sorted().first else { return }
+            let reason = self.unavailableQuotes[symbol] ?? ""
+            self.disconnect()
+            self.statusText = "Offline · no real-time market data subscription"
+            self.lastMessage = "\(symbol): \(reason)"
         }
     }
 
@@ -542,6 +565,7 @@ final class Broker {
 
     private func tickPrice(_ f: [String]) {
         guard let symbol = quoteSymbolByReq[f.int(2)] else { return }
+        hasLiveQuote = true
         let price = f.double(4)
         var q = quotes[symbol] ?? Quote()
         switch f.int(3) {
@@ -556,6 +580,7 @@ final class Broker {
 
     private func tickSize(_ f: [String]) {
         guard let symbol = quoteSymbolByReq[f.int(2)] else { return }
+        hasLiveQuote = true
         switch f.int(3) {
         case 8, 74: quotes[symbol, default: Quote()].volume = f.double(4)
         default: break
@@ -618,12 +643,11 @@ final class Broker {
         // 2100-2199 are connectivity/farm status notices; 10167 = "displaying delayed data".
         if (2100...2199).contains(code) || code == 10167 || code == 399 { return }
 
-        // No real-time subscription: go offline rather than show delayed or missing data.
-        if Self.noMarketDataCodes.contains(code), quoteSymbolByReq[reqId] != nil || scanOwnerByReq[reqId] != nil {
-            let symbol = quoteSymbolByReq[reqId].map { " (\($0))" } ?? ""
-            disconnect()
-            statusText = "Offline · no real-time market data subscription\(symbol)"
-            lastMessage = "[\(code)] \(text)"
+        // Not subscribed for this symbol: leave it without a quote. The request stays mapped so it
+        // isn't retried. If no quote at all comes through, go offline rather than run without data.
+        if Self.noMarketDataCodes.contains(code), let symbol = quoteSymbolByReq[reqId] {
+            unavailableQuotes[symbol] = text
+            scheduleNoDataCheck()
             return
         }
 
