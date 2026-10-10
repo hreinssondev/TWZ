@@ -2,8 +2,8 @@
 //  OrdersPanel.swift
 //  TWZ
 //
-//  Orders, Filled and Positions side by side as three always-visible columns.
-//  Rows are two lines so they fit the narrow columns.
+//  Orders, Filled and Positions side by side as three always-visible columns,
+//  with draggable dividers between them. Rows are two lines so they fit the narrow columns.
 //
 
 import SwiftUI
@@ -11,14 +11,37 @@ import SwiftUI
 struct OrdersPanel: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
+    // Widths of the Orders and Filled columns as shares of the panel; Positions takes the rest.
+    @AppStorage("ordersColumn") private var ordersShare: Double = 1 / 3
+    @AppStorage("filledColumn") private var filledShare: Double = 1 / 3
+
+    private static let minColumnWidth: CGFloat = 90
 
     var body: some View {
-        HStack(spacing: 0) {
-            column("Orders", count: activeOrders.count) { activeRows }
-            Divider()
-            column("Filled", count: broker.fills.count) { filledRows }
-            Divider()
-            column("Positions", count: broker.positions.count) { positionRows }
+        GeometryReader { geo in
+            let total = max(geo.size.width - 2, Self.minColumnWidth * 3)   // minus the two 1pt dividers
+            let minW = Self.minColumnWidth
+            let ordersW = min(max(total * ordersShare, minW), total - minW * 2)
+            let filledW = min(max(total * filledShare, minW), total - ordersW - minW)
+            HStack(spacing: 0) {
+                column("Orders", count: activeOrders.count) { activeRows }
+                    .frame(width: ordersW)
+                // Each divider trades width with its neighbour; the column on the far side stays put.
+                ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: ordersW,
+                             range: minW...(ordersW + filledW - minW),
+                             onChange: { w in
+                                 ordersShare = w / total
+                                 filledShare = (ordersW + filledW - w) / total
+                             },
+                             onReset: resetColumns)
+                column("Filled", count: broker.fills.count) { filledRows }
+                    .frame(width: filledW)
+                ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: filledW,
+                             range: minW...(total - ordersW - minW),
+                             onChange: { filledShare = $0 / total },
+                             onReset: resetColumns)
+                column("Positions", count: broker.positions.count) { positionRows }
+            }
         }
         .font(.system(size: 11).monospacedDigit())
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
@@ -26,7 +49,12 @@ struct OrdersPanel: View {
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
     }
 
-    /// One always-visible column: a compact header and its own scrolling rows, sharing width equally.
+    private func resetColumns() {
+        ordersShare = 1 / 3
+        filledShare = 1 / 3
+    }
+
+    /// One always-visible column: a compact header and its own scrolling rows.
     private func column<Rows: View>(_ title: String, count: Int, @ViewBuilder rows: () -> Rows) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {

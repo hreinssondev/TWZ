@@ -2,16 +2,17 @@
 //  ContentView.swift
 //  TWZ
 //
-//  ┌──── ●●● account bar (in the title bar) ─────┐
-//  │  chart 1  │  chart 2  │  list A  │  list B  │
-//  │  chart 3  │  chart 4  │          │          │
-//  ╞═══ drag handle (resizes) ═══╡   │          │
-//  │      hotkeys (6×2)       ├────── orders ─────┤
-//  └──────────────────────────┴──────────────────┘
+//  ┌──── ●●● account bar (in the title bar) ──────┐
+//  │  chart 1  │  chart 2  ┃  list A  ┃  list B  │
+//  │  chart 3  │  chart 4  ┃          ┃          │
+//  ╞═══ handle ════════════╡┃━━━━━ handle ━━━━━━━┥
+//  │      hotkeys (6×2)    ┃ orders ┃ filled ┃ pos │
+//  └───────────────────────┴───────────────────────┘
 //
-//  The handle only splits the left column: charts above, hotkeys below. The hotkey buttons
-//  keep a fixed size; only the free space around them changes, down to the height they need.
-//  The right column (lists above a fixed-height orders panel) is unaffected.
+//  Every ┃/═/━ separator is a drag handle (resize cursor on hover, double-click resets):
+//  charts ↕ hotkeys, left column ↔ right column, list A ↔ list B, lists ↕ orders, and
+//  the Orders / Filled / Positions columns. The hotkey buttons keep a fixed size; only
+//  the free space around them changes, down to the height they need.
 //
 
 import SwiftUI
@@ -19,22 +20,42 @@ import SwiftUI
 struct ContentView: View {
     @Environment(Workspace.self) private var workspace
     @AppStorage("bottomRowHeight") private var bottomHeight: Double = 190
-    @State private var dragStartHeight: Double?
+    @AppStorage("sideWidth") private var storedSideWidth: Double = 0      // 0 = default (a third)
+    @AppStorage("listSplit") private var listSplit: Double = 0.5          // left list's share of the lists
+    @AppStorage("ordersHeight") private var ordersHeight: Double = 190
 
+    private static let gap: CGFloat = 6
     private static let minTopHeight: CGFloat = 240
-    private static let ordersHeight: CGFloat = 190
+    private static let minChartsWidth: CGFloat = 520
+    private static let minListWidth: CGFloat = 190
+    private static let minListsHeight: CGFloat = 160
+    private static let minOrdersHeight: CGFloat = 80
 
     var body: some View {
         VStack(spacing: 0) {
             AccountBar()
             Divider()
             GeometryReader { geo in
-                let gap: CGFloat = 6
+                let gap = Self.gap
+                let inner = CGSize(width: geo.size.width - gap * 2, height: geo.size.height - gap * 2)
+
                 let minBottom = HotkeyPanel.minHeight
-                let maxBottom = max(minBottom, geo.size.height - gap * 3 - Self.minTopHeight)
-                let rowHeight = min(maxBottom, max(minBottom, bottomHeight))
-                let sideWidth = (geo.size.width - gap * 3) / 3
-                HStack(spacing: gap) {
+                let maxBottom = max(minBottom, inner.height - gap - Self.minTopHeight)
+                let rowHeight = clamp(bottomHeight, minBottom...maxBottom)
+
+                let minSide = Self.minListWidth * 2 + gap
+                let maxSide = max(minSide, inner.width - gap - Self.minChartsWidth)
+                let sideWidth = clamp(storedSideWidth > 0 ? storedSideWidth : (inner.width - gap) / 3, minSide...maxSide)
+
+                let listsWidth = sideWidth - gap
+                let leftListRange = Self.minListWidth...max(Self.minListWidth, listsWidth - Self.minListWidth)
+                let leftListWidth = clamp(listsWidth * listSplit, leftListRange)
+
+                let maxOrders = max(Self.minOrdersHeight, inner.height - gap - Self.minListsHeight)
+                let ordersRange = Self.minOrdersHeight...maxOrders
+                let ordersPanelHeight = clamp(ordersHeight, ordersRange)
+
+                HStack(spacing: 0) {
                     VStack(spacing: 0) {
                         Grid(horizontalSpacing: gap, verticalSpacing: gap) {
                             GridRow {
@@ -46,17 +67,29 @@ struct ContentView: View {
                                 ChartPane(chart: workspace.charts[3])
                             }
                         }
-                        resizeHandle(height: gap, current: rowHeight, range: minBottom...maxBottom)
+                        ResizeHandle(resizes: .vertical, thickness: gap, current: rowHeight,
+                                     range: minBottom...maxBottom, inverted: true,
+                                     onChange: { bottomHeight = $0 }, onReset: { bottomHeight = 190 })
                         HotkeyPanel()
                             .frame(height: rowHeight)
                     }
-                    VStack(spacing: gap) {
-                        HStack(spacing: gap) {
+                    ResizeHandle(resizes: .horizontal, thickness: gap, current: sideWidth,
+                                 range: minSide...maxSide, inverted: true,
+                                 onChange: { storedSideWidth = $0 }, onReset: { storedSideWidth = 0 })
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
                             ListPanel(panelId: "list-left", defaultScanner: .gainers)
+                                .frame(width: leftListWidth)
+                            ResizeHandle(resizes: .horizontal, thickness: gap, current: leftListWidth,
+                                         range: leftListRange,
+                                         onChange: { listSplit = $0 / listsWidth }, onReset: { listSplit = 0.5 })
                             ListPanel(panelId: "list-right", defaultScanner: .dollarVolume)
                         }
+                        ResizeHandle(resizes: .vertical, thickness: gap, current: ordersPanelHeight,
+                                     range: ordersRange, inverted: true,
+                                     onChange: { ordersHeight = $0 }, onReset: { ordersHeight = 190 })
                         OrdersPanel()
-                            .frame(height: Self.ordersHeight)
+                            .frame(height: ordersPanelHeight)
                     }
                     .frame(width: sideWidth)
                 }
@@ -68,24 +101,7 @@ struct ContentView: View {
         .frame(minWidth: 1200, minHeight: 760)
     }
 
-    /// Thin grab strip in the gap between the charts and the hotkeys.
-    private func resizeHandle(height: CGFloat, current: CGFloat, range: ClosedRange<CGFloat>) -> some View {
-        Capsule()
-            .fill(Color.primary.opacity(dragStartHeight == nil ? 0.15 : 0.35))
-            .frame(width: 36, height: 3)
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
-            .contentShape(Rectangle())
-            .pointerStyle(.rowResize)
-            .gesture(
-                DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                    .onChanged { value in
-                        let start = dragStartHeight ?? current
-                        dragStartHeight = start
-                        bottomHeight = min(range.upperBound, max(range.lowerBound, start - value.translation.height))
-                    }
-                    .onEnded { _ in dragStartHeight = nil }
-            )
-            .onTapGesture(count: 2) { bottomHeight = 190 }
+    private func clamp(_ value: Double, _ range: ClosedRange<CGFloat>) -> CGFloat {
+        min(range.upperBound, max(range.lowerBound, value))
     }
 }
