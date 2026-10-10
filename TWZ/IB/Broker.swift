@@ -19,7 +19,6 @@ final class Broker {
     var host: String { didSet { defaults.set(host, forKey: "ib.host") } }
     var port: Int { didSet { defaults.set(port, forKey: "ib.port") } }
     var clientId: Int { didSet { defaults.set(clientId, forKey: "ib.clientId") } }
-    var allowDelayedData: Bool { didSet { defaults.set(allowDelayedData, forKey: "ib.delayed") } }
 
     var isLivePort: Bool { port == 4001 || port == 7496 }
 
@@ -82,6 +81,9 @@ final class Broker {
     @ObservationIgnored private let pnlReq = 2
     @ObservationIgnored private let executionsReq = 3
 
+    /// "Requested market data is not subscribed" and variants (354, 10089, 10091, 10168).
+    private static let noMarketDataCodes: Set<Int> = [354, 10089, 10091, 10168]
+
     private static let minClientVersion = 157
     private static let maxClientVersion = 178
     nonisolated private static let unsetDouble = Double.greatestFiniteMagnitude
@@ -90,7 +92,6 @@ final class Broker {
         host = defaults.string(forKey: "ib.host") ?? "127.0.0.1"
         port = defaults.object(forKey: "ib.port") as? Int ?? 4002          // paper gateway by default
         clientId = defaults.object(forKey: "ib.clientId") as? Int ?? 1
-        allowDelayedData = defaults.object(forKey: "ib.delayed") as? Bool ?? true
         socket.onEvent = { [weak self] event in self?.handle(event) }
     }
 
@@ -175,7 +176,7 @@ final class Broker {
         statusText = "Connected · \(account)"
         lastMessage = nil
 
-        send(59, 1, allowDelayedData ? 3 : 1)                                      // reqMarketDataType
+        send(59, 1, 1)                                                             // reqMarketDataType: real-time only
         send(61, 1)                                                                // reqPositions
         send(62, 1, accountSummaryReq, "All", "NetLiquidation,GrossPositionValue")  // reqAccountSummary
         send(92, pnlReq, account, "")                                              // reqPnL
@@ -616,6 +617,15 @@ final class Broker {
 
         // 2100-2199 are connectivity/farm status notices; 10167 = "displaying delayed data".
         if (2100...2199).contains(code) || code == 10167 || code == 399 { return }
+
+        // No real-time subscription: go offline rather than show delayed or missing data.
+        if Self.noMarketDataCodes.contains(code), quoteSymbolByReq[reqId] != nil || scanOwnerByReq[reqId] != nil {
+            let symbol = quoteSymbolByReq[reqId].map { " (\($0))" } ?? ""
+            disconnect()
+            statusText = "Offline · no real-time market data subscription\(symbol)"
+            lastMessage = "[\(code)] \(text)"
+            return
+        }
 
         if closeKeyByReq.removeValue(forKey: reqId) != nil { return }
         if let owner = scanOwnerByReq.removeValue(forKey: reqId) {

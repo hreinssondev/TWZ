@@ -69,7 +69,6 @@ private struct ConnectionSettings: View {
     @State private var host = ""
     @State private var port = 4002
     @State private var clientId = 1
-    @State private var allowDelayed = true
     @State private var confirmLive = false
 
     private let presets: [(String, Int)] = [
@@ -79,7 +78,7 @@ private struct ConnectionSettings: View {
 
     private var hasChanges: Bool {
         host.trimmingCharacters(in: .whitespaces) != broker.host || port != broker.port
-            || clientId != broker.clientId || allowDelayed != broker.allowDelayedData
+            || clientId != broker.clientId
     }
 
     var body: some View {
@@ -92,7 +91,8 @@ private struct ConnectionSettings: View {
                 TextField("Client ID", value: $clientId, format: .number.grouping(.never))
             }
             Section("Market data") {
-                Toggle("Fall back to delayed data when not subscribed", isOn: $allowDelayed)
+                Text("Real-time data only. Without a market data subscription the app goes offline.")
+                    .foregroundStyle(.secondary)
             }
             if port == 4001 || port == 7496 {
                 Text("⚠︎ Live trading: hotkeys will send real orders.")
@@ -112,7 +112,6 @@ private struct ConnectionSettings: View {
             host = broker.host
             port = broker.port
             clientId = broker.clientId
-            allowDelayed = broker.allowDelayedData
         }
         .alert("Switch to LIVE trading?", isPresented: $confirmLive) {
             Button("Cancel", role: .cancel) {}
@@ -126,7 +125,6 @@ private struct ConnectionSettings: View {
         broker.host = host.trimmingCharacters(in: .whitespaces)
         broker.port = port
         broker.clientId = clientId
-        broker.allowDelayedData = allowDelayed
         broker.disconnect()
         broker.connect()
     }
