@@ -40,11 +40,13 @@ struct ChartPane: View {
                     broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
                 },
                 altClickPreview: { price in
-                    let (limit, atBid) = broker.chartBuyLimit(symbol: chart.symbol, clicked: price)
-                    guard let shares = broker.shares(forNOK: OrderAmount.clamp(orderNOK), at: limit) else {
+                    let plan = broker.chartBuy(symbol: chart.symbol, clicked: price)
+                    if case .unavailable(let reason) = plan { return reason }
+                    guard let limit = plan.price,
+                          let shares = broker.shares(forNOK: OrderAmount.clamp(orderNOK), at: limit) else {
                         return "No USD.NOK rate"
                     }
-                    return "BUY \(Fmt.shares(shares)) @ \(atBid ? "bid " : "")\(Fmt.price(limit))"
+                    return plan.label(shares: shares)
                 }
             )
         }
@@ -119,13 +121,16 @@ struct ChartPane: View {
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"
-            if let lmt = o.limitPrice {
-                if broker.chartOrderIds.contains(o.id) {
-                    // Placed by ⌥-clicking the chart.
-                    lines.append(PriceLine(price: lmt, color: .purple, label: side, dashed: false))
-                } else {
-                    lines.append(PriceLine(price: lmt, color: o.action == "BUY" ? .blue : .orange, label: side))
+            if broker.chartOrderIds.contains(o.id) {
+                // Placed by ⌥-clicking the chart: one solid line (a stop-limit's stop equals its limit).
+                if let price = o.auxPrice ?? o.limitPrice {
+                    let label = o.orderType.hasPrefix("STP") ? "STP \(side)" : side
+                    lines.append(PriceLine(price: price, color: .purple, label: label, dashed: false))
                 }
+                continue
+            }
+            if let lmt = o.limitPrice {
+                lines.append(PriceLine(price: lmt, color: o.action == "BUY" ? .blue : .orange, label: side))
             }
             // Stop / trigger price (TRAIL's aux is a distance, not a price).
             if let aux = o.auxPrice, !o.orderType.hasPrefix("TRAIL"), o.orderType != "REL" {
