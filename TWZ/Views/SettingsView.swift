@@ -91,7 +91,7 @@ private struct ConnectionSettings: View {
                 TextField("Client ID", value: $clientId, format: .number.grouping(.never))
             }
             Section("Market data") {
-                Text("Real-time data only. Without a market data subscription the app goes offline.")
+                Text("Real-time data only. Stocks you aren't subscribed for show no quote; if no real-time data comes through at all, the app goes offline.")
                     .foregroundStyle(.secondary)
             }
             if port == 4001 || port == 7496 {
