@@ -47,7 +47,7 @@ struct ChartPane: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: isSelected ? 2 : 1)
+                .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: isSelected ? 1.5 : 1)
         )
         .simultaneousGesture(TapGesture().onEnded { workspace.selectedChartIndex = chart.id })
         .onAppear {
