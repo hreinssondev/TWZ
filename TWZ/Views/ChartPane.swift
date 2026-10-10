@@ -40,7 +40,7 @@ struct ChartPane: View {
                     broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
                 },
                 altClickPreview: { price in
-                    let (limit, atBid, _) = broker.chartBuyLimit(symbol: chart.symbol, clicked: price)
+                    let (limit, atBid) = broker.chartBuyLimit(symbol: chart.symbol, clicked: price)
                     guard let shares = broker.shares(forNOK: OrderAmount.clamp(orderNOK), at: limit) else {
                         return "No USD.NOK rate"
                     }

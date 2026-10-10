@@ -499,17 +499,14 @@ final class Broker {
         return (nok / usdNok / price).rounded(.down)
     }
 
-    /// Where an alt-click buy rests: at the clicked price, or at the bid when the click is above the
-    /// current price (last trade, falling back to the chart's last bar). `fallback` names the price
-    /// used when there is no live bid.
-    func chartBuyLimit(symbol rawSymbol: String, clicked: Double)
-        -> (limit: Double, atBid: Bool, fallback: String?) {
-        let symbol = rawSymbol.uppercased()
-        if let current = quote(symbol, .last, isBuy: true)?.price, clicked > current,
-           let bid = quote(symbol, .bid, isBuy: true) {
-            return (Self.roundToTick(bid.price), true, bid.fallback)
+    /// Where an alt-click buy rests: at the bid when the click is above the live last trade and
+    /// there is a live bid, otherwise exactly at the clicked price. No fallback prices.
+    func chartBuyLimit(symbol rawSymbol: String, clicked: Double) -> (limit: Double, atBid: Bool) {
+        let q = quotes[rawSymbol.uppercased()]
+        if let last = q?.last, last > 0, clicked > last, let bid = q?.bid, bid > 0 {
+            return (Self.roundToTick(bid), true)
         }
-        return (Self.roundToTick(clicked), false, nil)
+        return (Self.roundToTick(clicked), false)
     }
 
     /// Alt-click on a chart: a DAY limit buy for `nok` worth of `symbol` at the clicked price,
@@ -524,7 +521,7 @@ final class Broker {
             lastMessage = "Load a symbol into the chart first"
             return
         }
-        let (limit, atBid, fallback) = chartBuyLimit(symbol: symbol, clicked: clickedPrice)
+        let (limit, atBid) = chartBuyLimit(symbol: symbol, clicked: clickedPrice)
         guard let quantity = shares(forNOK: nok, at: limit) else {
             lastMessage = "No USD.NOK rate yet, so the order can't be sized"
             return
@@ -533,7 +530,7 @@ final class Broker {
             lastMessage = "\(OrderAmount.format(nok)) NOK is less than one share of \(symbol) at \(Fmt.price(limit))"
             return
         }
-        var price = HotkeyPrice(limit: limit, outsideRth: true, fallback: fallback)
+        var price = HotkeyPrice(limit: limit, outsideRth: true)
         if MarketSession.phase() == .overnight { price.exchange = "OVERNIGHT" }
         let summary = "BUY \(Fmt.shares(quantity)) @ \(atBid ? "bid " : "")\(Fmt.price(limit)) (\(OrderAmount.format(nok)) NOK)"
         guard let id = submit(symbol: symbol, action: "BUY", quantity: quantity, price: price, tif: .day,
