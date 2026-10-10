@@ -41,7 +41,7 @@ enum CandleTheme: String, CaseIterable, Identifiable {
 enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
-        LineColors.avgCostKey, LineColors.altClickKey,
+        LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey,
     ]
 
     /// Removing the stored values makes every @AppStorage fall back to its default.
@@ -52,8 +52,10 @@ enum AppearanceDefaults {
 
 /// Chart line colors picked in Settings, stored as "RRGGBB"; empty means the default.
 enum LineColors {
+    static let lastPriceKey = "lastPriceLineColor"
     static let avgCostKey = "avgCostLineColor"
     static let altClickKey = "altClickOrderColor"
+    static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
     static let defaultAltClick = Color.purple
 

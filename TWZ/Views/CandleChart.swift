@@ -31,6 +31,7 @@ struct CandleChart: View {
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
     @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
+    @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @State private var hover: CGPoint?
     @State private var dragStartScroll: Double?
     @State private var optionHeld = false
@@ -288,9 +289,10 @@ struct CandleChart: View {
                      tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))")
         }
 
-        // Last price: dotted soft blue.
+        // Last price: dotted, color from Settings.
         if let last = lastPrice ?? bars.last?.close, last > lo, last < hi {
-            drawLine(in: &ctx, y: y(last), plot: plot, color: Color(red: 0.30, green: 0.50, blue: 0.95), dashed: true,
+            drawLine(in: &ctx, y: y(last), plot: plot,
+                     color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: true,
                      tag: Fmt.price(last))
         }
 

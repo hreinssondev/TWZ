@@ -136,6 +136,7 @@ private struct AppearanceSettings: View {
     @AppStorage(CandleTheme.storageKey) private var theme: CandleTheme = .teal
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
     @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
+    @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
 
@@ -167,6 +168,7 @@ private struct AppearanceSettings: View {
                 }
             }
             Section("Chart lines") {
+                lineColorRow("Last price", hex: $lastPriceHex, default: LineColors.defaultLastPrice)
                 lineColorRow("Average position", hex: $avgCostHex, default: LineColors.defaultAvgCost)
                 lineColorRow("⌥-click orders", hex: $altClickHex, default: LineColors.defaultAltClick)
             }
