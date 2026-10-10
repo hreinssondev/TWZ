@@ -39,9 +39,9 @@ struct OrderRow: Identifiable, Equatable {
     var symbol: String
     var action: String          // BUY / SELL
     var quantity: Double
-    var orderType: String       // IB order type: LMT, MKT, STP, TRAIL, …
+    var orderType: String       // IB order type (hotkeys send LMT; TWS orders may be anything)
     var limitPrice: Double?
-    var auxPrice: Double?       // stop / trigger price (or trailing amount for TRAIL)
+    var auxPrice: Double?       // stop / trigger price on orders entered elsewhere
     var status: String
     var filled: Double = 0
     var avgFillPrice: Double = 0
@@ -91,97 +91,25 @@ enum Timeframe: String, CaseIterable, Codable, Identifiable {
 
 // MARK: - Hotkeys
 
-/// IBKR order types a hotkey can send (stocks, SMART-routed).
-enum OrderKind: String, Codable, CaseIterable, Identifiable {
-    case market = "Market"
-    case limit = "Limit"
-    case stop = "Stop"
-    case stopLimit = "Stop Limit"
-    case trailingStop = "Trailing Stop"
-    case trailingStopLimit = "Trailing Stop Limit"
-    case marketIfTouched = "Market if Touched"
-    case limitIfTouched = "Limit if Touched"
-    case marketToLimit = "Market to Limit"
-    case midprice = "Midprice"
-    case relative = "Relative (Pegged to Primary)"
-    case marketOnOpen = "Market on Open"
-    case limitOnOpen = "Limit on Open"
-    case marketOnClose = "Market on Close"
-    case limitOnClose = "Limit on Close"
+/// The quote a hotkey's limit price is based on, before the offset is applied.
+enum PriceReference: String, Codable, CaseIterable, Identifiable {
+    case cross = "Bid/Ask"   // buys at the ask, sells at the bid (crosses the spread)
+    case bid = "Bid"
+    case ask = "Ask"
+    case mid = "Mid"
+    case last = "Last"
     var id: String { rawValue }
 
-    /// Grouping for the picker.
-    static let groups: [(String, [OrderKind])] = [
-        ("Basic", [.market, .limit]),
-        ("Stops", [.stop, .stopLimit, .trailingStop, .trailingStopLimit]),
-        ("Touched", [.marketIfTouched, .limitIfTouched]),
-        ("Market-based", [.marketToLimit, .midprice, .relative]),
-        ("Auction", [.marketOnOpen, .limitOnOpen, .marketOnClose, .limitOnClose]),
-    ]
-
-    /// IB API `orderType` string.
-    var ibType: String {
-        switch self {
-        case .market, .marketOnOpen: "MKT"
-        case .limit, .limitOnOpen: "LMT"
-        case .stop: "STP"
-        case .stopLimit: "STP LMT"
-        case .trailingStop: "TRAIL"
-        case .trailingStopLimit: "TRAIL LIMIT"
-        case .marketIfTouched: "MIT"
-        case .limitIfTouched: "LIT"
-        case .marketToLimit: "MTL"
-        case .midprice: "MIDPRICE"
-        case .relative: "REL"
-        case .marketOnClose: "MOC"
-        case .limitOnClose: "LOC"
-        }
+    /// Short label for buttons: "Ask"/"Bid" for cross depends on side.
+    func label(isBuy: Bool) -> String {
+        self == .cross ? (isBuy ? "Ask" : "Bid") : rawValue
     }
-
-    /// Short label for buttons and order rows.
-    var short: String {
-        switch self {
-        case .marketOnOpen: "MOO"
-        case .limitOnOpen: "LOO"
-        default: ibType
-        }
-    }
-
-    /// Limit price derived from bid/ask ± limit offset (or from the trigger for STP LMT / LIT).
-    var usesLimitOffset: Bool { [.limit, .stopLimit, .limitIfTouched, .limitOnOpen, .limitOnClose].contains(self) }
-    /// Stop / touch trigger derived from bid/ask ± trigger offset.
-    var usesTrigger: Bool { [.stop, .stopLimit, .marketIfTouched, .limitIfTouched].contains(self) }
-    var isTrailing: Bool { self == .trailingStop || self == .trailingStopLimit }
-    /// Auction orders have a fixed time in force.
-    var fixedTIF: TimeInForce? {
-        switch self {
-        case .marketOnOpen, .limitOnOpen: .opening
-        case .marketOnClose, .limitOnClose: .day
-        default: nil
-        }
-    }
-    /// Types that can work in pre-market / after-hours sessions.
-    var allowsOutsideRth: Bool {
-        [.limit, .stop, .stopLimit, .trailingStop, .trailingStopLimit, .marketIfTouched, .limitIfTouched].contains(self)
-    }
-    /// IB's Adaptive algo works with market and limit orders only.
-    var supportsAdaptive: Bool { self == .market || self == .limit }
 }
 
 enum TimeInForce: String, Codable, CaseIterable, Identifiable {
     case day = "DAY"
     case gtc = "GTC"
     case ioc = "IOC"
-    case opening = "OPG"
-    var id: String { rawValue }
-    static let selectable: [TimeInForce] = [.day, .gtc, .ioc]
-}
-
-enum AdaptivePriority: String, Codable, CaseIterable, Identifiable {
-    case off = "Off"
-    case patient = "Patient"
-    case normal = "Normal"
-    case urgent = "Urgent"
     var id: String { rawValue }
 }
 
@@ -206,46 +134,32 @@ struct Hotkey: Codable, Identifiable, Equatable {
         var id: String { rawValue }
     }
 
-    enum TrailUnit: String, Codable, CaseIterable, Identifiable {
-        case amount = "$"
-        case percent = "%"
-        var id: String { rawValue }
-    }
-
     var id = UUID()
     var label: String
     var action: Action
     var sizing: Sizing = .shares
     var amount: Double = 100
-    var orderType: OrderKind = .limit
-    /// Limit: buys ask + offset, sells bid − offset. Stop limit / LIT: limit beyond the trigger by this much.
-    /// Relative: the peg offset.
+    /// Limit price = reference + offset for buys, reference − offset for sells.
+    var priceReference: PriceReference = .cross
     var offset: Double = 0.02
-    /// Stop: buys ask + offset, sells bid − offset. Touched: buys bid − offset, sells ask + offset.
-    var triggerOffset: Double = 0.10
-    var trailAmount: Double = 1
-    var trailUnit: TrailUnit = .percent
     var tif: TimeInForce = .day
     var outsideRth = true
-    var adaptive: AdaptivePriority = .off
 
     init(label: String, action: Action, sizing: Sizing = .shares, amount: Double = 100,
-         orderType: OrderKind = .limit, offset: Double = 0.02) {
+         priceReference: PriceReference = .cross, offset: Double = 0.02) {
         self.label = label
         self.action = action
         self.sizing = sizing
         self.amount = amount
-        self.orderType = orderType
+        self.priceReference = priceReference
         self.offset = offset
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, label, action, sizing, amount, orderType, offset, triggerOffset
-        case trailAmount, trailUnit, tif, outsideRth, adaptive
-        case priceType   // legacy: "Market" or "Limit (bid/ask ± offset)"
+        case id, label, action, sizing, amount, priceReference, offset, tif, outsideRth
     }
 
-    /// Tolerant decoding so hotkeys saved by older versions keep working.
+    /// Tolerant decoding so hotkeys saved by older versions keep working (unknown keys are ignored).
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -253,18 +167,10 @@ struct Hotkey: Codable, Identifiable, Equatable {
         action = try c.decode(Action.self, forKey: .action)
         sizing = try c.decodeIfPresent(Sizing.self, forKey: .sizing) ?? .shares
         amount = try c.decodeIfPresent(Double.self, forKey: .amount) ?? 100
-        if let kind = try? c.decodeIfPresent(OrderKind.self, forKey: .orderType) {
-            orderType = kind
-        } else if let legacy = try? c.decodeIfPresent(String.self, forKey: .priceType) {
-            orderType = legacy == "Market" ? .market : .limit
-        }
+        priceReference = (try? c.decodeIfPresent(PriceReference.self, forKey: .priceReference)) ?? .cross
         offset = try c.decodeIfPresent(Double.self, forKey: .offset) ?? 0.02
-        triggerOffset = try c.decodeIfPresent(Double.self, forKey: .triggerOffset) ?? 0.10
-        trailAmount = try c.decodeIfPresent(Double.self, forKey: .trailAmount) ?? 1
-        trailUnit = (try? c.decodeIfPresent(TrailUnit.self, forKey: .trailUnit)) ?? .percent
         tif = (try? c.decodeIfPresent(TimeInForce.self, forKey: .tif)) ?? .day
         outsideRth = try c.decodeIfPresent(Bool.self, forKey: .outsideRth) ?? true
-        adaptive = (try? c.decodeIfPresent(AdaptivePriority.self, forKey: .adaptive)) ?? .off
     }
 
     func encode(to encoder: Encoder) throws {
@@ -274,14 +180,10 @@ struct Hotkey: Codable, Identifiable, Equatable {
         try c.encode(action, forKey: .action)
         try c.encode(sizing, forKey: .sizing)
         try c.encode(amount, forKey: .amount)
-        try c.encode(orderType, forKey: .orderType)
+        try c.encode(priceReference, forKey: .priceReference)
         try c.encode(offset, forKey: .offset)
-        try c.encode(triggerOffset, forKey: .triggerOffset)
-        try c.encode(trailAmount, forKey: .trailAmount)
-        try c.encode(trailUnit, forKey: .trailUnit)
         try c.encode(tif, forKey: .tif)
         try c.encode(outsideRth, forKey: .outsideRth)
-        try c.encode(adaptive, forKey: .adaptive)
     }
 
     static let defaults: [Hotkey] = [
@@ -296,7 +198,7 @@ struct Hotkey: Codable, Identifiable, Equatable {
         Hotkey(label: "Sell $1K", action: .sell, sizing: .dollars, amount: 1_000),
         Hotkey(label: "Sell $5K", action: .sell, sizing: .dollars, amount: 5_000),
         Hotkey(label: "Cancel All", action: .cancelAll),
-        Hotkey(label: "Flatten All", action: .flattenAll, orderType: .market),
+        Hotkey(label: "Flatten All", action: .flattenAll, offset: 0.10),
     ]
 }
 
