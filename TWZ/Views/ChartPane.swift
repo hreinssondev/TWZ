@@ -83,19 +83,6 @@ struct ChartPane: View {
                     symbolFocused = false
                 }
 
-            Picker("", selection: Binding(
-                get: { chart.timeframe },
-                set: { chart.timeframe = $0; broker.loadChart(chart); workspace.saveCharts() }
-            )) {
-                ForEach(Timeframe.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.mini)
-            .frame(width: 170)
-
-            Spacer(minLength: 4)
-
             if let p = broker.positions[chart.symbol] {
                 Text("\(p.quantity > 0 ? "LONG" : "SHORT") \(Fmt.shares(abs(p.quantity)))")
                     .font(.system(size: 10, weight: .semibold))
@@ -103,16 +90,12 @@ struct ChartPane: View {
                     .background(Capsule().fill((p.quantity > 0 ? Color.green : Color.red).opacity(0.25)))
             }
 
-            if let q = quote {
-                Text(Fmt.price(q.last))
-                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                Text(Fmt.percent(q.changePercent))
-                    .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle((q.changePercent ?? 0) >= 0 ? .green : .red)
-                Text("\(Fmt.price(q.bid)) × \(Fmt.price(q.ask))")
-                    .font(.system(size: 10).monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
+            Spacer(minLength: 4)
+
+            TimeframePicker(selection: Binding(
+                get: { chart.timeframe },
+                set: { chart.timeframe = $0; broker.loadChart(chart); workspace.saveCharts() }
+            ))
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
@@ -154,5 +137,30 @@ struct ChartPane: View {
             }
         }
         return lines
+    }
+}
+
+/// Quiet monochrome timeframe switch: plain labels, the selected one brighter on a faint chip.
+private struct TimeframePicker: View {
+    @Binding var selection: Timeframe
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(Timeframe.allCases) { tf in
+                let selected = tf == selection
+                Button {
+                    selection = tf
+                } label: {
+                    Text(tf.rawValue)
+                        .font(.system(size: 10, weight: selected ? .semibold : .regular).monospacedDigit())
+                        .foregroundStyle(selected ? Color.primary : Color.secondary.opacity(0.7))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(selected ? 0.12 : 0)))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }
