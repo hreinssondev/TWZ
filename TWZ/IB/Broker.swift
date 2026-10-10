@@ -306,7 +306,7 @@ final class Broker {
     @discardableResult
     /// Places a stock order; `limit == nil` sends a market order.
     func placeOrder(symbol: String, action: String, quantity: Double, limit: Double?,
-                    tif: TimeInForce = .day, outsideRth: Bool = true) -> Bool {
+                    tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART") -> Bool {
         guard apiReady, let orderId = nextOrderId else {
             lastMessage = "Not connected"
             return false
@@ -319,7 +319,7 @@ final class Broker {
 
         let orderType = limit == nil ? "MKT" : "LMT"
         var f: [Any] = [3, orderId]
-        f += contract(symbol)
+        f += contract(symbol, exchange: exchange)
         f += ["", ""]                                                     // secIdType, secId
         f += [action, quantity, orderType, limit ?? Self.unsetDouble, Self.unsetDouble, tif.rawValue, "", account, "", 0, "TWZ"]
         f += [true, 0, false, false, 0, 0, outsideRth && limit != nil, false]  // transmit … hidden
@@ -397,7 +397,7 @@ final class Broker {
                 quantity = hotkey.amount.rounded(.down)
             case .dollars:
                 // Market orders size off the side of the spread they'll likely fill at.
-                guard let ref = price.limit ?? quote(symbol, .cross, isBuy: action == "BUY") else {
+                guard let ref = price.limit ?? quote(symbol, .cross, isBuy: action == "BUY")?.price else {
                     lastMessage = "No price for \(symbol) yet"
                     return
                 }
@@ -407,8 +407,7 @@ final class Broker {
                 lastMessage = "Size too small for \(symbol)"
                 return
             }
-            placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
-                       tif: hotkey.tif, outsideRth: price.outsideRth)
+            submit(symbol: symbol, action: action, quantity: quantity, price: price, hotkey: hotkey)
         }
     }
 
@@ -417,54 +416,95 @@ final class Broker {
         var quantity = (abs(p.quantity) * fraction).rounded(.down)
         if quantity < 1 { quantity = abs(p.quantity) }
         guard let price = orderPrice(symbol: p.symbol, action: action, hotkey: hotkey) else { return }
-        placeOrder(symbol: p.symbol, action: action, quantity: quantity, limit: price.limit,
-                   tif: hotkey.tif, outsideRth: price.outsideRth)
+        submit(symbol: p.symbol, action: action, quantity: quantity, price: price, hotkey: hotkey)
     }
 
-    /// The quote a price reference points at, if it's available.
-    private func quote(_ symbol: String, _ reference: PriceReference, isBuy: Bool) -> Double? {
-        let q = quotes[symbol]
-        let value: Double?
-        switch reference {
-        case .cross: value = (isBuy ? q?.ask : q?.bid) ?? q?.last
-        case .bid: value = q?.bid
-        case .ask: value = q?.ask
-        case .mid: value = q.flatMap { q in q.bid.flatMap { b in q.ask.map { a in (a + b) / 2 } } }
-        case .last: value = q?.last
+    /// Places the order and says in the status line when it was priced off a fallback or
+    /// won't work until a later session.
+    private func submit(symbol: String, action: String, quantity: Double, price: HotkeyPrice, hotkey: Hotkey) {
+        let overnight = price.exchange == "OVERNIGHT"
+        guard placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
+                         tif: overnight ? .day : hotkey.tif, outsideRth: price.outsideRth,
+                         exchange: price.exchange) else { return }
+        var notes: [String] = []
+        if let source = price.fallback, let limit = price.limit {
+            notes.append("no live quote, priced off \(source) → \(Fmt.price(limit))")
         }
-        return value.flatMap { $0 > 0 ? $0 : nil }
+        switch MarketSession.phase() {
+        case .overnight: notes.append("routed to IBKR overnight")
+        case .closed: notes.append("market closed — works from 4:00 ET pre-market")
+        default: break
+        }
+        if !notes.isEmpty { lastMessage = "\(symbol): " + notes.joined(separator: "; ") }
+    }
+
+    /// The quote a price reference points at. When it's missing (market closed, no data yet) this
+    /// falls back to the last trade, then the previous close, then the chart's last bar, and
+    /// names the fallback so the caller can say so.
+    private func quote(_ symbol: String, _ reference: PriceReference, isBuy: Bool)
+        -> (price: Double, fallback: String?)? {
+        func valid(_ v: Double?) -> Double? { v.flatMap { $0 > 0 ? $0 : nil } }
+        let q = quotes[symbol]
+        let live: Double?
+        switch reference {
+        case .cross: live = valid(isBuy ? q?.ask : q?.bid)
+        case .bid: live = valid(q?.bid)
+        case .ask: live = valid(q?.ask)
+        case .mid: live = valid(q.flatMap { q in q.bid.flatMap { b in q.ask.map { a in (a + b) / 2 } } })
+        case .last: live = valid(q?.last)
+        }
+        if let live { return (live, nil) }
+        if let last = valid(q?.last) { return (last, "last \(Fmt.price(last))") }
+        if let close = valid(q?.prevClose) { return (close, "close \(Fmt.price(close))") }
+        if let bar = valid(charts.first(where: { $0.symbol == symbol })?.bars.last?.close) {
+            return (bar, "chart close \(Fmt.price(bar))")
+        }
+        return nil
     }
 
     /// `limit == nil` means a market order.
     private struct HotkeyPrice {
         var limit: Double?
         var outsideRth: Bool
+        var exchange = "SMART"
+        var fallback: String?
     }
 
-    /// Market: sent as MKT in regular hours; outside them IB won't fill MKT, so it becomes a
-    /// marketable limit 0.5% through the bid/ask. Limit: the chosen reference quote, plus the
-    /// offset for buys or minus it for sells (positive = more aggressive, negative = more passive).
+    /// Market, by session: regular hours → MKT; pre-market / after hours → limit 0.5% through the
+    /// ask (buys) or bid (sells); overnight / closed → limit at the bid (buys) or ask (sells).
+    /// Limit: the chosen reference, plus the offset for buys or minus it for sells.
+    /// During IBKR's overnight session limit orders go to the OVERNIGHT venue so they can fill.
     private func orderPrice(symbol: String, action: String, hotkey: Hotkey) -> HotkeyPrice? {
         let isBuy = action == "BUY"
         let sign = isBuy ? 1.0 : -1.0
-        switch hotkey.orderType {
-        case .market:
-            if MarketSession.isRegularHours() { return HotkeyPrice(limit: nil, outsideRth: false) }
-            guard let ref = quote(symbol, .cross, isBuy: isBuy) else {
-                lastMessage = "No bid/ask for \(symbol) yet — can't price an after-hours market order"
-                return nil
-            }
-            let cushion = max(0.01, ref * 0.005)
-            return HotkeyPrice(limit: Self.roundToTick(max(ref + sign * cushion, 0.0001)), outsideRth: true)
-        case .limit:
-            guard let ref = quote(symbol, hotkey.priceReference, isBuy: isBuy) else {
-                let name = hotkey.priceReference.label(isBuy: isBuy).lowercased()
-                lastMessage = "No \(name) price for \(symbol) yet — can't price the order"
-                return nil
-            }
-            let limit = Self.roundToTick(max(ref + sign * hotkey.offset, 0.0001))
-            return HotkeyPrice(limit: limit, outsideRth: hotkey.outsideRth)
+        let phase = MarketSession.phase()
+        func tick(_ p: Double) -> Double { Self.roundToTick(max(p, 0.0001)) }
+        func missing() -> HotkeyPrice? {
+            lastMessage = "No price for \(symbol) at all yet (no quote, close or chart) — can't price the order"
+            return nil
         }
+
+        var price: HotkeyPrice
+        switch (hotkey.orderType, phase) {
+        case (.market, .regular):
+            return HotkeyPrice(limit: nil, outsideRth: false)
+        case (.market, .preMarket), (.market, .afterHours):
+            guard let ref = quote(symbol, .cross, isBuy: isBuy) else { return missing() }
+            let cushion = max(0.01, ref.price * 0.005)
+            price = HotkeyPrice(limit: tick(ref.price + sign * cushion), outsideRth: true, fallback: ref.fallback)
+        case (.market, _):
+            guard let ref = quote(symbol, isBuy ? .bid : .ask, isBuy: isBuy) else { return missing() }
+            price = HotkeyPrice(limit: tick(ref.price), outsideRth: true, fallback: ref.fallback)
+        case (.limit, _):
+            guard let ref = quote(symbol, hotkey.priceReference, isBuy: isBuy) else { return missing() }
+            price = HotkeyPrice(limit: tick(ref.price + sign * hotkey.offset), outsideRth: hotkey.outsideRth,
+                                fallback: ref.fallback)
+        }
+        if phase == .overnight {
+            price.exchange = "OVERNIGHT"
+            price.outsideRth = true
+        }
+        return price
     }
 
     static func roundToTick(_ p: Double) -> Double {
@@ -698,9 +738,9 @@ final class Broker {
         return nextReqId
     }
 
-    private func contract(_ symbol: String) -> [Any] {
+    private func contract(_ symbol: String, exchange: String = "SMART") -> [Any] {
         // conId, symbol, secType, lastTradeDate, strike, right, multiplier, exchange, primaryExch, currency, localSymbol, tradingClass
-        [0, symbol, "STK", "", 0.0, "", "", "SMART", "", "USD", "", ""]
+        [0, symbol, "STK", "", 0.0, "", "", exchange, "", "USD", "", ""]
     }
 
     private func send(_ fields: Any...) { sendFields(fields) }
