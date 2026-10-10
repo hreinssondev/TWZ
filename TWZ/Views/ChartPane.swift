@@ -115,7 +115,8 @@ struct ChartPane: View {
     private var priceLines: [PriceLine] {
         var lines: [PriceLine] = []
         if let p = broker.positions[chart.symbol] {
-            lines.append(PriceLine(price: p.avgCost, color: .yellow, label: "Avg"))
+            // Avg cost: muted slate blue, number only on the axis.
+            lines.append(PriceLine(price: p.avgCost, color: Color(red: 0.42, green: 0.52, blue: 0.66), label: ""))
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"
