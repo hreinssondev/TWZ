@@ -5,6 +5,8 @@
 //  Lightweight candlestick + volume chart drawn with a single SwiftUI Canvas.
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
 //  around the cursor. Mouse: wheel zooms, shift-wheel pans. Drag pans, double-click resets.
+//  Intraday charts shade the sessions outside regular hours: pre-market and after hours in grey,
+//  overnight in indigo.
 //
 
 import SwiftUI
@@ -205,6 +207,22 @@ struct CandleChart: View {
         let labelColor = Color.secondary
         let (up, down) = candleTheme.colors(customUp: customUp, customDown: customDown)
 
+        // Session shading, one band per run of bars from the same session.
+        if chart.timeframe.isIntraday {
+            var i = start
+            while i < end {
+                let phase = bars[i].phase
+                var j = i
+                while j + 1 < end, bars[j + 1].phase == phase { j += 1 }
+                if let tint = Self.sessionTint(phase) {
+                    let band = CGRect(x: x(i) - barWidth / 2, y: plot.minY,
+                                      width: CGFloat(j - i + 1) * barWidth, height: plot.height)
+                    plotCtx.fill(Path(band), with: .color(tint))
+                }
+                i = j + 1
+            }
+        }
+
         // Horizontal grid + price labels.
         for tick in Self.niceTicks(lo: lo, hi: hi, count: max(3, Int(priceRect.height / 45))) {
             let yy = y(tick)
@@ -302,7 +320,8 @@ struct CandleChart: View {
             }
         }
         let change = readout.open > 0 ? (readout.close - readout.open) / readout.open * 100 : 0
-        let info = "O \(Fmt.price(readout.open))  H \(Fmt.price(readout.high))  L \(Fmt.price(readout.low))  C \(Fmt.price(readout.close))  \(Fmt.percent(change))  V \(Fmt.volume(readout.volume))"
+        var info = "O \(Fmt.price(readout.open))  H \(Fmt.price(readout.high))  L \(Fmt.price(readout.low))  C \(Fmt.price(readout.close))  \(Fmt.percent(change))  V \(Fmt.volume(readout.volume))"
+        if chart.timeframe.isIntraday, readout.phase != .regular { info += "  · \(readout.phase.rawValue)" }
         ctx.draw(Text(info).font(.system(size: 10).monospacedDigit()).foregroundStyle(.secondary),
                  at: CGPoint(x: plot.minX + 6, y: plot.minY + 2), anchor: .topLeading)
     }
@@ -321,6 +340,14 @@ struct CandleChart: View {
         let rect = CGRect(x: plot.maxX + 1, y: y - 8, width: max(axisWidth - 2, textSize.width + 8), height: 16)
         ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color))
         ctx.draw(resolved, at: CGPoint(x: rect.minX + 4, y: y), anchor: .leading)
+    }
+
+    private static func sessionTint(_ phase: MarketSession.Phase) -> Color? {
+        switch phase {
+        case .regular: nil
+        case .preMarket, .afterHours: Color.primary.opacity(0.045)
+        case .overnight, .closed: Color.indigo.opacity(0.08)
+        }
     }
 
     private func timeLabel(_ date: Date) -> String {

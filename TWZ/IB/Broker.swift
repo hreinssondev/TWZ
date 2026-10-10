@@ -84,6 +84,13 @@ final class Broker {
     @ObservationIgnored private var quoteOwners: [String: Set<String>] = [:]
     @ObservationIgnored private var quoteReqBySymbol: [String: Int] = [:]
     @ObservationIgnored private var quoteSymbolByReq: [Int: String] = [:]
+    /// Quotes from SMART and, during the overnight session, from IBKR's OVERNIGHT venue;
+    /// `quotes` combines them.
+    @ObservationIgnored private var smartQuotes: [String: Quote] = [:]
+    @ObservationIgnored private var overnightQuotes: [String: Quote] = [:]
+    @ObservationIgnored private var overnightReqBySymbol: [String: Int] = [:]
+    @ObservationIgnored private var overnightSymbolByReq: [Int: String] = [:]
+    @ObservationIgnored private var phase = MarketSession.phase()
 
     @ObservationIgnored private var scanSpecs: [String: ScanSpec] = [:]
     @ObservationIgnored private var scanReqByOwner: [String: Int] = [:]
@@ -95,6 +102,11 @@ final class Broker {
     @ObservationIgnored private var chartByReq: [Int: ChartModel] = [:]
     @ObservationIgnored private var reqByChart: [Int: Int] = [:]
     @ObservationIgnored private var pendingBars: [Int: [Bar]] = [:]
+    /// Intraday charts also load the overnight session (20:00–03:50 ET) from the OVERNIGHT venue,
+    /// since SMART's extended-hours bars stop at 20:00. Bars are kept per chart id.
+    @ObservationIgnored private var overnightChartByReq: [Int: ChartModel] = [:]
+    @ObservationIgnored private var overnightReqByChart: [Int: Int] = [:]
+    @ObservationIgnored private var overnightBars: [Int: [Bar]] = [:]
 
     @ObservationIgnored private var fxReq: Int?
     @ObservationIgnored private var fxBid: Double?
@@ -148,9 +160,15 @@ final class Broker {
         unavailableQuotes.removeAll()
         quoteReqBySymbol.removeAll()
         quoteSymbolByReq.removeAll()
+        overnightReqBySymbol.removeAll()
+        overnightSymbolByReq.removeAll()
+        overnightQuotes.removeAll()
         chartByReq.removeAll()
         reqByChart.removeAll()
         pendingBars.removeAll()
+        overnightChartByReq.removeAll()
+        overnightReqByChart.removeAll()
+        overnightBars.removeAll()
         scanReqByOwner.removeAll()
         scanOwnerByReq.removeAll()
         closeKeyByReq.removeAll()
@@ -216,9 +234,9 @@ final class Broker {
         send(16, 1)                                                                // reqAllOpenOrders
         send(7, 3, executionsReq, 0, "", "", "", "", "", "")                       // reqExecutions (today)
 
-        for symbol in quoteOwners.values.reduce(into: Set<String>(), { $0.formUnion($1) }) {
-            subscribeQuote(symbol)
-        }
+        phase = MarketSession.phase()
+        syncQuoteSubscriptions()
+        watchSessionPhase()
         subscribeUsdNok()
         for chart in charts { loadChart(chart) }
         for owner in scanSpecs.keys { startScan(owner) }
@@ -244,6 +262,47 @@ final class Broker {
         for symbol in wanted where quoteReqBySymbol[symbol] == nil {
             subscribeQuote(symbol)
         }
+
+        let overnightWanted = phase == .overnight ? wanted : []
+        for (symbol, reqId) in overnightReqBySymbol where !overnightWanted.contains(symbol) {
+            send(2, 2, reqId)                                                      // cancelMktData
+            overnightReqBySymbol[symbol] = nil
+            overnightSymbolByReq[reqId] = nil
+            overnightQuotes[symbol] = nil
+            updateQuote(symbol)
+        }
+        for symbol in overnightWanted where overnightReqBySymbol[symbol] == nil {
+            subscribeOvernightQuote(symbol)
+        }
+    }
+
+    /// Checks the session every 30 s and moves quotes onto or off the OVERNIGHT venue when it changes.
+    private func watchSessionPhase() {
+        let current = session
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+            guard let self, self.session == current, self.apiReady else { return }
+            let now = MarketSession.phase()
+            if now != self.phase {
+                self.phase = now
+                self.syncQuoteSubscriptions()
+                for symbol in Set(self.smartQuotes.keys).union(self.overnightQuotes.keys) {
+                    self.updateQuote(symbol)
+                }
+            }
+            self.watchSessionPhase()
+        }
+    }
+
+    /// SMART, except during the overnight session, when SMART is frozen at the 20:00 close and
+    /// the OVERNIGHT venue's bid/ask/last (where overnight orders go) take over where it has them.
+    private func updateQuote(_ symbol: String) {
+        var q = smartQuotes[symbol] ?? Quote()
+        if phase == .overnight, let o = overnightQuotes[symbol] {
+            q.bid = o.bid ?? q.bid
+            q.ask = o.ask ?? q.ask
+            q.last = o.last ?? q.last
+        }
+        if quotes[symbol] != q { quotes[symbol] = q }
     }
 
     private func scheduleNoDataCheck() {
@@ -266,6 +325,14 @@ final class Broker {
         quoteReqBySymbol[symbol] = reqId
         quoteSymbolByReq[reqId] = symbol
         sendFields([1, 11, reqId] + contract(symbol) + [false, "", false, false, ""])   // reqMktData
+    }
+
+    private func subscribeOvernightQuote(_ symbol: String) {
+        guard apiReady, overnightReqBySymbol[symbol] == nil else { return }
+        let reqId = makeReqId()
+        overnightReqBySymbol[symbol] = reqId
+        overnightSymbolByReq[reqId] = symbol
+        sendFields([1, 11, reqId] + contract(symbol, exchange: "OVERNIGHT") + [false, "", false, false, ""])
     }
 
     /// USD.NOK on IDEALPRO (free forex quotes) for sizing NOK-denominated chart orders.
@@ -354,6 +421,11 @@ final class Broker {
             pendingBars[old] = nil
             reqByChart[chart.id] = nil
         }
+        if let old = overnightReqByChart.removeValue(forKey: chart.id) {
+            if apiReady { send(25, 1, old) }                                      // cancelHistoricalData
+            overnightChartByReq[old] = nil
+        }
+        overnightBars[chart.id] = nil
         chart.bars = []
         chart.error = nil
         chart.scrollBack = 0
@@ -370,6 +442,13 @@ final class Broker {
         // reqHistoricalData: endDateTime "" + keepUpToDate streams live bar updates.
         sendFields([20, reqId] + contract(chart.symbol) + [
             false, "", tf.barSize, tf.duration, tf.isIntraday ? 0 : 1, "TRADES", 2, true, "",
+        ])
+        guard tf.isIntraday else { return }
+        let overnightReq = makeReqId()
+        overnightChartByReq[overnightReq] = chart
+        overnightReqByChart[chart.id] = overnightReq
+        sendFields([20, overnightReq] + contract(chart.symbol, exchange: "OVERNIGHT") + [
+            false, "", tf.barSize, tf.duration, 0, "TRADES", 2, true, "",
         ])
     }
 
@@ -665,11 +744,13 @@ final class Broker {
     }
 
     private func tickPrice(_ f: [String]) {
-        if f.int(2) == fxReq { return fxTick(type: f.int(3), price: f.double(4)) }
-        guard let symbol = quoteSymbolByReq[f.int(2)] else { return }
+        let reqId = f.int(2)
+        if reqId == fxReq { return fxTick(type: f.int(3), price: f.double(4)) }
+        let isOvernight = overnightSymbolByReq[reqId] != nil
+        guard let symbol = quoteSymbolByReq[reqId] ?? overnightSymbolByReq[reqId] else { return }
         hasLiveQuote = true
         let price = f.double(4)
-        var q = quotes[symbol] ?? Quote()
+        var q = (isOvernight ? overnightQuotes[symbol] : smartQuotes[symbol]) ?? Quote()
         switch f.int(3) {
         case 1, 66: q.bid = price > 0 ? price : nil
         case 2, 67: q.ask = price > 0 ? price : nil
@@ -677,14 +758,18 @@ final class Broker {
         case 9, 75: if price > 0 { q.prevClose = price }
         default: return
         }
-        quotes[symbol] = q
+        if isOvernight { overnightQuotes[symbol] = q } else { smartQuotes[symbol] = q }
+        updateQuote(symbol)
     }
 
+    /// Volume stays SMART's full-day figure; the overnight venue's own volume isn't shown.
     private func tickSize(_ f: [String]) {
         guard let symbol = quoteSymbolByReq[f.int(2)] else { return }
         hasLiveQuote = true
         switch f.int(3) {
-        case 8, 74: quotes[symbol, default: Quote()].volume = f.double(4)
+        case 8, 74:
+            smartQuotes[symbol, default: Quote()].volume = f.double(4)
+            updateQuote(symbol)
         default: break
         }
     }
@@ -751,6 +836,13 @@ final class Broker {
             return
         }
 
+        // The overnight venue is extra: a symbol it can't serve just keeps its SMART data.
+        if overnightSymbolByReq[reqId] != nil { return }
+        if let chart = overnightChartByReq.removeValue(forKey: reqId) {
+            overnightReqByChart[chart.id] = nil
+            return
+        }
+
         // Not subscribed for this symbol: leave it without a quote. The request stays mapped so it
         // isn't retried. If no quote at all comes through, go offline rather than run without data.
         if Self.noMarketDataCodes.contains(code), let symbol = quoteSymbolByReq[reqId] {
@@ -795,7 +887,6 @@ final class Broker {
             if count > 0, closeIndex < f.count { sessionCloses[key] = f.double(closeIndex) }
             return
         }
-        guard let chart = chartByReq[reqId] else { return }
         var bars: [Bar] = []
         bars.reserveCapacity(count)
         var i = 5
@@ -805,10 +896,24 @@ final class Broker {
                             close: f.double(i + 4), volume: max(0, f.double(i + 5))))
             i += 8
         }
+        if let chart = overnightChartByReq[reqId] {
+            overnightBars[chart.id] = bars
+            if !chart.isLoading, !chart.bars.isEmpty { chart.bars = Self.merge(chart.bars, bars) }
+            return
+        }
+        guard let chart = chartByReq[reqId] else { return }
         pendingBars[reqId] = nil
-        chart.bars = bars
+        chart.bars = Self.merge(bars, overnightBars[chart.id] ?? [])
         chart.isLoading = false
-        chart.error = bars.isEmpty ? "No data" : nil
+        chart.error = chart.bars.isEmpty ? "No data" : nil
+    }
+
+    /// Both series in time order; where both have a bar for the same time, `primary`'s wins.
+    private static func merge(_ primary: [Bar], _ extra: [Bar]) -> [Bar] {
+        guard !extra.isEmpty else { return primary }
+        var byTime = Dictionary(extra.map { ($0.time, $0) }, uniquingKeysWith: { _, new in new })
+        for bar in primary { byTime[bar.time] = bar }
+        return byTime.values.sorted { $0.time < $1.time }
     }
 
     private func scannerData(_ f: [String]) {
@@ -832,7 +937,7 @@ final class Broker {
 
     private func historicalDataUpdate(_ f: [String]) {
         // reqId, barCount, date, open, close, high, low, average, volume
-        guard let chart = chartByReq[f.int(1)], !chart.isLoading,
+        guard let chart = chartByReq[f.int(1)] ?? overnightChartByReq[f.int(1)], !chart.isLoading,
               let time = Self.parseBarTime(f.str(3)) else { return }
         let bar = Bar(time: time, open: f.double(4), high: f.double(6), low: f.double(7),
                       close: f.double(5), volume: max(0, f.double(9)))

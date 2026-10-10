@@ -12,6 +12,18 @@ struct Bar: Equatable {
     var low: Double
     var close: Double
     var volume: Double
+    /// Trading session the bar starts in; worked out once so the chart can shade sessions cheaply.
+    var phase: MarketSession.Phase
+
+    init(time: Date, open: Double, high: Double, low: Double, close: Double, volume: Double) {
+        self.time = time
+        self.open = open
+        self.high = high
+        self.low = low
+        self.close = close
+        self.volume = volume
+        phase = MarketSession.phase(time)
+    }
 }
 
 struct Quote: Equatable {
