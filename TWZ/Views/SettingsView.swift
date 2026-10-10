@@ -164,17 +164,21 @@ private struct AppearanceSettings: View {
                     .buttonStyle(.plain)
                 }
                 if theme == .custom {
-                    ColorPicker("Up candles", selection: hexBinding($customUp, fallback: CandleTheme.defaultUpHex),
-                                supportsOpacity: false)
-                    ColorPicker("Down candles", selection: hexBinding($customDown, fallback: CandleTheme.defaultDownHex),
-                                supportsOpacity: false)
+                    ColorWell(title: "Up candles", key: CandleTheme.customUpKey,
+                              color: Color(hex: customUp) ?? Color(hex: CandleTheme.defaultUpHex)!)
+                    ColorWell(title: "Down candles", key: CandleTheme.customDownKey,
+                              color: Color(hex: customDown) ?? Color(hex: CandleTheme.defaultDownHex)!)
                 }
             }
             Section("Chart lines") {
-                lineColorRow("Last price", hex: $lastPriceHex, default: LineColors.defaultLastPrice)
-                lineColorRow("Average position", hex: $avgCostHex, default: LineColors.defaultAvgCost)
-                lineColorRow("⌥-click orders", hex: $altClickHex, default: LineColors.defaultAltClick)
-                lineColorRow("Hover price", hex: $hoverHex, default: LineColors.defaultHover)
+                lineColorRow("Last price", key: LineColors.lastPriceKey, hex: $lastPriceHex,
+                             default: LineColors.defaultLastPrice)
+                lineColorRow("Average position", key: LineColors.avgCostKey, hex: $avgCostHex,
+                             default: LineColors.defaultAvgCost)
+                lineColorRow("⌥-click orders", key: LineColors.altClickKey, hex: $altClickHex,
+                             default: LineColors.defaultAltClick)
+                lineColorRow("Hover price", key: LineColors.hoverKey, hex: $hoverHex,
+                             default: LineColors.defaultHover)
             }
             Section("Chart header") {
                 Picker("Timeframe picker", selection: $pickerStyle) {
@@ -200,25 +204,15 @@ private struct AppearanceSettings: View {
         .formStyle(.grouped)
     }
 
-    /// Color picker plus a Reset button while a custom color is set (empty hex = default).
-    private func lineColorRow(_ title: String, hex: Binding<String>, default fallback: Color) -> some View {
+    /// Color swatch plus a Reset button while a custom color is set (empty hex = default).
+    private func lineColorRow(_ title: String, key: String, hex: Binding<String>, default fallback: Color) -> some View {
         HStack {
-            ColorPicker(title, selection: Binding(
-                get: { LineColors.resolve(hex.wrappedValue, default: fallback) },
-                set: { hex.wrappedValue = $0.hex }
-            ), supportsOpacity: false)
+            ColorWell(title: title, key: key, color: LineColors.resolve(hex.wrappedValue, default: fallback))
             if !hex.wrappedValue.isEmpty {
                 Button("Reset") { hex.wrappedValue = "" }
                     .controlSize(.small)
             }
         }
-    }
-
-    private func hexBinding(_ hex: Binding<String>, fallback: String) -> Binding<Color> {
-        Binding(
-            get: { Color(hex: hex.wrappedValue) ?? Color(hex: fallback)! },
-            set: { hex.wrappedValue = $0.hex }
-        )
     }
 }
 
