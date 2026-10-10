@@ -118,7 +118,8 @@ struct CandleChart: View {
     private func zoom(by factor: Double, at anchorX: CGFloat, plotWidth: CGFloat) {
         let x = min(plotWidth, max(0, anchorX))
         let oldWidth = barWidth(plotWidth: plotWidth)
-        chart.visibleBars = min(600, max(15, chart.visibleBars * factor))
+        // Zooms out as far as all the loaded bars (at least 600).
+        chart.visibleBars = min(max(600, Double(chart.bars.count)), max(15, chart.visibleBars * factor))
         let newWidth = barWidth(plotWidth: plotWidth)
         let fromRight = Double(plotWidth - x)
         setScrollBack(chart.scrollBack + fromRight / oldWidth - fromRight / newWidth)

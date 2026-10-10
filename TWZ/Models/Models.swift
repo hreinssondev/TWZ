@@ -90,8 +90,8 @@ enum Timeframe: String, CaseIterable, Codable, Identifiable {
 
     var duration: String {
         switch self {
-        case .m1: "2 D"
-        case .m5: "5 D"
+        case .m1: "5 D"
+        case .m5: "10 D"
         case .m15: "10 D"
         case .h1: "1 M"
         case .d1: "1 Y"
