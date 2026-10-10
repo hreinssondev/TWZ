@@ -142,8 +142,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         static let protective = Dirty(rawValue: 1 << 9)
     }
 
-    /// One display frame at 60 Hz: the UI never gets more snapshots than it can show.
-    private static let frameNanos: UInt64 = 16_666_667
+    /// One display frame at 120 Hz (ProMotion): the UI never gets more snapshots than it can show.
+    private static let frameNanos: UInt64 = 8_333_333
     private var dirty: Dirty = []
     private var dirtyCharts: Set<Int> = []
     private var flushScheduled = false
