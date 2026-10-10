@@ -15,6 +15,7 @@ struct TWZApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .modifier(TradingShortcuts())
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)

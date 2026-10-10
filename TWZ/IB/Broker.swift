@@ -111,6 +111,8 @@ final class Broker {
     @ObservationIgnored private var overnightBars: [Int: [Bar]] = [:]
 
     /// Stop losses to place again once the take profit blocking them is cancelled, by its order id.
+    /// Orders already asked to cancel, so ⌥Z pressed again moves on to the next one.
+    @ObservationIgnored private var cancelsSent: Set<Int> = []
     @ObservationIgnored private var stopsAwaitingCancel: [Int: (symbol: String, price: Double)] = [:]
     @ObservationIgnored private var fxReq: Int?
     @ObservationIgnored private var fxBid: Double?
@@ -176,6 +178,7 @@ final class Broker {
         overnightReqByChart.removeAll()
         overnightBars.removeAll()
         stopsAwaitingCancel.removeAll()
+        cancelsSent.removeAll()
         scanReqByOwner.removeAll()
         scanOwnerByReq.removeAll()
         closeKeyByReq.removeAll()
@@ -524,6 +527,37 @@ final class Broker {
     func cancelOrder(_ orderId: Int) {
         guard apiReady else { return }
         if serverVersion >= 169 { send(4, 1, orderId, "") } else { send(4, 1, orderId) }
+        cancelsSent.insert(orderId)
+    }
+
+    /// ⌥Z: cancels the most recently placed order that's still working.
+    func cancelLastOrder() {
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        let working = orders.values.filter { $0.isActive && $0.id > 0 && !cancelsSent.contains($0.id) }
+        guard let o = working.max(by: { $0.id < $1.id }) else {
+            lastMessage = "No working orders to cancel"
+            return
+        }
+        cancelOrder(o.id)
+        lastMessage = "Cancelling \(o.action) \(Fmt.shares(o.quantity - o.filled)) \(o.symbol) #\(o.id)"
+    }
+
+    /// ⌥< and the Cancel Symbol hotkey: every working order in `symbol`, stop loss and take profit included.
+    func cancelOrders(for rawSymbol: String) {
+        let symbol = rawSymbol.uppercased()
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        stopsAwaitingCancel = stopsAwaitingCancel.filter { $0.value.symbol != symbol }
+        let working = orders.values.filter { $0.isActive && $0.symbol == symbol }
+        for o in working { cancelOrder(o.id) }
+        lastMessage = working.isEmpty
+            ? "No working orders in \(symbol)"
+            : "Cancelling \(working.count) order\(working.count == 1 ? "" : "s") in \(symbol)"
     }
 
     func cancelAllOrders() {
@@ -544,7 +578,7 @@ final class Broker {
         case .cancelAll:
             cancelAllOrders()
         case .cancelSymbol:
-            for o in orders.values where o.isActive && o.symbol == symbol { cancelOrder(o.id) }
+            cancelOrders(for: symbol)
         case .flattenAll:
             for p in positions.values where p.quantity != 0 {
                 close(p, fraction: 1, hotkey: hotkey)
