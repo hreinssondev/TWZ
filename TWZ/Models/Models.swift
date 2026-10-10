@@ -106,6 +106,12 @@ enum PriceReference: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum OrderType: String, Codable, CaseIterable, Identifiable {
+    case market = "Market"
+    case limit = "Limit"
+    var id: String { rawValue }
+}
+
 enum TimeInForce: String, Codable, CaseIterable, Identifiable {
     case day = "DAY"
     case gtc = "GTC"
@@ -139,6 +145,7 @@ struct Hotkey: Codable, Identifiable, Equatable {
     var action: Action
     var sizing: Sizing = .shares
     var amount: Double = 100
+    var orderType: OrderType = .limit
     /// Limit price = reference + offset for buys, reference − offset for sells.
     var priceReference: PriceReference = .cross
     var offset: Double = 0.02
@@ -146,17 +153,19 @@ struct Hotkey: Codable, Identifiable, Equatable {
     var outsideRth = true
 
     init(label: String, action: Action, sizing: Sizing = .shares, amount: Double = 100,
-         priceReference: PriceReference = .cross, offset: Double = 0.02) {
+         orderType: OrderType = .limit, priceReference: PriceReference = .cross, offset: Double = 0.02) {
         self.label = label
         self.action = action
         self.sizing = sizing
         self.amount = amount
+        self.orderType = orderType
         self.priceReference = priceReference
         self.offset = offset
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, label, action, sizing, amount, priceReference, offset, tif, outsideRth
+        case id, label, action, sizing, amount, orderType, priceReference, offset, tif, outsideRth
+        case priceType   // legacy: "Market" or "Limit (bid/ask ± offset)"
     }
 
     /// Tolerant decoding so hotkeys saved by older versions keep working (unknown keys are ignored).
@@ -167,6 +176,10 @@ struct Hotkey: Codable, Identifiable, Equatable {
         action = try c.decode(Action.self, forKey: .action)
         sizing = try c.decodeIfPresent(Sizing.self, forKey: .sizing) ?? .shares
         amount = try c.decodeIfPresent(Double.self, forKey: .amount) ?? 100
+        // Older versions stored other IB order types here (Stop, Trailing Stop, …); those become Limit.
+        let storedType = (try? c.decodeIfPresent(String.self, forKey: .orderType))
+            ?? (try? c.decodeIfPresent(String.self, forKey: .priceType))
+        orderType = storedType == "Market" ? .market : .limit
         priceReference = (try? c.decodeIfPresent(PriceReference.self, forKey: .priceReference)) ?? .cross
         offset = try c.decodeIfPresent(Double.self, forKey: .offset) ?? 0.02
         tif = (try? c.decodeIfPresent(TimeInForce.self, forKey: .tif)) ?? .day
@@ -180,6 +193,7 @@ struct Hotkey: Codable, Identifiable, Equatable {
         try c.encode(action, forKey: .action)
         try c.encode(sizing, forKey: .sizing)
         try c.encode(amount, forKey: .amount)
+        try c.encode(orderType, forKey: .orderType)
         try c.encode(priceReference, forKey: .priceReference)
         try c.encode(offset, forKey: .offset)
         try c.encode(tif, forKey: .tif)
@@ -198,7 +212,7 @@ struct Hotkey: Codable, Identifiable, Equatable {
         Hotkey(label: "Sell $1K", action: .sell, sizing: .dollars, amount: 1_000),
         Hotkey(label: "Sell $5K", action: .sell, sizing: .dollars, amount: 5_000),
         Hotkey(label: "Cancel All", action: .cancelAll),
-        Hotkey(label: "Flatten All", action: .flattenAll, offset: 0.10),
+        Hotkey(label: "Flatten All", action: .flattenAll, orderType: .market),
     ]
 }
 

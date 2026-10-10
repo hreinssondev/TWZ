@@ -95,13 +95,13 @@ private extension Hotkey {
         }
     }
 
-    /// Compact description of what the button sends, e.g. "LMT Mid +0.02 · GTC".
+    /// Compact description of what the button sends, e.g. "MKT" or "LMT Mid +0.02 · GTC".
     var subtitle: String {
         guard action.placesOrder else { return action.rawValue }
         let buy = action == .buy
         let sign = buy ? "+" : "−"
-        var text = "LMT \(priceReference.label(isBuy: buy))"
-        if offset != 0 {
+        var text = orderType == .market ? "MKT" : "LMT \(priceReference.label(isBuy: buy))"
+        if orderType == .limit, offset != 0 {
             let signed = offset > 0 ? sign : (buy ? "−" : "+")
             text += " \(signed)\(abs(offset).formatted(.number.precision(.fractionLength(2))))"
         }
@@ -200,19 +200,29 @@ private struct HotkeyFields: View {
     }
 
     @ViewBuilder private var orderSection: some View {
-        Section("Limit price") {
-            Picker("Based on", selection: $hotkey.priceReference) {
-                ForEach(PriceReference.allCases) { ref in
-                    Text(ref == .cross ? "Bid/Ask (ask for buys, bid for sells)" : ref.rawValue).tag(ref)
-                }
+        Section("Order") {
+            Picker("Order type", selection: $hotkey.orderType) {
+                ForEach(OrderType.allCases) { Text($0.rawValue).tag($0) }
             }
-            TextField("Offset ($)", value: $hotkey.offset, format: .number.precision(.fractionLength(2...4)))
+            .pickerStyle(.segmented)
+            if hotkey.orderType == .limit {
+                Picker("Limit price based on", selection: $hotkey.priceReference) {
+                    ForEach(PriceReference.allCases) { ref in
+                        Text(ref == .cross ? "Bid/Ask (ask for buys, bid for sells)" : ref.rawValue).tag(ref)
+                    }
+                }
+                TextField("Offset ($)", value: $hotkey.offset, format: .number.precision(.fractionLength(2...4)))
+            }
             Picker("Time in force", selection: $hotkey.tif) {
                 ForEach(TimeInForce.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
-            Toggle("Allow outside regular hours", isOn: $hotkey.outsideRth)
-            Text("Buys: price + offset · Sells: price − offset. A positive offset fills more easily; a negative one waits for a better price.")
+            if hotkey.orderType == .limit {
+                Toggle("Allow outside regular hours", isOn: $hotkey.outsideRth)
+            }
+            Text(hotkey.orderType == .market
+                 ? "Fills at the best available price. Outside regular hours it's sent as a limit 0.5% through the ask (buys) or bid (sells), since IB doesn't fill market orders then."
+                 : "Buys: price + offset · Sells: price − offset. A positive offset fills more easily; a negative one waits for a better price.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
