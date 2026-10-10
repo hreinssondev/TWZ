@@ -5,7 +5,8 @@
 //  Lightweight candlestick + volume chart drawn with a single SwiftUI Canvas.
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
 //  around the cursor; a diagonal swipe does both. Mouse: wheel zooms, shift-wheel pans.
-//  Drag pans. Double-click an order line to cancel that order; anywhere else resets the view.
+//  Drag pans freely, in time and price. Right-click resets the view, as does double-clicking
+//  anywhere but an order line; double-clicking an order line cancels that order.
 //  Intraday charts shade the sessions outside regular hours: pre-market and after hours in grey,
 //  overnight in indigo.
 //
@@ -41,7 +42,7 @@ struct CandleChart: View {
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @State private var hover: CGPoint?
-    @State private var dragStartScroll: Double?
+    @State private var dragStart: (scroll: Double, shift: Double)?
     @State private var optionHeld = false
     @State private var controlHeld = false
 
@@ -65,13 +66,12 @@ struct CandleChart: View {
                     hover = nil
                 }
             }
-            .gesture(panGesture(plotWidth: plotWidth))
+            .gesture(panGesture(plotWidth: plotWidth, plotHeight: plotRect(size: geo.size).height))
             .onTapGesture(count: 2) { location in
                 if let id = orderLine(near: location, size: geo.size) {
                     onCancelOrder?(id)
                 } else {
-                    chart.scrollBack = 0
-                    chart.visibleBars = 120
+                    resetView()
                 }
             }
             .background(ScrollCatcher(
@@ -91,7 +91,8 @@ struct CandleChart: View {
                 onModifierKeys: { flags in
                     optionHeld = flags.contains(.option)
                     controlHeld = flags.contains(.control)
-                }
+                },
+                onRightClick: resetView
             ))
         }
     }
@@ -123,16 +124,25 @@ struct CandleChart: View {
         setScrollBack(chart.scrollBack + fromRight / oldWidth - fromRight / newWidth)
     }
 
+    /// Latest bars at the right edge, default zoom, price range fitted to the bars again.
+    private func resetView() {
+        chart.scrollBack = 0
+        chart.visibleBars = 120
+        chart.priceShift = 0
+    }
+
     // MARK: Gestures
 
-    private func panGesture(plotWidth: CGFloat) -> some Gesture {
+    /// The content follows the pointer both ways: sideways through time, up and down in price.
+    private func panGesture(plotWidth: CGFloat, plotHeight: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
-                let start = dragStartScroll ?? chart.scrollBack
-                dragStartScroll = start
-                setScrollBack(start + Double(value.translation.width / barWidth(plotWidth: plotWidth)))
+                let start = dragStart ?? (chart.scrollBack, chart.priceShift)
+                dragStart = start
+                setScrollBack(start.scroll + Double(value.translation.width / barWidth(plotWidth: plotWidth)))
+                chart.priceShift = start.shift + Double(value.translation.height / max(1, plotHeight))
             }
-            .onEnded { _ in dragStartScroll = nil }
+            .onEnded { _ in dragStart = nil }
     }
 
     // MARK: Drawing
@@ -188,6 +198,8 @@ struct CandleChart: View {
         if hi - lo < 1e-9 { hi += 0.01; lo -= 0.01 }
         let pad = (hi - lo) * 0.06
         lo -= pad; hi += pad
+        let shift = (hi - lo) * chart.priceShift
+        lo += shift; hi += shift
         return Viewport(plot: plot, priceRect: priceRect, volumeHeight: volumeHeight, barWidth: barWidth,
                         anchor: anchor, anchorX: anchorX, start: start, end: end, lo: lo, hi: hi)
     }
@@ -413,6 +425,7 @@ private struct ScrollCatcher: NSViewRepresentable {
     /// ⌥- or ⌃-click location and which of the two; return true to consume the click.
     var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
     var onModifierKeys: (NSEvent.ModifierFlags) -> Void
+    var onRightClick: () -> Void
 
     func makeNSView(context: Context) -> CatcherView {
         let view = CatcherView()
@@ -425,6 +438,7 @@ private struct ScrollCatcher: NSViewRepresentable {
         view.onMagnify = onMagnify
         view.onModifiedClick = onModifiedClick
         view.onModifierKeys = onModifierKeys
+        view.onRightClick = onRightClick
     }
 
     static func dismantleNSView(_ view: CatcherView, coordinator: ()) {
@@ -436,6 +450,7 @@ private struct ScrollCatcher: NSViewRepresentable {
         var onMagnify: ((CGFloat, CGPoint) -> Void)?
         var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
         var onModifierKeys: ((NSEvent.ModifierFlags) -> Void)?
+        var onRightClick: (() -> Void)?
         private var monitor: Any?
 
         override var isFlipped: Bool { true }
@@ -446,7 +461,7 @@ private struct ScrollCatcher: NSViewRepresentable {
             removeMonitor()
             guard window != nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(
-                matching: [.scrollWheel, .magnify, .leftMouseDown, .flagsChanged]
+                matching: [.scrollWheel, .magnify, .leftMouseDown, .rightMouseDown, .flagsChanged]
             ) { [weak self] event in
                 guard let self else { return event }
                 if event.type == .flagsChanged {
@@ -457,6 +472,8 @@ private struct ScrollCatcher: NSViewRepresentable {
                 switch event.type {
                 case .magnify:
                     self.onMagnify?(event.magnification, location)
+                case .rightMouseDown:
+                    self.onRightClick?()
                 case .leftMouseDown:
                     let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
                     guard flags == .option || flags == .control, let onModifiedClick = self.onModifiedClick,

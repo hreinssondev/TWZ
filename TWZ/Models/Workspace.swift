@@ -21,6 +21,8 @@ final class ChartModel: Identifiable {
     // Viewport: how many bars fit on screen and how far we've scrolled back from the latest bar.
     var visibleBars: Double = 120
     var scrollBack: Double = 0
+    /// Vertical drag, as a fraction of the auto-fitted price range (positive = moved down).
+    var priceShift: Double = 0
 
     init(id: Int, symbol: String, timeframe: Timeframe) {
         self.id = id

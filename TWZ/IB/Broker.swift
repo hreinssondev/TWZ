@@ -436,6 +436,7 @@ final class Broker {
         chart.bars = []
         chart.error = nil
         chart.scrollBack = 0
+        chart.priceShift = 0
         guard apiReady, !chart.symbol.isEmpty else {
             chart.isLoading = false
             return
