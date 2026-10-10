@@ -30,6 +30,7 @@ struct CandleChart: View {
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
     @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
+    @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @State private var hover: CGPoint?
     @State private var dragStartScroll: Double?
     @State private var optionHeld = false
@@ -300,9 +301,10 @@ struct CandleChart: View {
             ctx.stroke(cross, with: .color(.secondary.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
             if priceRect.contains(hover) {
                 let hoverPrice = v.price(at: hover.y)
-                // Holding ⌥ turns the price tag purple: an alt-click buys there.
+                // Holding ⌥ turns the price tag the ⌥-click order color: an alt-click buys there.
+                let altClick = LineColors.resolve(altClickHex, default: LineColors.defaultAltClick)
                 drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot,
-                        color: optionHeld && onAltClick != nil ? .purple : .gray)
+                        color: optionHeld && onAltClick != nil ? altClick : .gray)
             }
         }
     }

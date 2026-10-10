@@ -96,15 +96,7 @@ struct HotkeyPanel: View {
 }
 
 private extension Hotkey {
-    var tint: Color {
-        switch action {
-        case .buy: .green
-        case .sell: .red
-        case .closeHalf, .closeAll: .orange
-        case .cancelSymbol, .cancelAll: .gray
-        case .flattenAll: .purple
-        }
-    }
+    var tint: Color { (color ?? action.defaultColor).color }
 
     /// Compact description of what the button sends, e.g. "MKT" or "LMT Mid +0.02 · GTC".
     var subtitle: String {
@@ -316,6 +308,7 @@ private struct HotkeyFields: View {
             Picker("Action", selection: $hotkey.action) {
                 ForEach(Hotkey.Action.allCases) { Text($0.rawValue).tag($0) }
             }
+            LabeledContent("Color") { colorSwatches }
             if hotkey.action.needsSize {
                 Picker("Size in", selection: $hotkey.sizing) {
                     ForEach(Hotkey.Sizing.allCases) { Text($0.rawValue).tag($0) }
@@ -333,6 +326,27 @@ private struct HotkeyFields: View {
             // Keep an automatic label in sync ("Buy 100" → "Buy 1000$"); leave custom labels alone.
             if Hotkey.isAutoLabel(hotkey.label, action: old.action, sizing: old.sizing, amount: old.amount) {
                 hotkey.label = Hotkey.autoLabel(action: new.action, sizing: new.sizing, amount: new.amount)
+            }
+        }
+    }
+
+    /// Preset colors; picking the action's default stores none, so it keeps following the action.
+    private var colorSwatches: some View {
+        let current = hotkey.color ?? hotkey.action.defaultColor
+        return HStack(spacing: 5) {
+            ForEach(HotkeyColor.allCases) { option in
+                Button {
+                    hotkey.color = option == hotkey.action.defaultColor ? nil : option
+                } label: {
+                    Circle()
+                        .fill(option.color.opacity(0.75))
+                        .frame(width: 16, height: 16)
+                        .padding(2)
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(option == current ? 0.8 : 0), lineWidth: 1.5))
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(option.rawValue.capitalized + (option == hotkey.action.defaultColor ? " (default)" : ""))
             }
         }
     }

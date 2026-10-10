@@ -49,7 +49,7 @@ final class Broker {
     /// rate; `usdNokIsLive` turns true once this connection has a quote.
     private(set) var usdNok: Double?
     private(set) var usdNokIsLive = false
-    /// Orders placed by alt-clicking a chart; drawn as solid purple lines.
+    /// Orders placed by alt-clicking a chart; drawn as solid lines in the ⌥-click color (Settings).
     private(set) var chartOrderIds: Set<Int>
 
     /// Live market value of all positions in USD (falls back to cost when no quote yet).

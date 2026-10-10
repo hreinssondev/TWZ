@@ -144,6 +144,17 @@ struct Hotkey: Codable, Identifiable, Equatable {
 
         var needsSize: Bool { self == .buy || self == .sell }
         var placesOrder: Bool { self != .cancelSymbol && self != .cancelAll }
+
+        /// Button color when the hotkey has no color of its own.
+        var defaultColor: HotkeyColor {
+            switch self {
+            case .buy: .green
+            case .sell: .red
+            case .closeHalf, .closeAll: .orange
+            case .cancelSymbol, .cancelAll: .gray
+            case .flattenAll: .purple
+            }
+        }
     }
 
     enum Sizing: String, Codable, CaseIterable, Identifiable {
@@ -163,6 +174,8 @@ struct Hotkey: Codable, Identifiable, Equatable {
     var offset: Double = 0.02
     var tif: TimeInForce = .day
     var outsideRth = true
+    /// Button color; nil follows the action's default.
+    var color: HotkeyColor?
 
     init(label: String, action: Action, sizing: Sizing = .shares, amount: Double = 100,
          orderType: OrderType = .limit, priceReference: PriceReference = .cross, offset: Double = 0.02) {
@@ -176,7 +189,7 @@ struct Hotkey: Codable, Identifiable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, label, action, sizing, amount, orderType, priceReference, offset, tif, outsideRth
+        case id, label, action, sizing, amount, orderType, priceReference, offset, tif, outsideRth, color
         case priceType   // legacy: "Market" or "Limit (bid/ask ± offset)"
     }
 
@@ -196,6 +209,7 @@ struct Hotkey: Codable, Identifiable, Equatable {
         offset = try c.decodeIfPresent(Double.self, forKey: .offset) ?? 0.02
         tif = (try? c.decodeIfPresent(TimeInForce.self, forKey: .tif)) ?? .day
         outsideRth = try c.decodeIfPresent(Bool.self, forKey: .outsideRth) ?? true
+        color = try? c.decodeIfPresent(HotkeyColor.self, forKey: .color)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -210,6 +224,7 @@ struct Hotkey: Codable, Identifiable, Equatable {
         try c.encode(offset, forKey: .offset)
         try c.encode(tif, forKey: .tif)
         try c.encode(outsideRth, forKey: .outsideRth)
+        try c.encodeIfPresent(color, forKey: .color)
     }
 
     /// What a hotkey for these settings is called automatically, e.g. "Buy 100" or "Sell 1000$".

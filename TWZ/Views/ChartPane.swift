@@ -23,6 +23,8 @@ struct ChartPane: View {
     let chart: ChartModel
 
     @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
+    @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
+    @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
 
@@ -108,8 +110,9 @@ struct ChartPane: View {
     private var priceLines: [PriceLine] {
         var lines: [PriceLine] = []
         if let p = broker.positions[chart.symbol] {
-            // Avg cost: solid blue, number only on the axis.
-            lines.append(PriceLine(price: p.avgCost, color: .blue, label: "", dashed: false))
+            // Avg cost: solid line, number only on the axis.
+            lines.append(PriceLine(price: p.avgCost, color: LineColors.resolve(avgCostHex, default: LineColors.defaultAvgCost),
+                                   label: "", dashed: false))
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"
@@ -117,7 +120,8 @@ struct ChartPane: View {
                 // Placed by ⌥-clicking the chart: one solid line (a stop-limit's stop equals its limit).
                 if let price = o.auxPrice ?? o.limitPrice {
                     let label = o.orderType.hasPrefix("STP") ? "STP \(side)" : side
-                    lines.append(PriceLine(price: price, color: .purple, label: label, dashed: false))
+                    lines.append(PriceLine(price: price, color: LineColors.resolve(altClickHex, default: LineColors.defaultAltClick),
+                                           label: label, dashed: false))
                 }
                 continue
             }

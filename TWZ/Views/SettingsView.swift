@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  Settings sheet: Connection (IB Gateway host/port/client, applied on reconnect)
-//  and Appearance (candle colors, applied immediately).
+//  and Appearance (candle and chart line colors, applied immediately).
 //
 
 import SwiftUI
@@ -136,6 +136,8 @@ private struct AppearanceSettings: View {
     @AppStorage(CandleTheme.storageKey) private var theme: CandleTheme = .teal
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
     @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
+    @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
+    @AppStorage(LineColors.altClickKey) private var altClickHex = ""
 
     var body: some View {
         Form {
@@ -164,8 +166,26 @@ private struct AppearanceSettings: View {
                                 supportsOpacity: false)
                 }
             }
+            Section("Chart lines") {
+                lineColorRow("Average position", hex: $avgCostHex, default: LineColors.defaultAvgCost)
+                lineColorRow("⌥-click orders", hex: $altClickHex, default: LineColors.defaultAltClick)
+            }
         }
         .formStyle(.grouped)
+    }
+
+    /// Color picker plus a Reset button while a custom color is set (empty hex = default).
+    private func lineColorRow(_ title: String, hex: Binding<String>, default fallback: Color) -> some View {
+        HStack {
+            ColorPicker(title, selection: Binding(
+                get: { LineColors.resolve(hex.wrappedValue, default: fallback) },
+                set: { hex.wrappedValue = $0.hex }
+            ), supportsOpacity: false)
+            if !hex.wrappedValue.isEmpty {
+                Button("Reset") { hex.wrappedValue = "" }
+                    .controlSize(.small)
+            }
+        }
     }
 
     private func hexBinding(_ hex: Binding<String>, fallback: String) -> Binding<Color> {

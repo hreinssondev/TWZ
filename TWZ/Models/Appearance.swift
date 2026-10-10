@@ -37,6 +37,41 @@ enum CandleTheme: String, CaseIterable, Identifiable {
     }
 }
 
+/// Chart line colors picked in Settings, stored as "RRGGBB"; empty means the default.
+enum LineColors {
+    static let avgCostKey = "avgCostLineColor"
+    static let altClickKey = "altClickOrderColor"
+    static let defaultAvgCost = Color.blue
+    static let defaultAltClick = Color.purple
+
+    static func resolve(_ hex: String, default fallback: Color) -> Color {
+        Color(hex: hex) ?? fallback
+    }
+}
+
+/// Preset colors a hotkey button can use instead of its action's default.
+enum HotkeyColor: String, Codable, CaseIterable, Identifiable {
+    case green, red, orange, yellow, mint, teal, blue, indigo, purple, pink, brown, gray
+    var id: String { rawValue }
+
+    var color: Color {
+        switch self {
+        case .green: .green
+        case .red: .red
+        case .orange: .orange
+        case .yellow: .yellow
+        case .mint: .mint
+        case .teal: .teal
+        case .blue: .blue
+        case .indigo: .indigo
+        case .purple: .purple
+        case .pink: .pink
+        case .brown: .brown
+        case .gray: .gray
+        }
+    }
+}
+
 extension Color {
     /// "RRGGBB" (with or without "#").
     init?(hex: String) {
