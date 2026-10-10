@@ -52,13 +52,21 @@ final class Broker {
     /// Orders placed by alt-clicking a chart; drawn as solid purple lines.
     private(set) var chartOrderIds: Set<Int>
 
-    /// Live market value of all positions (falls back to cost when no quote yet).
+    /// Live market value of all positions in USD (falls back to cost when no quote yet).
     var totalPositionValue: Double? {
         guard state == .connected else { return nil }
         if positions.isEmpty { return 0 }
         return positions.values.reduce(0) { sum, p in
             sum + abs(p.quantity) * (quotes[p.symbol]?.last ?? p.avgCost)
         }
+    }
+
+    /// Position value in NOK, the account's base currency like equity and P/L: the live USD value
+    /// at USD.NOK, or IB's own (less frequently updated) gross position value without a rate.
+    var totalPositionValueNOK: Double? {
+        guard let usd = totalPositionValue else { return nil }
+        guard let usdNok else { return grossPositionValue }
+        return usd * usdNok
     }
 
     // MARK: Private

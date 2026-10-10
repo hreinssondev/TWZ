@@ -337,6 +337,14 @@ enum MarketSession {
 // MARK: - Formatting
 
 enum Fmt {
+    /// Money with no currency symbol, e.g. "1,234,567.89" or "+1,234.56".
+    static func amount(_ v: Double?, signed: Bool = false) -> String {
+        guard let v else { return "—" }
+        let s = abs(v).formatted(.number.precision(.fractionLength(2)))
+        if signed { return (v < 0 ? "-" : "+") + s }
+        return (v < 0 ? "-" : "") + s
+    }
+
     static func price(_ v: Double?) -> String {
         guard let v else { return "—" }
         return v.formatted(.number.precision(.fractionLength(v < 1 ? 4 : 2)))

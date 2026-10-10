@@ -22,11 +22,12 @@ struct AccountBar: View {
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(Capsule().fill(broker.isLivePort ? Color.red : Color.blue))
 
-            stat("Equity", Fmt.money(broker.netLiquidation))
-            stat("P/L Today", Fmt.money(broker.dailyPnL, signed: true), color: color(broker.dailyPnL))
-            stat("Unrealized", Fmt.money(broker.unrealizedPnL, signed: true), color: color(broker.unrealizedPnL))
-            stat("Realized", Fmt.money(broker.realizedPnL, signed: true), color: color(broker.realizedPnL))
-            stat("Positions", Fmt.money(broker.totalPositionValue))
+            // Account values are in the base currency (NOK), shown as bare numbers.
+            stat("Equity", Fmt.amount(broker.netLiquidation))
+            stat("P/L Today", Fmt.amount(broker.dailyPnL, signed: true), color: color(broker.dailyPnL))
+            stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true), color: color(broker.unrealizedPnL))
+            stat("Realized", Fmt.amount(broker.realizedPnL, signed: true), color: color(broker.realizedPnL))
+            stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
 
             Spacer()
 
