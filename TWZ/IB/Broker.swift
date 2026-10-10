@@ -51,6 +51,8 @@ final class Broker {
     private(set) var usdNokIsLive = false
     /// Orders placed by alt-clicking a chart; drawn as solid lines in the ⌥-click color (Settings).
     private(set) var chartOrderIds: Set<Int>
+    /// Stop loss / take profit orders placed by ⌃-clicking a chart, by order id.
+    private(set) var protectiveOrders: [Int: Protective]
 
     /// Live market value of all positions in USD (falls back to cost when no quote yet).
     var totalPositionValue: Double? {
@@ -108,6 +110,8 @@ final class Broker {
     @ObservationIgnored private var overnightReqByChart: [Int: Int] = [:]
     @ObservationIgnored private var overnightBars: [Int: [Bar]] = [:]
 
+    /// Stop losses to place again once the take profit blocking them is cancelled, by its order id.
+    @ObservationIgnored private var stopsAwaitingCancel: [Int: (symbol: String, price: Double)] = [:]
     @ObservationIgnored private var fxReq: Int?
     @ObservationIgnored private var fxBid: Double?
     @ObservationIgnored private var fxAsk: Double?
@@ -129,6 +133,8 @@ final class Broker {
         clientId = defaults.object(forKey: "ib.clientId") as? Int ?? 1
         usdNok = defaults.object(forKey: "fx.usdNok") as? Double
         chartOrderIds = Set(defaults.array(forKey: "chartOrderIds") as? [Int] ?? [])
+        protectiveOrders = defaults.data(forKey: "protectiveOrders")
+            .flatMap { try? JSONDecoder().decode([Int: Protective].self, from: $0) } ?? [:]
         socket.onEvent = { [weak self] event in self?.handle(event) }
     }
 
@@ -169,6 +175,7 @@ final class Broker {
         overnightChartByReq.removeAll()
         overnightReqByChart.removeAll()
         overnightBars.removeAll()
+        stopsAwaitingCancel.removeAll()
         scanReqByOwner.removeAll()
         scanOwnerByReq.removeAll()
         closeKeyByReq.removeAll()
@@ -457,9 +464,12 @@ final class Broker {
     @discardableResult
     /// Places a stock order and returns its id; `limit == nil` sends a market order. With a `stop`
     /// it's a stop-limit (STP LMT) that triggers when the last trade reaches the stop.
+    /// Orders sharing an `ocaGroup` cancel each other: when one fills, the rest shrink by as much.
+    /// Passing `modifying` an existing order id changes that order instead of placing a new one.
     func placeOrder(symbol: String, action: String, quantity: Double, limit: Double?, stop: Double? = nil,
-                    tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART") -> Int? {
-        guard apiReady, let orderId = nextOrderId else {
+                    tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART",
+                    ocaGroup: String = "", modifying: Int? = nil) -> Int? {
+        guard apiReady, let next = nextOrderId else {
             lastMessage = "Not connected"
             return nil
         }
@@ -467,7 +477,8 @@ final class Broker {
             lastMessage = "Order quantity must be > 0"
             return nil
         }
-        nextOrderId = orderId + 1
+        let orderId = modifying ?? next
+        if modifying == nil { nextOrderId = next + 1 }
 
         let orderType = stop != nil && limit != nil ? "STP LMT" : (limit == nil ? "MKT" : "LMT")
         let triggerMethod = stop != nil ? 2 : 0                           // 2 = last trade
@@ -475,11 +486,11 @@ final class Broker {
         f += contract(symbol, exchange: exchange)
         f += ["", ""]                                                     // secIdType, secId
         f += [action, quantity, orderType, limit ?? Self.unsetDouble, stop ?? Self.unsetDouble,
-              tif.rawValue, "", account, "", 0, "TWZ"]
+              tif.rawValue, ocaGroup, account, "", 0, "TWZ"]
         f += [true, 0, false, false, 0, triggerMethod, outsideRth && limit != nil, false]  // transmit … hidden
         f += ["", 0.0, "", "", "", "", ""]                                // sharesAlloc, discretionary, GAT, GTD, FA
         if serverVersion < 177 { f += [""] }                              // faProfile
-        f += ["", 0, "", -1, 0, "", "", false, Int.unset, Self.unsetDouble, false, false, Self.unsetDouble]
+        f += ["", 0, "", -1, ocaGroup.isEmpty ? 0 : 2, "", "", false, Int.unset, Self.unsetDouble, false, false, Self.unsetDouble]
         f += [0, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble]
         f += [false, Self.unsetDouble, Int.unset, "", Self.unsetDouble]   // override%, volatility, volType, deltaNeutral
         f += [false, Int.unset, Self.unsetDouble, Self.unsetDouble, Int.unset, Int.unset, Self.unsetDouble]
@@ -497,10 +508,15 @@ final class Broker {
         if serverVersion >= 169 { f += [""] }                             // manualOrderTime
         sendFields(f)
 
-        orders[orderId] = OrderRow(
+        var row = OrderRow(
             id: orderId, symbol: symbol, action: action, quantity: quantity,
             orderType: orderType, limitPrice: limit, auxPrice: stop, status: "PendingSubmit"
         )
+        if modifying != nil, let old = orders[orderId] {
+            row.status = old.status
+            row.filled = old.filled
+        }
+        orders[orderId] = row
         return orderId
     }
 
@@ -653,6 +669,119 @@ final class Broker {
                               summary: summary) else { return }
         chartOrderIds.insert(id)
         defaults.set(Array(chartOrderIds.sorted().suffix(500)), forKey: "chartOrderIds")
+    }
+
+    // MARK: - Stop loss / take profit
+
+    /// A ⌃-click order that closes the position, and the OCA group pairing it with its counterpart.
+    struct Protective: Codable, Equatable {
+        enum Kind: String, Codable { case stopLoss, takeProfit }
+        var symbol: String
+        var kind: Kind
+        var ocaGroup: String
+    }
+
+    /// What a ⌃-click at `price` places: a stop loss on the losing side of the last trade, a take
+    /// profit on the winning side. nil without a position or a live price.
+    func protectiveKind(symbol rawSymbol: String, at price: Double) -> Protective.Kind? {
+        let symbol = rawSymbol.uppercased()
+        guard let qty = positions[symbol]?.quantity, qty != 0,
+              let last = quotes[symbol]?.last, last > 0 else { return nil }
+        return (qty > 0) == (price < last) ? .stopLoss : .takeProfit
+    }
+
+    /// ⌃-click on a chart: a GTC order closing the whole position at the clicked price. A second
+    /// click of the same kind moves the existing order. The stop loss and take profit share an
+    /// OCA group, so when one fills the other is cancelled.
+    func placeProtective(symbol rawSymbol: String, at clickedPrice: Double) {
+        let symbol = rawSymbol.uppercased()
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        guard positions[symbol].map({ $0.quantity != 0 }) ?? false else {
+            lastMessage = "No position in \(symbol) to put a stop loss or take profit on"
+            return
+        }
+        guard let kind = protectiveKind(symbol: symbol, at: clickedPrice) else {
+            lastMessage = "No live price for \(symbol) yet, so the order wasn't sent"
+            return
+        }
+        placeProtective(kind, symbol: symbol, price: Self.roundToTick(clickedPrice))
+    }
+
+    /// Stop loss: a stop-limit with the limit 1% (at least 2¢) past the stop, so it can fill
+    /// outside regular hours too. Take profit: a limit.
+    private func placeProtective(_ kind: Protective.Kind, symbol: String, price: Double) {
+        guard let qty = positions[symbol]?.quantity, qty != 0 else { return }
+        let action = qty > 0 ? "SELL" : "BUY"
+        let active = activeProtective(symbol)
+        let existing = active.first { $0.value.kind == kind }?.key
+        let group = active.first?.value.ocaGroup ?? "TWZ-\(symbol)-\(Int(Date().timeIntervalSince1970))"
+        let (limit, stop) = Self.protectivePrices(kind, action: action, price: price)
+        guard let id = placeOrder(symbol: symbol, action: action, quantity: abs(qty), limit: limit, stop: stop,
+                                  tif: .gtc, outsideRth: true, ocaGroup: group, modifying: existing) else { return }
+        protectiveOrders[id] = Protective(symbol: symbol, kind: kind, ocaGroup: group)
+        saveProtective()
+        var message = "\(symbol): \(kind == .stopLoss ? "stop loss" : "take profit") \(action) \(Fmt.shares(abs(qty))) @ \(Fmt.price(price))"
+        if existing != nil { message += " (moved)" }
+        if MarketSession.phase() == .overnight || MarketSession.phase() == .closed {
+            message += "; works from 4:00 ET pre-market"
+        }
+        lastMessage = message
+    }
+
+    private static func protectivePrices(_ kind: Protective.Kind, action: String, price: Double)
+        -> (limit: Double, stop: Double?) {
+        guard kind == .stopLoss else { return (price, nil) }
+        let cushion = max(0.02, price * 0.01)
+        return (roundToTick(max(0.0001, action == "SELL" ? price - cushion : price + cushion)), price)
+    }
+
+    private func activeProtective(_ symbol: String) -> [Int: Protective] {
+        protectiveOrders.filter { $0.value.symbol == symbol && (orders[$0.key]?.isActive ?? false) }
+    }
+
+    private func saveProtective() {
+        let kept = Dictionary(uniqueKeysWithValues: protectiveOrders.sorted { $0.key < $1.key }.suffix(500).map { ($0.key, $0.value) })
+        protectiveOrders = kept
+        if let data = try? JSONEncoder().encode(kept) { defaults.set(data, forKey: "protectiveOrders") }
+    }
+
+    /// Keeps ⌃-click orders closing exactly the position: cancelled once it's gone or flipped,
+    /// resized when it changes (unless partly filled, where the OCA group already shrinks them).
+    private func syncProtective(_ symbol: String) {
+        let qty = positions[symbol]?.quantity ?? 0
+        for (id, p) in activeProtective(symbol) {
+            guard let o = orders[id] else { continue }
+            guard (o.action == "SELL" && qty > 0) || (o.action == "BUY" && qty < 0) else {
+                cancelOrder(id)
+                continue
+            }
+            guard o.filled == 0, o.quantity != abs(qty),
+                  let price = p.kind == .stopLoss ? o.auxPrice : o.limitPrice else { continue }
+            let (limit, stop) = Self.protectivePrices(p.kind, action: o.action, price: price)
+            placeOrder(symbol: symbol, action: o.action, quantity: abs(qty), limit: limit, stop: stop,
+                       tif: .gtc, outsideRth: true, ocaGroup: p.ocaGroup, modifying: id)
+        }
+    }
+
+    /// The stop loss wins: if IBKR rejects one because a take profit already covers the position,
+    /// cancel the take profit and place the stop loss again.
+    private func protectiveRejected(_ id: Int, _ text: String) {
+        guard let p = protectiveOrders[id], let o = orders[id] else { return }
+        switch p.kind {
+        case .stopLoss:
+            guard let price = o.auxPrice, let tp = activeProtective(p.symbol).first(where: { $0.value.kind == .takeProfit })?.key
+            else { return }
+            stopsAwaitingCancel[tp] = (p.symbol, price)
+            cancelOrder(tp)
+            lastMessage = "\(p.symbol): stop loss rejected (\(text)); cancelling the take profit to place it"
+        case .takeProfit:
+            if activeProtective(p.symbol).contains(where: { $0.value.kind == .stopLoss }) {
+                lastMessage = "\(p.symbol): take profit rejected (\(text)); the stop loss stays"
+            }
+        }
     }
 
     /// Places the order and says in the status line when it was priced off a fallback or
@@ -819,6 +948,9 @@ final class Broker {
         o.avgFillPrice = f.double(5)
         o.updated = Date()
         orders[id] = o
+        if !o.isActive, let stop = stopsAwaitingCancel.removeValue(forKey: id) {
+            placeProtective(.stopLoss, symbol: stop.symbol, price: stop.price)
+        }
     }
 
     private func openOrder(_ f: [String]) {
@@ -909,6 +1041,7 @@ final class Broker {
             }
             orders[reqId] = o
             lastMessage = "Order \(o.symbol) #\(reqId): \(text)"
+            if o.status == "Rejected" { protectiveRejected(reqId, text) }
             return
         }
         lastMessage = "[\(code)] \(text)"
@@ -995,6 +1128,7 @@ final class Broker {
             positions[symbol] = Position(symbol: symbol, quantity: qty, avgCost: f.double(15))
         }
         syncQuoteSubscriptions()
+        syncProtective(symbol)
     }
 
     private func accountSummary(_ f: [String]) {

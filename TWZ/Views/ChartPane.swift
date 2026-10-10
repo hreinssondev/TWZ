@@ -41,6 +41,13 @@ struct ChartPane: View {
                 onAltClick: { price in
                     workspace.selectedChartIndex = chart.id
                     broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
+                },
+                onControlClick: { price in
+                    workspace.selectedChartIndex = chart.id
+                    broker.placeProtective(symbol: chart.symbol, at: price)
+                },
+                controlClickColor: { price in
+                    broker.protectiveKind(symbol: chart.symbol, at: price).map { $0 == .stopLoss ? .red : .green }
                 }
             )
         }
@@ -117,6 +124,15 @@ struct ChartPane: View {
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"
+            if let p = broker.protectiveOrders[o.id] {
+                // Placed by ⌃-clicking the chart: a solid red stop loss (at its stop) or green take profit.
+                let isStop = p.kind == .stopLoss
+                if let price = isStop ? o.auxPrice : o.limitPrice {
+                    lines.append(PriceLine(price: price, color: isStop ? .red : .green,
+                                           label: "\(isStop ? "SL" : "TP") \(side)", dashed: false))
+                }
+                continue
+            }
             if broker.chartOrderIds.contains(o.id) {
                 // Placed by ⌥-clicking the chart: one solid line (a stop-limit's stop equals its limit).
                 if let price = o.auxPrice ?? o.limitPrice {

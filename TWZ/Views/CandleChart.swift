@@ -26,6 +26,10 @@ struct CandleChart: View {
     var lines: [PriceLine] = []
     /// ⌥-click in the price area: called with the price under the cursor.
     var onAltClick: ((Double) -> Void)?
+    /// ⌃-click in the price area: called with the price under the cursor.
+    var onControlClick: ((Double) -> Void)?
+    /// Price tag color while ⌃ is held: what a ⌃-click there would place (nil: nothing).
+    var controlClickColor: ((Double) -> Color?)?
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
@@ -35,6 +39,7 @@ struct CandleChart: View {
     @State private var hover: CGPoint?
     @State private var dragStartScroll: Double?
     @State private var optionHeld = false
+    @State private var controlHeld = false
 
     private let axisWidth: CGFloat = 58
     private let timeAxisHeight: CGFloat = 16
@@ -51,6 +56,7 @@ struct CandleChart: View {
                 if case .active(let p) = phase {
                     hover = p
                     optionHeld = NSEvent.modifierFlags.contains(.option)
+                    controlHeld = NSEvent.modifierFlags.contains(.control)
                 } else {
                     hover = nil
                 }
@@ -68,14 +74,16 @@ struct CandleChart: View {
                 onMagnify: { magnification, location in
                     zoom(by: 1 / (1 + magnification), at: location.x, plotWidth: plotWidth)
                 },
-                onAltClick: onAltClick.map { handler in
-                    { location in
-                        guard let price = price(at: location, size: geo.size) else { return false }
-                        handler(price)
-                        return true
-                    }
+                onModifiedClick: { location, flags in
+                    guard let handler = flags == .control ? onControlClick : onAltClick,
+                          let price = price(at: location, size: geo.size) else { return false }
+                    handler(price)
+                    return true
                 },
-                onOptionKey: { optionHeld = $0 }
+                onModifierKeys: { flags in
+                    optionHeld = flags.contains(.option)
+                    controlHeld = flags.contains(.control)
+                }
             ))
         }
     }
@@ -304,9 +312,14 @@ struct CandleChart: View {
             if priceRect.contains(hover) {
                 let hoverPrice = v.price(at: hover.y)
                 // Holding ⌥ turns the price tag the ⌥-click order color: an alt-click buys there.
-                let altClick = LineColors.resolve(altClickHex, default: LineColors.defaultAltClick)
-                drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot,
-                        color: optionHeld && onAltClick != nil ? altClick : .gray)
+                // Holding ⌃ turns it red or green: a ⌃-click places a stop loss or take profit there.
+                var tagColor = Color.gray
+                if controlHeld, let color = controlClickColor?(hoverPrice) {
+                    tagColor = color
+                } else if optionHeld, onAltClick != nil {
+                    tagColor = LineColors.resolve(altClickHex, default: LineColors.defaultAltClick)
+                }
+                drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor)
             }
         }
     }
@@ -375,9 +388,9 @@ private struct ScrollCatcher: NSViewRepresentable {
     /// (positive = zoom out), location in view coordinates with a top-left origin.
     var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
     var onMagnify: (CGFloat, CGPoint) -> Void
-    /// ⌥-click location; return true to consume the click.
-    var onAltClick: ((CGPoint) -> Bool)?
-    var onOptionKey: (Bool) -> Void
+    /// ⌥- or ⌃-click location and which of the two; return true to consume the click.
+    var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
+    var onModifierKeys: (NSEvent.ModifierFlags) -> Void
 
     func makeNSView(context: Context) -> CatcherView {
         let view = CatcherView()
@@ -388,8 +401,8 @@ private struct ScrollCatcher: NSViewRepresentable {
     func updateNSView(_ view: CatcherView, context: Context) {
         view.onScroll = onScroll
         view.onMagnify = onMagnify
-        view.onAltClick = onAltClick
-        view.onOptionKey = onOptionKey
+        view.onModifiedClick = onModifiedClick
+        view.onModifierKeys = onModifierKeys
     }
 
     static func dismantleNSView(_ view: CatcherView, coordinator: ()) {
@@ -399,8 +412,8 @@ private struct ScrollCatcher: NSViewRepresentable {
     final class CatcherView: NSView {
         var onScroll: ((CGFloat, CGFloat, CGPoint) -> Void)?
         var onMagnify: ((CGFloat, CGPoint) -> Void)?
-        var onAltClick: ((CGPoint) -> Bool)?
-        var onOptionKey: ((Bool) -> Void)?
+        var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
+        var onModifierKeys: ((NSEvent.ModifierFlags) -> Void)?
         private var monitor: Any?
 
         override var isFlipped: Bool { true }
@@ -415,7 +428,7 @@ private struct ScrollCatcher: NSViewRepresentable {
             ) { [weak self] event in
                 guard let self else { return event }
                 if event.type == .flagsChanged {
-                    self.onOptionKey?(event.modifierFlags.contains(.option))
+                    self.onModifierKeys?(event.modifierFlags)
                     return event
                 }
                 guard let location = self.location(of: event) else { return event }
@@ -424,7 +437,8 @@ private struct ScrollCatcher: NSViewRepresentable {
                     self.onMagnify?(event.magnification, location)
                 case .leftMouseDown:
                     let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
-                    guard flags == .option, let onAltClick = self.onAltClick, onAltClick(location) else { return event }
+                    guard flags == .option || flags == .control, let onModifiedClick = self.onModifiedClick,
+                          onModifiedClick(location, flags) else { return event }
                 default:
                     self.handleScroll(event, at: location)
                 }
