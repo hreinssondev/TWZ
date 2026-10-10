@@ -24,6 +24,9 @@ struct TWZApp: App {
                     broker.registerCharts(workspace.charts)
                     broker.connect()
                 }
+                .onChange(of: workspace.selectedChartIndex, initial: true) { _, index in
+                    broker.setSelectedChart(index)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowBackgroundDragBehavior(.enabled)

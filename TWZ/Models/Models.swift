@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct Bar: Equatable {
+nonisolated struct Bar: Equatable {
     var time: Date
     var open: Double
     var high: Double
@@ -26,7 +26,7 @@ struct Bar: Equatable {
     }
 }
 
-struct Quote: Equatable {
+nonisolated struct Quote: Equatable {
     var bid: Double?
     var ask: Double?
     var last: Double?
@@ -39,14 +39,14 @@ struct Quote: Equatable {
     }
 }
 
-struct Position: Identifiable, Equatable {
+nonisolated struct Position: Identifiable, Equatable {
     var symbol: String
     var quantity: Double
     var avgCost: Double
     var id: String { symbol }
 }
 
-struct OrderRow: Identifiable, Equatable {
+nonisolated struct OrderRow: Identifiable, Equatable {
     var id: Int                 // IB order id
     var symbol: String
     var action: String          // BUY / SELL
@@ -64,7 +64,7 @@ struct OrderRow: Identifiable, Equatable {
     }
 }
 
-struct Fill: Identifiable, Equatable {
+nonisolated struct Fill: Identifiable, Equatable {
     var id: String              // execId
     var orderId: Int
     var symbol: String
@@ -74,7 +74,7 @@ struct Fill: Identifiable, Equatable {
     var time: Date
 }
 
-enum Timeframe: String, CaseIterable, Codable, Identifiable {
+nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
     case m1 = "1m", m5 = "5m", m15 = "15m", h1 = "1h", d1 = "D"
     var id: String { rawValue }
 
@@ -99,12 +99,23 @@ enum Timeframe: String, CaseIterable, Codable, Identifiable {
     }
 
     var isIntraday: Bool { self != .d1 }
+
+    /// Bar length in seconds; nil for daily bars, which follow the ET trading day.
+    var barSeconds: Double? {
+        switch self {
+        case .m1: 60
+        case .m5: 300
+        case .m15: 900
+        case .h1: 3600
+        case .d1: nil
+        }
+    }
 }
 
 // MARK: - Hotkeys
 
 /// The quote a hotkey's limit price is based on, before the offset is applied.
-enum PriceReference: String, Codable, CaseIterable, Identifiable {
+nonisolated enum PriceReference: String, Codable, CaseIterable, Identifiable {
     case cross = "Bid/Ask"   // buys at the ask, sells at the bid (crosses the spread)
     case bid = "Bid"
     case ask = "Ask"
@@ -118,20 +129,20 @@ enum PriceReference: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum OrderType: String, Codable, CaseIterable, Identifiable {
+nonisolated enum OrderType: String, Codable, CaseIterable, Identifiable {
     case market = "Market"
     case limit = "Limit"
     var id: String { rawValue }
 }
 
-enum TimeInForce: String, Codable, CaseIterable, Identifiable {
+nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
     case day = "DAY"
     case gtc = "GTC"
     case ioc = "IOC"
     var id: String { rawValue }
 }
 
-struct Hotkey: Codable, Identifiable, Equatable {
+nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     enum Action: String, Codable, CaseIterable, Identifiable {
         case buy = "Buy"
         case sell = "Sell"
@@ -282,7 +293,7 @@ struct Hotkey: Codable, Identifiable, Equatable {
 
 // MARK: - Scanners
 
-enum ScannerKind: String, CaseIterable, Identifiable {
+nonisolated enum ScannerKind: String, CaseIterable, Identifiable {
     case gainers = "Top Gainers"
     case losers = "Top Losers"
     case afterHours = "AH Gainers"
@@ -303,18 +314,18 @@ enum ScannerKind: String, CaseIterable, Identifiable {
     }
 }
 
-struct ScannerFilter: Codable, Equatable {
+nonisolated struct ScannerFilter: Codable, Equatable {
     var minPrice: Double? = 1
     var maxPrice: Double?
     var minVolume: Int? = 100_000
 }
 
-struct ScanSpec: Equatable {
+nonisolated struct ScanSpec: Equatable {
     var kind: ScannerKind
     var filter: ScannerFilter
 }
 
-struct ScanResult: Equatable {
+nonisolated struct ScanResult: Equatable {
     var symbols: [String] = []
     var error: String?
     var updated: Date?
@@ -322,7 +333,7 @@ struct ScanResult: Equatable {
 
 // MARK: - Market session
 
-enum MarketSession {
+nonisolated enum MarketSession {
     private static let eastern = TimeZone(identifier: "America/New_York")!
 
     enum Phase: String {
@@ -369,7 +380,7 @@ enum MarketSession {
 
 // MARK: - Formatting
 
-enum Fmt {
+nonisolated enum Fmt {
     /// Money with no currency symbol, e.g. "1,234,567.89" or "+1,234.56".
     static func amount(_ v: Double?, signed: Bool = false) -> String {
         guard let v else { return "—" }
@@ -418,7 +429,7 @@ enum Fmt {
 // MARK: - Chart order amount
 
 /// NOK amount for alt-click chart buys, set in the order entry box next to the hotkeys.
-enum OrderAmount {
+nonisolated enum OrderAmount {
     static let storageKey = "orderAmountNOK"
     static let initial = 50_000.0
     static let minimum = 500.0

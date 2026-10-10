@@ -84,7 +84,7 @@ enum LineColors {
 }
 
 /// Preset colors a hotkey button can use instead of its action's default.
-enum HotkeyColor: String, Codable, CaseIterable, Identifiable {
+nonisolated enum HotkeyColor: String, Codable, CaseIterable, Identifiable {
     case green, red, orange, yellow, mint, teal, blue, indigo, purple, pink, brown, gray
     var id: String { rawValue }
 
