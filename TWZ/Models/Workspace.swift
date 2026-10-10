@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  UI state that survives relaunches: chart symbols/timeframes,
-//  watchlists and hotkey configuration.
+//  watchlists, scanner filters and hotkey configuration.
 //
 
 import Foundation
@@ -38,6 +38,8 @@ final class Workspace {
 
     var watchlists: [String: [String]] { didSet { save() } }
     var hotkeys: [Hotkey] { didSet { save() } }
+    /// Scanner filters per list panel and scanner, keyed "panelId|scanner".
+    var scanFilters: [String: ScannerFilter] { didSet { save() } }
 
     var selectedChart: ChartModel { charts[selectedChartIndex] }
 
@@ -72,6 +74,21 @@ final class Workspace {
         } else {
             hotkeys = Hotkey.defaults
         }
+
+        if let data = defaults.data(forKey: "scanFilters"),
+           let filters = try? JSONDecoder().decode([String: ScannerFilter].self, from: data) {
+            scanFilters = filters
+        } else {
+            scanFilters = [:]
+        }
+    }
+
+    func scanFilter(panel: String, _ kind: ScannerKind) -> ScannerFilter {
+        scanFilters["\(panel)|\(kind.rawValue)"] ?? ScannerFilter()
+    }
+
+    func setScanFilter(_ filter: ScannerFilter, panel: String, _ kind: ScannerKind) {
+        scanFilters["\(panel)|\(kind.rawValue)"] = filter
     }
 
     func symbols(in list: String) -> [String] { watchlists[list] ?? [] }
@@ -94,5 +111,6 @@ final class Workspace {
     private func save() {
         if let data = try? JSONEncoder().encode(watchlists) { defaults.set(data, forKey: "watchlists") }
         if let data = try? JSONEncoder().encode(hotkeys) { defaults.set(data, forKey: "hotkeys") }
+        if let data = try? JSONEncoder().encode(scanFilters) { defaults.set(data, forKey: "scanFilters") }
     }
 }

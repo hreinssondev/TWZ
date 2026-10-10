@@ -2,8 +2,9 @@
 //  ListPanel.swift
 //  TWZ
 //
-//  Selectable symbol list. Clicking a row loads it into the selected chart.
-//  Scanner lists (gainers, losers, most active…) will be added as more sources.
+//  Selectable symbol list: a watchlist or a live IB scanner (gainers, losers,
+//  after-hours gainers, most active by dollar volume). Clicking a row loads it
+//  into the selected chart.
 //
 
 import SwiftUI
@@ -15,21 +16,53 @@ struct ListPanel: View {
     let panelId: String
     @AppStorage private var listName: String
     @State private var newSymbol = ""
+    @State private var showFilter = false
 
     init(panelId: String, defaultList: String) {
         self.panelId = panelId
         _listName = AppStorage(wrappedValue: defaultList, "list.\(panelId)")
     }
 
-    private var symbols: [String] { workspace.symbols(in: listName) }
+    private var scanner: ScannerKind? { ScannerKind(rawValue: listName) }
+
+    private var scanSpec: ScanSpec? {
+        scanner.map { ScanSpec(kind: $0, filter: workspace.scanFilter(panel: panelId, $0)) }
+    }
+
+    private var symbols: [String] {
+        scanner == nil ? workspace.symbols(in: listName) : broker.scans[panelId]?.symbols ?? []
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $listName) {
-                ForEach(Workspace.watchlistNames, id: \.self) { Text($0).tag($0) }
+            HStack(spacing: 4) {
+                Picker("", selection: $listName) {
+                    Section("Watchlists") {
+                        ForEach(Workspace.watchlistNames, id: \.self) { Text($0).tag($0) }
+                    }
+                    Section("Scanners") {
+                        ForEach(ScannerKind.allCases) { Text($0.rawValue).tag($0.rawValue) }
+                    }
+                }
+                .labelsHidden()
+                .controlSize(.small)
+
+                if let scanner {
+                    Button {
+                        showFilter.toggle()
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Scanner filters")
+                    .popover(isPresented: $showFilter, arrowEdge: .bottom) {
+                        ScanFilterEditor(filter: workspace.scanFilter(panel: panelId, scanner)) { filter in
+                            workspace.setScanFilter(filter, panel: panelId, scanner)
+                            showFilter = false
+                        }
+                    }
+                }
             }
-            .labelsHidden()
-            .controlSize(.small)
             .padding(6)
 
             columnHeader
@@ -44,19 +77,27 @@ struct ListPanel: View {
             }
 
             Divider()
-            TextField("Add symbol", text: $newSymbol)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12))
-                .padding(6)
-                .onSubmit {
-                    workspace.add(newSymbol, to: listName)
-                    newSymbol = ""
-                }
+            if scanner != nil {
+                scanStatus
+            } else {
+                TextField("Add symbol", text: $newSymbol)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .padding(6)
+                    .onSubmit {
+                        workspace.add(newSymbol, to: listName)
+                        newSymbol = ""
+                    }
+            }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
-        .onAppear { broker.setQuoteSymbols(symbols, owner: panelId) }
+        .onAppear {
+            broker.setScanner(scanSpec, owner: panelId)
+            broker.setQuoteSymbols(symbols, owner: panelId)
+        }
+        .onChange(of: scanSpec) { _, new in broker.setScanner(new, owner: panelId) }
         .onChange(of: symbols) { _, new in broker.setQuoteSymbols(new, owner: panelId) }
     }
 
@@ -64,8 +105,8 @@ struct ListPanel: View {
         HStack(spacing: 4) {
             Text("Symbol").frame(maxWidth: .infinity, alignment: .leading)
             Text("Last").frame(width: 58, alignment: .trailing)
-            Text("%Chg").frame(width: 52, alignment: .trailing)
-            Text("Vol").frame(width: 50, alignment: .trailing)
+            Text(scanner == .afterHours ? "AH %" : "%Chg").frame(width: 52, alignment: .trailing)
+            Text(scanner == .dollarVolume ? "$Vol" : "Vol").frame(width: 50, alignment: .trailing)
         }
         .font(.system(size: 10, weight: .medium))
         .foregroundStyle(.secondary)
@@ -73,17 +114,51 @@ struct ListPanel: View {
         .padding(.bottom, 3)
     }
 
+    private var scanStatus: some View {
+        let scan = broker.scans[panelId]
+        let text: String
+        if broker.state != .connected {
+            text = "Not connected"
+        } else if let error = scan?.error {
+            text = error
+        } else if let updated = scan?.updated {
+            text = "\(MarketSession.phase().rawValue) · \(updated.formatted(date: .omitted, time: .standard))"
+        } else {
+            text = "Scanning…"
+        }
+        return Text(text)
+            .font(.system(size: 10))
+            .foregroundStyle(scan?.error == nil ? Color.secondary : Color.red)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(6)
+            .help(text)
+    }
+
+    /// After hours, the AH scanner measures change from today's regular-session close.
+    private func changePercent(_ symbol: String, _ q: Quote?) -> Double? {
+        if scanner == .afterHours, MarketSession.phase() == .afterHours,
+           let last = q?.last, let close = broker.sessionClose(symbol), close > 0 {
+            return (last - close) / close * 100
+        }
+        return q?.changePercent
+    }
+
     private func row(_ symbol: String) -> some View {
         let q = broker.quotes[symbol]
-        let change = q?.changePercent
+        let change = changePercent(symbol, q)
         let isCharted = workspace.selectedChart.symbol == symbol
+        let volume = scanner == .dollarVolume
+            ? Fmt.dollars(q?.volume.flatMap { v in q?.last.map { v * $0 } })
+            : Fmt.volume(q?.volume)
         return HStack(spacing: 4) {
             Text(symbol).fontWeight(.semibold).frame(maxWidth: .infinity, alignment: .leading)
             Text(Fmt.price(q?.last)).frame(width: 58, alignment: .trailing)
             Text(Fmt.percent(change))
                 .foregroundStyle(change == nil ? Color.secondary : (change! >= 0 ? Color.green : Color.red))
                 .frame(width: 52, alignment: .trailing)
-            Text(Fmt.volume(q?.volume)).foregroundStyle(.secondary).frame(width: 50, alignment: .trailing)
+            Text(volume).foregroundStyle(.secondary).frame(width: 50, alignment: .trailing)
         }
         .font(.system(size: 11).monospacedDigit())
         .lineLimit(1)
@@ -101,9 +176,40 @@ struct ListPanel: View {
                 }
             }
             Divider()
-            Button("Remove \(symbol)", role: .destructive) {
-                workspace.remove(symbol, from: listName)
+            if scanner != nil {
+                Menu("Add to Watchlist") {
+                    ForEach(Workspace.watchlistNames, id: \.self) { name in
+                        Button(name) { workspace.add(symbol, to: name) }
+                    }
+                }
+            } else {
+                Button("Remove \(symbol)", role: .destructive) {
+                    workspace.remove(symbol, from: listName)
+                }
             }
         }
+    }
+}
+
+/// Price/volume filter for a scanner; applied on "Apply" so typing doesn't resubscribe.
+private struct ScanFilterEditor: View {
+    @State var filter: ScannerFilter
+    let onApply: (ScannerFilter) -> Void
+
+    var body: some View {
+        Form {
+            TextField("Min price", value: $filter.minPrice, format: .number, prompt: Text("Any"))
+            TextField("Max price", value: $filter.maxPrice, format: .number, prompt: Text("Any"))
+            TextField("Min volume", value: $filter.minVolume, format: .number, prompt: Text("Any"))
+            HStack {
+                Button("Reset") { filter = ScannerFilter() }
+                Spacer()
+                Button("Apply") { onApply(filter) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .controlSize(.small)
+        .frame(width: 210)
+        .padding(12)
     }
 }

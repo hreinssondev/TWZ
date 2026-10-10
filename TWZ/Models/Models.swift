@@ -141,20 +141,84 @@ struct Hotkey: Codable, Identifiable, Equatable {
     ]
 }
 
+// MARK: - Scanners
+
+enum ScannerKind: String, CaseIterable, Identifiable {
+    case gainers = "Top Gainers"
+    case losers = "Top Losers"
+    case afterHours = "AH Gainers"
+    case dollarVolume = "Most Active $"
+    var id: String { rawValue }
+
+    static let rowCount = 25
+
+    /// IB scan codes. The % change scans rank on last vs. prior close, and IB's last
+    /// includes extended-hours trades, so gainers/losers track pre-market moves before the open.
+    var scanCode: String {
+        switch self {
+        case .gainers: "TOP_PERC_GAIN"
+        case .losers: "TOP_PERC_LOSE"
+        case .afterHours: "TOP_AFTER_HOURS_PERC_GAIN"
+        case .dollarVolume: "MOST_ACTIVE_USD"
+        }
+    }
+}
+
+struct ScannerFilter: Codable, Equatable {
+    var minPrice: Double? = 1
+    var maxPrice: Double?
+    var minVolume: Int? = 100_000
+}
+
+struct ScanSpec: Equatable {
+    var kind: ScannerKind
+    var filter: ScannerFilter
+}
+
+struct ScanResult: Equatable {
+    var symbols: [String] = []
+    var error: String?
+    var updated: Date?
+}
+
 // MARK: - Market session
 
 enum MarketSession {
     private static let eastern = TimeZone(identifier: "America/New_York")!
 
-    /// True during regular US equity hours (09:30–16:00 ET, Mon–Fri).
-    static func isRegularHours(_ date: Date = Date()) -> Bool {
+    enum Phase: String {
+        case preMarket = "Pre-market"
+        case regular = "Regular hours"
+        case afterHours = "After hours"
+        case closed = "Closed"
+    }
+
+    /// US equity session: pre 04:00–09:30, regular 09:30–16:00, after 16:00–20:00 ET, Mon–Fri.
+    static func phase(_ date: Date = Date()) -> Phase {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = eastern
         let c = cal.dateComponents([.weekday, .hour, .minute], from: date)
         guard let weekday = c.weekday, (2...6).contains(weekday),
-              let h = c.hour, let m = c.minute else { return false }
-        let minutes = h * 60 + m
-        return minutes >= 9 * 60 + 30 && minutes < 16 * 60
+              let h = c.hour, let m = c.minute else { return .closed }
+        switch h * 60 + m {
+        case 4 * 60..<(9 * 60 + 30): return .preMarket
+        case (9 * 60 + 30)..<(16 * 60): return .regular
+        case (16 * 60)..<(20 * 60): return .afterHours
+        default: return .closed
+        }
+    }
+
+    /// True during regular US equity hours (09:30–16:00 ET, Mon–Fri).
+    static func isRegularHours(_ date: Date = Date()) -> Bool {
+        phase(date) == .regular
+    }
+
+    /// ET calendar day, "yyyyMMdd".
+    static func dayKey(_ date: Date = Date()) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = eastern
+        let c = cal.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d%02d%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 }
 
@@ -186,6 +250,11 @@ enum Fmt {
         case 1_000...: return (v / 1_000).formatted(.number.precision(.fractionLength(1))) + "K"
         default: return v.formatted(.number.precision(.fractionLength(0)))
         }
+    }
+
+    static func dollars(_ v: Double?) -> String {
+        guard let v else { return "—" }
+        return "$" + volume(v)
     }
 
     static func shares(_ v: Double) -> String {

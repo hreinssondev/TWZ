@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  Talks the TWS API socket protocol to IB Gateway: handshake, market data,
-//  historical bars, account/P&L, positions and orders.
+//  historical bars, market scanners, account/P&L, positions and orders.
 //  Message layouts follow client protocol versions 157...178 (pre-protobuf).
 //
 
@@ -45,6 +45,10 @@ final class Broker {
     private(set) var orders: [Int: OrderRow] = [:]
     private(set) var fills: [String: Fill] = [:]
     private(set) var quotes: [String: Quote] = [:]
+    /// Latest scanner results per list panel.
+    private(set) var scans: [String: ScanResult] = [:]
+    /// Regular-session closes keyed "SYMBOL|yyyyMMdd", fetched for after-hours scanner rows.
+    private(set) var sessionCloses: [String: Double] = [:]
 
     /// Live market value of all positions (falls back to cost when no quote yet).
     var totalPositionValue: Double? {
@@ -67,6 +71,12 @@ final class Broker {
     @ObservationIgnored private var quoteOwners: [String: Set<String>] = [:]
     @ObservationIgnored private var quoteReqBySymbol: [String: Int] = [:]
     @ObservationIgnored private var quoteSymbolByReq: [Int: String] = [:]
+
+    @ObservationIgnored private var scanSpecs: [String: ScanSpec] = [:]
+    @ObservationIgnored private var scanReqByOwner: [String: Int] = [:]
+    @ObservationIgnored private var scanOwnerByReq: [Int: String] = [:]
+    @ObservationIgnored private var closeKeyByReq: [Int: String] = [:]
+    @ObservationIgnored private var closesRequested: Set<String> = []
 
     @ObservationIgnored private var charts: [ChartModel] = []
     @ObservationIgnored private var chartByReq: [Int: ChartModel] = [:]
@@ -116,6 +126,11 @@ final class Broker {
         chartByReq.removeAll()
         reqByChart.removeAll()
         pendingBars.removeAll()
+        scanReqByOwner.removeAll()
+        scanOwnerByReq.removeAll()
+        closeKeyByReq.removeAll()
+        closesRequested.removeAll()
+        scans.removeAll()
         netLiquidation = nil
         grossPositionValue = nil
         dailyPnL = nil
@@ -176,6 +191,7 @@ final class Broker {
             subscribeQuote(symbol)
         }
         for chart in charts { loadChart(chart) }
+        for owner in scanSpecs.keys { startScan(owner) }
     }
 
     // MARK: - Market data
@@ -206,6 +222,58 @@ final class Broker {
         quoteReqBySymbol[symbol] = reqId
         quoteSymbolByReq[reqId] = symbol
         sendFields([1, 11, reqId] + contract(symbol) + [false, "", false, false, ""])   // reqMktData
+    }
+
+    // MARK: - Scanners
+
+    /// Each list panel declares the scanner it shows (nil for a watchlist).
+    func setScanner(_ spec: ScanSpec?, owner: String) {
+        guard scanSpecs[owner] != spec else { return }
+        stopScan(owner)
+        scanSpecs[owner] = spec
+        scans[owner] = nil
+        startScan(owner)
+    }
+
+    /// Regular-session close to measure after-hours moves against (today's 16:00 close).
+    func sessionClose(_ symbol: String) -> Double? {
+        sessionCloses["\(symbol)|\(MarketSession.dayKey())"]
+    }
+
+    private func startScan(_ owner: String) {
+        guard apiReady, let spec = scanSpecs[owner] else { return }
+        let reqId = makeReqId()
+        scanReqByOwner[owner] = reqId
+        scanOwnerByReq[reqId] = owner
+        let f = spec.filter
+        // reqScannerSubscription (server ≥ 143: no version field)
+        sendFields([
+            22, reqId, ScannerKind.rowCount, "STK", "STK.US.MAJOR", spec.kind.scanCode,
+            f.minPrice ?? Self.unsetDouble, f.maxPrice ?? Self.unsetDouble, f.minVolume ?? Int.unset,
+            Self.unsetDouble, Self.unsetDouble,       // market cap above/below
+            "", "", "", "", "", "",                   // moody/S&P ratings, maturity dates
+            Self.unsetDouble, Self.unsetDouble,       // coupon rate above/below
+            false, Int.unset, "", "ALL",              // excludeConvertible, avgOptionVolume, settingPairs, stockType
+            "", "",                                   // filter options, subscription options
+        ])
+    }
+
+    private func stopScan(_ owner: String) {
+        guard let reqId = scanReqByOwner.removeValue(forKey: owner) else { return }
+        scanOwnerByReq[reqId] = nil
+        if apiReady { send(23, 1, reqId) }                                        // cancelScannerSubscription
+    }
+
+    private func requestSessionCloses(_ symbols: [String]) {
+        guard MarketSession.phase() == .afterHours else { return }
+        let day = MarketSession.dayKey()
+        for symbol in symbols {
+            let key = "\(symbol)|\(day)"
+            guard closesRequested.insert(key).inserted else { continue }
+            let reqId = makeReqId()
+            closeKeyByReq[reqId] = key
+            sendFields([20, reqId] + contract(symbol) + [false, "", "1 day", "1 D", 1, "TRADES", 1, false, ""])
+        }
     }
 
     func registerCharts(_ charts: [ChartModel]) {
@@ -406,6 +474,7 @@ final class Broker {
             account = f.str(2).split(separator: ",").first.map(String.init) ?? ""
             checkReady()
         case 17: historicalData(f)
+        case 20: scannerData(f)
         case 61: position(f)
         case 63: accountSummary(f)
         case 90: historicalDataUpdate(f)
@@ -490,6 +559,12 @@ final class Broker {
         // 2100-2199 are connectivity/farm status notices; 10167 = "displaying delayed data".
         if (2100...2199).contains(code) || code == 10167 || code == 399 { return }
 
+        if closeKeyByReq.removeValue(forKey: reqId) != nil { return }
+        if let owner = scanOwnerByReq.removeValue(forKey: reqId) {
+            scanReqByOwner[owner] = nil
+            scans[owner, default: ScanResult()].error = text
+            return
+        }
         if let chart = chartByReq[reqId] {
             chart.isLoading = false
             chart.error = text
@@ -514,8 +589,13 @@ final class Broker {
     private func historicalData(_ f: [String]) {
         // reqId, startDate, endDate, numBars, then 8 fields per bar
         let reqId = f.int(1)
-        guard let chart = chartByReq[reqId] else { return }
         let count = f.int(4)
+        if let key = closeKeyByReq.removeValue(forKey: reqId) {
+            let closeIndex = 5 + (count - 1) * 8 + 4
+            if count > 0, closeIndex < f.count { sessionCloses[key] = f.double(closeIndex) }
+            return
+        }
+        guard let chart = chartByReq[reqId] else { return }
         var bars: [Bar] = []
         bars.reserveCapacity(count)
         var i = 5
@@ -529,6 +609,25 @@ final class Broker {
         chart.bars = bars
         chart.isLoading = false
         chart.error = bars.isEmpty ? "No data" : nil
+    }
+
+    private func scannerData(_ f: [String]) {
+        // version, reqId, count, then per row: rank, conId (v3+), symbol, secType, lastTradeDate, strike,
+        // right, exchange, currency, localSymbol, marketName, tradingClass, distance, benchmark, projection, legs (v2+)
+        guard let owner = scanOwnerByReq[f.int(2)] else { return }
+        let version = f.int(1)
+        let symbolOffset = version >= 3 ? 2 : 1
+        let stride = 14 + (version >= 3 ? 1 : 0) + (version >= 2 ? 1 : 0)
+        var symbols: [String] = []
+        var i = 4
+        for _ in 0..<max(0, f.int(3)) {
+            guard i + stride <= f.count else { break }
+            let symbol = f[i + symbolOffset]
+            if !symbol.isEmpty, !symbols.contains(symbol) { symbols.append(symbol) }
+            i += stride
+        }
+        scans[owner] = ScanResult(symbols: symbols, updated: Date())
+        if scanSpecs[owner]?.kind == .afterHours { requestSessionCloses(symbols) }
     }
 
     private func historicalDataUpdate(_ f: [String]) {
