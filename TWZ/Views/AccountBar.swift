@@ -26,7 +26,6 @@ struct AccountBar: View {
             stat("Equity", Fmt.amount(broker.netLiquidation))
             stat("P/L Today", Fmt.amount(broker.dailyPnL, signed: true), color: color(broker.dailyPnL))
             stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true), color: color(broker.unrealizedPnL))
-            stat("Realized", Fmt.amount(broker.realizedPnL, signed: true), color: color(broker.realizedPnL))
             stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
 
             Spacer()
