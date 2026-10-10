@@ -8,29 +8,13 @@ import SwiftUI
 struct OrdersPanel: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
-    @AppStorage("ordersTab") private var tab = Tab.active
-
-    enum Tab: String, CaseIterable { case active = "Active", filled = "Filled", positions = "Positions" }
-
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $tab) {
-                ForEach(Tab.allCases, id: \.self) { t in Text(title(for: t)).tag(t) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
-            .padding(6)
+            section("Orders", count: activeOrders.count) { activeRows }
             Divider()
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    switch tab {
-                    case .active: activeRows
-                    case .filled: filledRows
-                    case .positions: positionRows
-                    }
-                }
-            }
+            section("Filled", count: broker.fills.count) { filledRows }
+            Divider()
+            section("Positions", count: broker.positions.count) { positionRows }
         }
         .font(.system(size: 11).monospacedDigit())
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
@@ -38,16 +22,28 @@ struct OrdersPanel: View {
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
     }
 
-    private var activeOrders: [OrderRow] {
-        broker.orders.values.filter(\.isActive).sorted { $0.updated > $1.updated }
+    /// One always-visible section: a compact header and its own scrolling rows, sharing height equally.
+    private func section<Rows: View>(_ title: String, count: Int, @ViewBuilder rows: () -> Rows) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                Text(title).fontWeight(.semibold)
+                Text("\(count)").foregroundStyle(.secondary)
+                Spacer()
+            }
+            .font(.system(size: 10))
+            .padding(.horizontal, 8)
+            .frame(height: 16)
+            .background(Color.primary.opacity(0.05))
+            ScrollView {
+                LazyVStack(spacing: 0) { rows() }
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .frame(maxHeight: .infinity)
     }
 
-    private func title(for tab: Tab) -> String {
-        switch tab {
-        case .active: "Active (\(activeOrders.count))"
-        case .filled: "Filled (\(broker.fills.count))"
-        case .positions: "Positions (\(broker.positions.count))"
-        }
+    private var activeOrders: [OrderRow] {
+        broker.orders.values.filter(\.isActive).sorted { $0.updated > $1.updated }
     }
 
     @ViewBuilder private var activeRows: some View {
@@ -121,7 +117,7 @@ struct OrdersPanel: View {
     }
 
     private func empty(_ text: String) -> some View {
-        Text(text).foregroundStyle(.secondary).padding(.top, 16)
+        Text(text).foregroundStyle(.secondary).padding(.vertical, 4)
     }
 }
 

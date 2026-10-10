@@ -3,10 +3,12 @@
 //  TWZ
 //
 //  Lightweight candlestick + volume chart drawn with a single SwiftUI Canvas.
-//  Drag to pan, pinch to zoom, double-click to reset, hover for crosshair.
+//  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
+//  around the cursor. Mouse: wheel zooms, shift-wheel pans. Drag pans, double-click resets.
 //
 
 import SwiftUI
+import AppKit
 
 struct PriceLine {
     var price: Double
@@ -21,7 +23,6 @@ struct CandleChart: View {
 
     @State private var hover: CGPoint?
     @State private var dragStartScroll: Double?
-    @State private var zoomStartBars: Double?
 
     private let axisWidth: CGFloat = 58
     private let timeAxisHeight: CGFloat = 16
@@ -38,12 +39,47 @@ struct CandleChart: View {
                 if case .active(let p) = phase { hover = p } else { hover = nil }
             }
             .gesture(panGesture(plotWidth: plotWidth))
-            .simultaneousGesture(zoomGesture)
             .onTapGesture(count: 2) {
                 chart.scrollBack = 0
                 chart.visibleBars = 120
             }
+            .background(ScrollCatcher(
+                onScroll: { dx, dy, location in
+                    if dx != 0 { pan(byPoints: dx, plotWidth: plotWidth) }
+                    if dy != 0 { zoom(by: exp(-dy * 0.01), at: location.x, plotWidth: plotWidth) }
+                },
+                onMagnify: { magnification, location in
+                    zoom(by: 1 / (1 + magnification), at: location.x, plotWidth: plotWidth)
+                }
+            ))
         }
+    }
+
+    // MARK: Viewport
+
+    private func barWidth(plotWidth: CGFloat) -> CGFloat {
+        plotWidth / (chart.visibleBars + rightPaddingBars)
+    }
+
+    /// Clamped write: never past the oldest bars, and at most half a screen into the future.
+    private func setScrollBack(_ value: Double) {
+        let maxBack = max(0, Double(chart.bars.count) - 10)
+        chart.scrollBack = min(maxBack, max(-chart.visibleBars / 2, value))
+    }
+
+    /// Positive points move the content right (revealing older bars).
+    private func pan(byPoints points: CGFloat, plotWidth: CGFloat) {
+        setScrollBack(chart.scrollBack + Double(points / barWidth(plotWidth: plotWidth)))
+    }
+
+    /// Scales the number of visible bars by `factor`, keeping the bar under `anchorX` in place.
+    private func zoom(by factor: Double, at anchorX: CGFloat, plotWidth: CGFloat) {
+        let x = min(plotWidth, max(0, anchorX))
+        let oldWidth = barWidth(plotWidth: plotWidth)
+        chart.visibleBars = min(600, max(15, chart.visibleBars * factor))
+        let newWidth = barWidth(plotWidth: plotWidth)
+        let fromRight = Double(plotWidth - x)
+        setScrollBack(chart.scrollBack + fromRight / oldWidth - fromRight / newWidth)
     }
 
     // MARK: Gestures
@@ -53,21 +89,9 @@ struct CandleChart: View {
             .onChanged { value in
                 let start = dragStartScroll ?? chart.scrollBack
                 dragStartScroll = start
-                let barWidth = plotWidth / (chart.visibleBars + rightPaddingBars)
-                let maxBack = max(0, Double(chart.bars.count) - 10)
-                chart.scrollBack = min(maxBack, max(0, start + Double(value.translation.width / barWidth)))
+                setScrollBack(start + Double(value.translation.width / barWidth(plotWidth: plotWidth)))
             }
             .onEnded { _ in dragStartScroll = nil }
-    }
-
-    private var zoomGesture: some Gesture {
-        MagnifyGesture()
-            .onChanged { value in
-                let start = zoomStartBars ?? chart.visibleBars
-                zoomStartBars = start
-                chart.visibleBars = min(600, max(15, start / value.magnification))
-            }
-            .onEnded { _ in zoomStartBars = nil }
     }
 
     // MARK: Drawing
@@ -84,15 +108,20 @@ struct CandleChart: View {
             return
         }
 
-        // Visible window, anchored to the right edge.
+        // Visible window, anchored to the right edge. scrollBack is fractional so panning is smooth.
         let slots = chart.visibleBars + rightPaddingBars
         let barWidth = plot.width / slots
-        let end = max(1, bars.count - Int(chart.scrollBack.rounded()))
-        let start = max(0, end - Int(chart.visibleBars.rounded()))
+        let anchor = Double(bars.count) - chart.scrollBack   // index just past the bar at the anchor slot
+        let anchorX = plot.maxX - CGFloat(rightPaddingBars) * barWidth
+        let end = min(bars.count, max(1, Int((anchor + rightPaddingBars).rounded(.up))))
+        let start = min(end - 1, max(0, Int((anchor - chart.visibleBars).rounded(.down))))
         let visible = bars[start..<end]
         func x(_ index: Int) -> CGFloat {
-            plot.maxX - CGFloat(rightPaddingBars) * barWidth - (CGFloat(end - 1 - index) + 0.5) * barWidth
+            anchorX - CGFloat(anchor - Double(index) - 0.5) * barWidth
         }
+        // Bars partially scrolled past the edges are clipped; axis tags draw on the unclipped context.
+        var plotCtx = ctx
+        plotCtx.clip(to: Path(CGRect(x: 0, y: 0, width: plot.maxX, height: size.height)))
 
         // Price area takes the top 80%, volume the bottom 20%.
         let volumeHeight = plot.height * 0.18
@@ -129,13 +158,13 @@ struct CandleChart: View {
 
         // Vertical grid + time labels, roughly every 90px.
         let labelEvery = max(1, Int((90 / barWidth).rounded(.up)))
-        for i in stride(from: end - 1, through: start, by: -labelEvery) {
+        for i in start..<end where i % labelEvery == 0 {
             let xx = x(i)
             var path = Path()
             path.move(to: CGPoint(x: xx, y: plot.minY))
             path.addLine(to: CGPoint(x: xx, y: plot.maxY))
-            ctx.stroke(path, with: .color(gridColor), lineWidth: 1)
-            ctx.draw(Text(timeLabel(bars[i].time)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
+            plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
+            plotCtx.draw(Text(timeLabel(bars[i].time)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
                      at: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1))
         }
 
@@ -149,8 +178,8 @@ struct CandleChart: View {
                 let rect = CGRect(x: x(i) - barWidth * 0.35, y: plot.maxY - h, width: max(1, barWidth * 0.7), height: h)
                 if b.close >= b.open { upVol.addRect(rect) } else { downVol.addRect(rect) }
             }
-            ctx.fill(upVol, with: .color(up.opacity(0.35)))
-            ctx.fill(downVol, with: .color(down.opacity(0.35)))
+            plotCtx.fill(upVol, with: .color(up.opacity(0.35)))
+            plotCtx.fill(downVol, with: .color(down.opacity(0.35)))
         }
 
         // Candles: batch into two paths per color for speed.
@@ -170,10 +199,10 @@ struct CandleChart: View {
                 downBodies.addRect(body)
             }
         }
-        ctx.stroke(upWicks, with: .color(up), lineWidth: 1)
-        ctx.stroke(downWicks, with: .color(down), lineWidth: 1)
-        ctx.fill(upBodies, with: .color(up))
-        ctx.fill(downBodies, with: .color(down))
+        plotCtx.stroke(upWicks, with: .color(up), lineWidth: 1)
+        plotCtx.stroke(downWicks, with: .color(down), lineWidth: 1)
+        plotCtx.fill(upBodies, with: .color(up))
+        plotCtx.fill(downBodies, with: .color(down))
 
         // Position / order lines.
         for line in lines where line.price > lo && line.price < hi {
@@ -188,9 +217,9 @@ struct CandleChart: View {
         }
 
         // Crosshair + OHLCV readout.
-        var readout = bars[end - 1]
+        var readout = bars[min(end, max(start + 1, Int(anchor.rounded(.up)))) - 1]
         if let hover, plot.contains(hover) {
-            let index = min(end - 1, max(start, end - 1 - Int(((plot.maxX - CGFloat(rightPaddingBars) * barWidth - hover.x) / barWidth).rounded(.down))))
+            let index = min(end - 1, max(start, Int((anchor - Double((anchorX - hover.x) / barWidth)).rounded(.down))))
             readout = bars[index]
             var cross = Path()
             cross.move(to: CGPoint(x: plot.minX, y: hover.y)); cross.addLine(to: CGPoint(x: plot.maxX, y: hover.y))
@@ -249,5 +278,93 @@ struct CandleChart: View {
             t += step
         }
         return ticks
+    }
+}
+
+// MARK: - Trackpad / scroll-wheel input
+
+/// SwiftUI on macOS has no scroll-wheel or precise trackpad scroll gesture, so this background
+/// view watches the app's scroll and magnify events and forwards the ones over its own frame.
+private struct ScrollCatcher: NSViewRepresentable {
+    /// (dx, dy, location): dx in points (positive = content moves right), dy in points
+    /// (positive = zoom in), location in view coordinates with a top-left origin.
+    var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
+    var onMagnify: (CGFloat, CGPoint) -> Void
+
+    func makeNSView(context: Context) -> CatcherView {
+        let view = CatcherView()
+        view.onScroll = onScroll
+        view.onMagnify = onMagnify
+        return view
+    }
+
+    func updateNSView(_ view: CatcherView, context: Context) {
+        view.onScroll = onScroll
+        view.onMagnify = onMagnify
+    }
+
+    static func dismantleNSView(_ view: CatcherView, coordinator: ()) {
+        view.removeMonitor()
+    }
+
+    final class CatcherView: NSView {
+        var onScroll: ((CGFloat, CGFloat, CGPoint) -> Void)?
+        var onMagnify: ((CGFloat, CGPoint) -> Void)?
+        private var monitor: Any?
+        private enum Axis { case horizontal, vertical }
+        private var lockedAxis: Axis?
+
+        override var isFlipped: Bool { true }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            removeMonitor()
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .magnify]) { [weak self] event in
+                guard let self, let location = self.location(of: event) else { return event }
+                if event.type == .magnify {
+                    self.onMagnify?(event.magnification, location)
+                } else {
+                    self.handleScroll(event, at: location)
+                }
+                return nil
+            }
+        }
+
+        func removeMonitor() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+
+        private func location(of event: NSEvent) -> CGPoint? {
+            guard let window, event.window === window, !isHiddenOrHasHiddenAncestor else { return nil }
+            let point = convert(event.locationInWindow, from: nil)
+            return bounds.contains(point) ? point : nil
+        }
+
+        private func handleScroll(_ event: NSEvent, at location: CGPoint) {
+            var dx = event.scrollingDeltaX
+            var dy = event.scrollingDeltaY
+            if !event.hasPreciseScrollingDeltas {
+                // Mouse wheel: line-based deltas. Shift-wheel arrives as dx and pans.
+                dx *= 12
+                dy *= 12
+            } else {
+                // Trackpad: lock each gesture (and its momentum) to its dominant axis so a
+                // slightly diagonal swipe doesn't pan and zoom at once.
+                if event.phase == .began || event.phase == .mayBegin { lockedAxis = nil }
+                if lockedAxis == nil, dx != 0 || dy != 0 {
+                    lockedAxis = abs(dx) >= abs(dy) ? .horizontal : .vertical
+                }
+                switch lockedAxis {
+                case .horizontal: dy = 0
+                case .vertical: dx = 0
+                case nil: break
+                }
+            }
+            if event.isDirectionInvertedFromDevice { dy = -dy }
+            onScroll?(dx, dy, location)
+        }
     }
 }
