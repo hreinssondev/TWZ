@@ -8,9 +8,9 @@ import SwiftUI
 struct AccountBar: View {
     @Environment(Broker.self) private var broker
     @State private var showSettings = false
+    /// Distance from the window's top edge to the center of the close/minimize/zoom buttons.
+    @State private var controlsCenterY: CGFloat = 14
 
-    /// Matches the standard title bar, so the window controls sit centered in the bar.
-    static let height: CGFloat = 28
     /// Room for the close/minimize/zoom buttons at the leading edge.
     private static let trafficLightsWidth: CGFloat = 80
 
@@ -50,8 +50,10 @@ struct AccountBar: View {
         }
         .padding(.leading, Self.trafficLightsWidth)
         .padding(.trailing, 12)
-        .frame(height: Self.height)
+        // Centered on the window controls, so the stats line up with them.
+        .frame(height: max(28, controlsCenterY * 2))
         .background(.bar)
+        .background(WindowControlsProbe { controlsCenterY = $0 })
         .sheet(isPresented: $showSettings) { SettingsView() }
     }
 
@@ -72,6 +74,36 @@ struct AccountBar: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(title).font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
             Text(value).font(.system(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(color)
+        }
+    }
+}
+
+/// Reports how far below the window's top edge the window controls are centered.
+private struct WindowControlsProbe: NSViewRepresentable {
+    var onChange: (CGFloat) -> Void
+
+    func makeNSView(context: Context) -> Probe { Probe(onChange: onChange) }
+    func updateNSView(_ view: Probe, context: Context) { view.onChange = onChange }
+
+    final class Probe: NSView {
+        var onChange: (CGFloat) -> Void
+
+        init(onChange: @escaping (CGFloat) -> Void) {
+            self.onChange = onChange
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // The title bar buttons are laid out after the content view joins the window.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let window,
+                      let button = window.standardWindowButton(.closeButton) else { return }
+                let frame = button.convert(button.bounds, to: nil)
+                onChange((window.frame.height - frame.midY).rounded())
+            }
         }
     }
 }
