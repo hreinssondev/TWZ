@@ -10,16 +10,51 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("settingsTab") private var tab: Tab = .connection
+
+    enum Tab: String, CaseIterable, Identifiable {
+        case connection = "Connection"
+        case appearance = "Appearance"
+        var id: String { rawValue }
+
+        var icon: String {
+            switch self {
+            case .connection: "network"
+            case .appearance: "paintpalette"
+            }
+        }
+    }
 
     var body: some View {
-        TabView {
-            ConnectionSettings()
-                .tabItem { Label("Connection", systemImage: "network") }
-            AppearanceSettings()
-                .tabItem { Label("Appearance", systemImage: "paintpalette") }
+        VStack(spacing: 0) {
+            // Tab bar in the style of System Settings: icon above label, evenly spaced.
+            HStack(spacing: 4) {
+                ForEach(Tab.allCases) { t in
+                    Button {
+                        tab = t
+                    } label: {
+                        VStack(spacing: 3) {
+                            Image(systemName: t.icon).font(.system(size: 18))
+                            Text(t.rawValue).font(.system(size: 11))
+                        }
+                        .frame(width: 96, height: 50)
+                        .foregroundStyle(tab == t ? Color.accentColor : Color.secondary)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(tab == t ? 0.1 : 0)))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            Divider()
+
+            switch tab {
+            case .connection: ConnectionSettings()
+            case .appearance: AppearanceSettings()
+            }
         }
-        .frame(width: 460, height: 380)
-        .padding(.top, 8)
+        .frame(width: 460, height: 440)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
         }
