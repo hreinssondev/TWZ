@@ -38,15 +38,6 @@ struct ChartPane: View {
                 onAltClick: { price in
                     workspace.selectedChartIndex = chart.id
                     broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
-                },
-                altClickPreview: { price in
-                    let plan = broker.chartBuy(symbol: chart.symbol, clicked: price)
-                    if case .unavailable(let reason) = plan { return reason }
-                    guard let limit = plan.price,
-                          let shares = broker.shares(forNOK: OrderAmount.clamp(orderNOK), at: limit) else {
-                        return "No USD.NOK rate"
-                    }
-                    return plan.label(shares: shares)
                 }
             )
         }

@@ -26,8 +26,6 @@ struct CandleChart: View {
     var lines: [PriceLine] = []
     /// ⌥-click in the price area: called with the price under the cursor.
     var onAltClick: ((Double) -> Void)?
-    /// Text shown by the cursor while ⌥ is held, e.g. "BUY 45 @ 101.20".
-    var altClickPreview: ((Double) -> String?)?
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
@@ -302,16 +300,7 @@ struct CandleChart: View {
             ctx.stroke(cross, with: .color(.secondary.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
             if priceRect.contains(hover) {
                 let hoverPrice = v.price(at: hover.y)
-                // Holding ⌥ previews the alt-click order: what it buys, next to the cursor.
-                if optionHeld, let preview = altClickPreview?(hoverPrice) {
-                    let resolved = ctx.resolve(Text(preview).font(.system(size: 10, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(.white))
-                    let textSize = resolved.measure(in: CGSize(width: 300, height: 20))
-                    let pill = CGRect(x: min(hover.x + 10, plot.maxX - textSize.width - 10), y: hover.y - 22,
-                                      width: textSize.width + 8, height: 16)
-                    ctx.fill(Path(roundedRect: pill, cornerRadius: 3), with: .color(.purple))
-                    ctx.draw(resolved, at: CGPoint(x: pill.minX + 4, y: pill.midY), anchor: .leading)
-                }
+                // Holding ⌥ turns the price tag purple: an alt-click buys there.
                 drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot,
                         color: optionHeld && onAltClick != nil ? .purple : .gray)
             }
