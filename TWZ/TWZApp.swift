@@ -23,6 +23,8 @@ struct TWZApp: App {
                     broker.connect()
                 }
         }
+        .windowStyle(.hiddenTitleBar)
+        .windowBackgroundDragBehavior(.enabled)
         .defaultSize(width: 1600, height: 1000)
     }
 }

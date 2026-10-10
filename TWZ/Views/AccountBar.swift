@@ -9,6 +9,11 @@ struct AccountBar: View {
     @Environment(Broker.self) private var broker
     @State private var showSettings = false
 
+    /// Matches the standard title bar, so the window controls sit centered in the bar.
+    static let height: CGFloat = 28
+    /// Room for the close/minimize/zoom buttons at the leading edge.
+    private static let trafficLightsWidth: CGFloat = 80
+
     var body: some View {
         HStack(spacing: 18) {
             Text(broker.isLivePort ? "LIVE" : "PAPER")
@@ -43,9 +48,10 @@ struct AccountBar: View {
             .buttonStyle(.borderless)
             .help("Connection settings")
         }
-        .padding(.horizontal, 12)
-        .frame(height: 34)
-        .background(.bar, ignoresSafeAreaEdges: .top)
+        .padding(.leading, Self.trafficLightsWidth)
+        .padding(.trailing, 12)
+        .frame(height: Self.height)
+        .background(.bar)
         .sheet(isPresented: $showSettings) { SettingsView() }
     }
 

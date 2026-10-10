@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  TWZ
 //
-//  ┌──────────────── account bar ────────────────┐
+//  ┌──── ●●● account bar (in the title bar) ─────┐
 //  │  chart 1  │  chart 2  │  list A  │  list B  │
 //  │  chart 3  │  chart 4  │          │          │
 //  ╞═══ drag handle (resizes) ═══╡   │          │
@@ -63,8 +63,8 @@ struct ContentView: View {
                 .padding(gap)
             }
         }
-        // Let the account bar's background show through the title bar, so both read as one band.
-        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        // The title bar is hidden; the account bar takes its place, next to the window controls.
+        .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 1200, minHeight: 760)
     }
 
