@@ -4,7 +4,8 @@
 //
 //  Lightweight candlestick + volume chart drawn with a single SwiftUI Canvas.
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
-//  around the cursor. Mouse: wheel zooms, shift-wheel pans. Drag pans, double-click resets.
+//  around the cursor; a diagonal swipe does both. Mouse: wheel zooms, shift-wheel pans.
+//  Drag pans, double-click resets.
 //  Intraday charts shade the sessions outside regular hours: pre-market and after hours in grey,
 //  overnight in indigo.
 //
@@ -62,7 +63,7 @@ struct CandleChart: View {
             .background(ScrollCatcher(
                 onScroll: { dx, dy, location in
                     if dx != 0 { pan(byPoints: dx, plotWidth: plotWidth) }
-                    if dy != 0 { zoom(by: exp(-dy * 0.01), at: location.x, plotWidth: plotWidth) }
+                    if dy != 0 { zoom(by: exp(dy * 0.01), at: location.x, plotWidth: plotWidth) }
                 },
                 onMagnify: { magnification, location in
                     zoom(by: 1 / (1 + magnification), at: location.x, plotWidth: plotWidth)
@@ -378,7 +379,7 @@ struct CandleChart: View {
 /// It also takes ⌥-clicks (before SwiftUI's tap and drag gestures see them) and ⌥ key changes.
 private struct ScrollCatcher: NSViewRepresentable {
     /// (dx, dy, location): dx in points (positive = content moves right), dy in points
-    /// (positive = zoom in), location in view coordinates with a top-left origin.
+    /// (positive = zoom out), location in view coordinates with a top-left origin.
     var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
     var onMagnify: (CGFloat, CGPoint) -> Void
     /// ⌥-click location; return true to consume the click.
@@ -408,8 +409,6 @@ private struct ScrollCatcher: NSViewRepresentable {
         var onAltClick: ((CGPoint) -> Bool)?
         var onOptionKey: ((Bool) -> Void)?
         private var monitor: Any?
-        private enum Axis { case horizontal, vertical }
-        private var lockedAxis: Axis?
 
         override var isFlipped: Bool { true }
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -459,17 +458,9 @@ private struct ScrollCatcher: NSViewRepresentable {
                 dx *= 12
                 dy *= 12
             } else {
-                // Trackpad: lock each gesture (and its momentum) to its dominant axis so a
-                // slightly diagonal swipe doesn't pan and zoom at once.
-                if event.phase == .began || event.phase == .mayBegin { lockedAxis = nil }
-                if lockedAxis == nil, dx != 0 || dy != 0 {
-                    lockedAxis = abs(dx) >= abs(dy) ? .horizontal : .vertical
-                }
-                switch lockedAxis {
-                case .horizontal: dy = 0
-                case .vertical: dx = 0
-                case nil: break
-                }
+                // Trackpad: a nearly straight swipe only pans or only zooms, but a clearly
+                // diagonal one does both, so you can zoom while panning without lifting.
+                if abs(dy) < abs(dx) * 0.35 { dy = 0 } else if abs(dx) < abs(dy) * 0.35 { dx = 0 }
             }
             if event.isDirectionInvertedFromDevice { dy = -dy }
             onScroll?(dx, dy, location)
