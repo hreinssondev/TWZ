@@ -158,6 +158,8 @@ private struct OrderAmountBox: View {
     @AppStorage(OrderAmount.storageKey) private var amount = OrderAmount.initial
     @State private var text = ""
     @FocusState private var focused: Bool
+    /// The field editor whose caret is hidden, and its original color.
+    @State private var caretEditor: (NSTextView, NSColor)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -182,8 +184,7 @@ private struct OrderAmountBox: View {
             .padding(.trailing, 2)
             .padding(.vertical, 2)
             .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: .textBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(focused ? Color.accentColor : Color.primary.opacity(0.15)))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.15)))
             Spacer(minLength: 0)
             Text(sizeText)
                 .font(.system(size: 10).monospacedDigit())
@@ -204,8 +205,29 @@ private struct OrderAmountBox: View {
             if let typed = OrderAmount.parse(new) { amount = OrderAmount.clamp(typed) }
         }
         .onChange(of: focused) { _, isFocused in
-            if !isFocused { commit() }
+            if isFocused {
+                hideCaret()
+            } else {
+                restoreCaret()
+                commit()
+            }
         }
+    }
+
+    /// The window's field editor is shared by every text field, so the caret is hidden only while
+    /// this one is being edited. Deferred a tick: focus flips before the editor becomes first responder.
+    private func hideCaret() {
+        DispatchQueue.main.async {
+            guard focused, let editor = NSApp.keyWindow?.firstResponder as? NSTextView else { return }
+            if caretEditor == nil { caretEditor = (editor, editor.insertionPointColor) }
+            editor.insertionPointColor = .clear
+        }
+    }
+
+    private func restoreCaret() {
+        guard let (editor, color) = caretEditor else { return }
+        editor.insertionPointColor = color
+        caretEditor = nil
     }
 
     /// "≈ $4,566 · 45 AAPL": the USD value, and what it buys of the selected symbol at its last price.
