@@ -183,7 +183,7 @@ private struct OrderAmountBox: View {
             .padding(.vertical, 2)
             .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: .textBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(focused ? Color.purple : Color.primary.opacity(0.15)))
+                .strokeBorder(focused ? Color.accentColor : Color.primary.opacity(0.15)))
             Spacer(minLength: 0)
             Text(sizeText)
                 .font(.system(size: 10).monospacedDigit())
@@ -195,8 +195,9 @@ private struct OrderAmountBox: View {
         .minimumScaleFactor(0.7)
         .padding(5)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 5).fill(Color.purple.opacity(0.15)))
-        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.purple.opacity(0.5)))
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
         .help("⌥-click a chart to place a limit buy for this many NOK at the clicked price. ↑/↓ step 5 000 NOK (500–300 000).")
         .onAppear { text = OrderAmount.format(amount) }
         .onChange(of: text) { _, new in
