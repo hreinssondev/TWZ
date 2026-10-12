@@ -120,6 +120,7 @@ struct OrdersPanel: View {
                 }
                 HStack(spacing: 4) {
                     Text("\(Fmt.shares(o.filled))/\(Fmt.shares(o.quantity))")
+                        .foregroundStyle(sideColor(o.action == "BUY"))
                     Text(o.priceSummary)
                     Spacer(minLength: 2)
                     Text(o.status).foregroundStyle(.secondary)
@@ -170,7 +171,7 @@ struct OrdersPanel: View {
                     Spacer(minLength: 2)
                     Text(f.time, format: .dateTime.hour().minute().second()).foregroundStyle(.secondary)
                 }
-                Text("\(Fmt.shares(f.shares)) - \(Fmt.price(f.price))")
+                Text("\(Text(Fmt.shares(f.shares)).foregroundStyle(sideColor(f.side == "BOT"))) - \(Fmt.price(f.price))")
                     .font(.system(size: 10).monospacedDigit())
             }
             .rowStyle()
@@ -190,7 +191,7 @@ struct OrdersPanel: View {
                     Text(Fmt.money(pnl, signed: true)).foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
                 }
                 HStack(spacing: 4) {
-                    Text("\(Fmt.shares(p.quantity)) - \(Fmt.price(p.avgCost))")
+                    Text("\(Text(Fmt.shares(p.quantity)).foregroundStyle(sideColor(p.quantity > 0))) - \(Fmt.price(p.avgCost))")
                 }
                 .font(.system(size: 10).monospacedDigit())
             }
