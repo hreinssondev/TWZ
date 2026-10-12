@@ -43,6 +43,7 @@ enum AppearanceDefaults {
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
+        Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.lineWidthKey,
     ]
 
     /// Removing the stored values makes every @AppStorage fall back to its default.
@@ -65,6 +66,16 @@ enum SelectedOutline {
     static let widthKey = "selectedChartOutlineWidth"
     static let defaultWidth = 1.5
     static let range = 0.5...4.0
+}
+
+/// Which indicator lines the charts draw, and how thick.
+enum Indicators {
+    static let vwapKey = "showVWAP"
+    static let fastSMAKey = "showSMA9"
+    static let slowSMAKey = "showSMA21"
+    static let lineWidthKey = "indicatorLineWidth"
+    static let defaultLineWidth = 1.25
+    static let lineWidthRange = 0.5...4.0
 }
 
 /// Chart line colors picked in Settings, stored as "RRGGBB"; empty means the default.

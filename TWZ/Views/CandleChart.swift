@@ -9,7 +9,8 @@
 //  anywhere but an order line; double-clicking an order line cancels that order.
 //  Intraday charts shade the sessions outside regular hours: pre-market and after hours in grey,
 //  overnight in indigo.
-//  Indicators: SMA 9 and SMA 21 on every chart, plus VWAP (from 04:00 ET) on intraday charts.
+//  Indicators: SMA 9 and SMA 21 on every chart, plus VWAP (from 04:00 ET) on intraday charts;
+//  each can be turned off, and their thickness set, in Settings › Appearance.
 //
 
 import SwiftUI
@@ -43,6 +44,10 @@ struct CandleChart: View {
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.hoverKey) private var hoverHex = ""
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
+    @AppStorage(Indicators.vwapKey) private var showVWAP = true
+    @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
+    @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
+    @AppStorage(Indicators.lineWidthKey) private var indicatorWidth = Indicators.defaultLineWidth
     @State private var hover: CGPoint?
     @State private var dragStart: (scroll: Double, shift: Double)?
     @State private var optionHeld = false
@@ -370,11 +375,12 @@ struct CandleChart: View {
     private static let fastSMAColor = Color(red: 0.3, green: 0.65, blue: 1)
     private static let slowSMAColor = Color(red: 0.75, green: 0.4, blue: 1)
 
-    /// VWAP (intraday only, from 04:00 ET), SMA 9 and SMA 21 over the visible bars, plus a legend
+    /// VWAP (intraday only, from 04:00 ET), SMA 9 and SMA 21 over the visible bars, each if turned on
+    /// in Settings, plus a legend
     /// with their values at the latest visible bar.
     private func drawIndicators(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, plot: CGRect,
                                 x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
-        func stroke(_ values: [Double?], color: Color, width: CGFloat, breakBefore: (Int) -> Bool = { _ in false }) {
+        func stroke(_ values: [Double?], color: Color, breakBefore: (Int) -> Bool = { _ in false }) {
             var path = Path()
             var drawing = false
             for (offset, value) in values.enumerated() {
@@ -383,21 +389,23 @@ struct CandleChart: View {
                 let point = CGPoint(x: x(start + offset), y: y(value))
                 if drawing { path.addLine(to: point) } else { path.move(to: point); drawing = true }
             }
-            ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineJoin: .round))
+            ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: indicatorWidth, lineJoin: .round))
         }
 
         var legend: [(String, Double?, Color)] = []
-        if chart.timeframe.isIntraday {
+        if showVWAP, chart.timeframe.isIntraday {
             let vwap = Self.vwap(bars, start: start, end: end)
-            stroke(vwap, color: Self.vwapColor, width: 1.5) { i in i > 0 && bars[i].vwapDay != bars[i - 1].vwapDay }
+            stroke(vwap, color: Self.vwapColor) { i in i > 0 && bars[i].vwapDay != bars[i - 1].vwapDay }
             legend.append(("VWAP", vwap.last ?? nil, Self.vwapColor))
         }
-        let fast = Self.sma(bars, period: 9, start: start, end: end)
-        let slow = Self.sma(bars, period: 21, start: start, end: end)
-        stroke(slow, color: Self.slowSMAColor, width: 1.2)
-        stroke(fast, color: Self.fastSMAColor, width: 1.2)
-        legend.append(("SMA 9", fast.last ?? nil, Self.fastSMAColor))
-        legend.append(("SMA 21", slow.last ?? nil, Self.slowSMAColor))
+        let fast = showFastSMA ? Self.sma(bars, period: 9, start: start, end: end) : nil
+        let slow = showSlowSMA ? Self.sma(bars, period: 21, start: start, end: end) : nil
+        if let slow { stroke(slow, color: Self.slowSMAColor) }
+        if let fast {
+            stroke(fast, color: Self.fastSMAColor)
+            legend.append(("SMA 9", fast.last ?? nil, Self.fastSMAColor))
+        }
+        if let slow { legend.append(("SMA 21", slow.last ?? nil, Self.slowSMAColor)) }
 
         var text = Text("")
         for (index, (name, value, color)) in legend.enumerated() {

@@ -142,6 +142,10 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.hoverKey) private var hoverHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
+    @AppStorage(Indicators.vwapKey) private var showVWAP = true
+    @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
+    @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
+    @AppStorage(Indicators.lineWidthKey) private var indicatorWidth = Indicators.defaultLineWidth
 
     var body: some View {
         Form {
@@ -179,6 +183,19 @@ private struct AppearanceSettings: View {
                              default: LineColors.defaultAltClick)
                 lineColorRow("Hover price", key: LineColors.hoverKey, hex: $hoverHex,
                              default: LineColors.defaultHover)
+            }
+            Section("Indicators") {
+                Toggle("VWAP (intraday charts)", isOn: $showVWAP)
+                Toggle("SMA 9", isOn: $showFastSMA)
+                Toggle("SMA 21", isOn: $showSlowSMA)
+                LabeledContent("Line thickness") {
+                    HStack {
+                        Slider(value: $indicatorWidth, in: Indicators.lineWidthRange, step: 0.25)
+                        Text("\(indicatorWidth.formatted(.number.precision(.fractionLength(0...2)))) pt")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
             }
             Section("Chart header") {
                 Picker("Timeframe picker", selection: $pickerStyle) {
