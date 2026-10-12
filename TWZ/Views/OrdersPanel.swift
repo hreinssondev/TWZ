@@ -215,15 +215,15 @@ struct OrdersPanel: View {
                 let pnl = t.pnl(last: broker.quotes[t.symbol]?.last)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
-                        side(t.isLong, long: true)
-                        symbolButton(t.symbol)
+                        symbolButton(t.symbol, color: sideColor(t.isLong))
                         if t.isOpen { Text("open").foregroundStyle(.secondary) }
                         Spacer(minLength: 2)
                         if let pnl { pnlText(pnl) } else { Text("—").foregroundStyle(.secondary) }
                     }
                     HStack(spacing: 4) {
-                        Text("\(Fmt.shares(t.entryShares)) @ \(t.entryPrice.map { Fmt.price($0) } ?? "earlier")"
+                        Text("\(Fmt.shares(t.entryShares)) / \(t.entryPrice.map { Fmt.price($0) } ?? "earlier")"
                              + " → \(t.exitPrice.map { Fmt.price($0) } ?? "…")")
+                            .foregroundStyle(sideColor(t.isLong))
                         Spacer(minLength: 2)
                         Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
                     }
@@ -236,14 +236,6 @@ struct OrdersPanel: View {
 
     private func pnlText(_ pnl: Double) -> Text {
         Text(Fmt.money(pnl, signed: true)).foregroundStyle(pnl >= 0 ? .green : .red)
-    }
-
-    private func side(_ isBuy: Bool, long: Bool = false) -> some View {
-        Text(long ? (isBuy ? "L" : "S") : (isBuy ? "B" : "S"))
-            .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: 16, height: 16)
-            .background(RoundedRectangle(cornerRadius: 3).fill(isBuy ? Color.green.opacity(0.7) : Color.red.opacity(0.7)))
     }
 
     /// Text color for a buy / long (green) or sell / short (red).
