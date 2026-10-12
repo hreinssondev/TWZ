@@ -4,6 +4,7 @@
 //
 //  Orders, Filled and Positions side by side as three always-visible columns,
 //  with draggable dividers between them. Rows are two lines so they fit the narrow columns.
+//  Fills in the same symbol, side and second show as one row at their average price.
 //  A working order's row has a thin bar along its bottom that fills to the right as the order fills.
 //  Below them, behind a draggable divider, today's round trips with their profit or loss.
 //
@@ -60,7 +61,7 @@ struct OrdersPanel: View {
                                  filledShare = (ordersW + filledW - w) / total
                              },
                              onReset: resetColumns)
-                column("Filled", count: broker.fills.count) { filledRows }
+                column("Filled", count: groupedFills.count) { filledRows }
                     .frame(width: filledW)
                 ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: filledW,
                              range: minW...(total - ordersW - minW),
@@ -144,8 +145,24 @@ struct OrdersPanel: View {
             .allowsHitTesting(false)
     }
 
+    /// The day's fills, newest first, with fills in the same symbol, side and second added together
+    /// at their volume-weighted average price.
+    private var groupedFills: [Fill] {
+        struct Key: Hashable { var symbol: String; var side: String; var second: Int }
+        var groups: [Key: Fill] = [:]
+        for f in broker.fills.values.sorted(by: { ($0.time, $0.id) < ($1.time, $1.id) }) {
+            let key = Key(symbol: f.symbol, side: f.side, second: Int(f.time.timeIntervalSince1970.rounded(.down)))
+            guard var g = groups[key] else { groups[key] = f; continue }
+            let shares = g.shares + f.shares
+            if shares > 0 { g.price = (g.price * g.shares + f.price * f.shares) / shares }
+            g.shares = shares
+            groups[key] = g
+        }
+        return groups.values.sorted { ($0.time, $0.id) > ($1.time, $1.id) }
+    }
+
     @ViewBuilder private var filledRows: some View {
-        let fills = broker.fills.values.sorted { $0.time > $1.time }
+        let fills = groupedFills
         if fills.isEmpty { empty("No fills today") }
         ForEach(fills) { f in
             VStack(alignment: .leading, spacing: 1) {
