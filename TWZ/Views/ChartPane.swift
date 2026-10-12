@@ -168,11 +168,12 @@ struct ChartPane: View {
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"
             if let p = broker.protectiveOrders[o.id] {
-                // Placed by ⌃-clicking the chart: a solid red stop loss (at its stop) or green take profit.
+                // Placed by ⌃-clicking the chart: a solid red stop loss (at its stop) or green take profit,
+                // just the price on the axis.
                 let isStop = p.kind == .stopLoss
                 if let price = isStop ? o.auxPrice : o.limitPrice {
                     lines.append(PriceLine(price: price, color: isStop ? .red : .green,
-                                           label: "\(isStop ? "SL" : "TP") \(side)", dashed: false, orderId: o.id))
+                                           label: "", dashed: false, orderId: o.id))
                 }
                 continue
             }
