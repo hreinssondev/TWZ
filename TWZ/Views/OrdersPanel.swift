@@ -107,8 +107,8 @@ struct OrdersPanel: View {
         ForEach(activeOrders) { o in
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
-                    side(o.action == "BUY")
                     symbolButton(o.symbol)
+                    sideDot(o.action == "BUY")
                     Spacer(minLength: 2)
                     Button {
                         broker.cancelOrder(o.id, why: "Orders panel ✕")
@@ -167,12 +167,12 @@ struct OrdersPanel: View {
         ForEach(fills) { f in
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
-                    side(f.side == "BOT")
                     symbolButton(f.symbol)
+                    sideDot(f.side == "BOT")
                     Spacer(minLength: 2)
                     Text(f.time, format: .dateTime.hour().minute().second()).foregroundStyle(.secondary)
                 }
-                Text("\(Fmt.shares(f.shares)) @ \(Fmt.price(f.price))")
+                Text("\(Fmt.shares(f.shares)) / \(Fmt.price(f.price))")
                     .font(.system(size: 10).monospacedDigit())
             }
             .rowStyle()
@@ -187,14 +187,14 @@ struct OrdersPanel: View {
             let pnl = last.map { ($0 - p.avgCost) * p.quantity }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
-                    side(p.quantity > 0, long: true)
                     symbolButton(p.symbol)
+                    sideDot(p.quantity > 0)
                     Spacer(minLength: 2)
                     Text(Fmt.money(pnl, signed: true)).foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
                 }
                 HStack(spacing: 4) {
                     Text(Fmt.shares(p.quantity))
-                    Text("@ \(Fmt.price(p.avgCost))").foregroundStyle(.secondary)
+                    Text("/ \(Fmt.price(p.avgCost))").foregroundStyle(.secondary)
                 }
                 .font(.system(size: 10).monospacedDigit())
             }
@@ -243,6 +243,11 @@ struct OrdersPanel: View {
             .foregroundStyle(.white)
             .frame(width: 16, height: 16)
             .background(RoundedRectangle(cornerRadius: 3).fill(isBuy ? Color.green.opacity(0.7) : Color.red.opacity(0.7)))
+    }
+
+    /// Small green (buy / long) or red (sell / short) dot after the symbol.
+    private func sideDot(_ isBuy: Bool) -> some View {
+        Circle().fill(isBuy ? Color.green : Color.red).frame(width: 6, height: 6)
     }
 
     private func symbolButton(_ symbol: String) -> some View {
