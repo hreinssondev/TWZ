@@ -30,6 +30,8 @@ struct AccountBar: View {
 
             Spacer()
 
+            IndicatorToggles()
+
             HStack(spacing: 6) {
                 Circle().fill(statusColor).frame(width: 8, height: 8)
                 MessageLabel(text: broker.statusText, size: 11)
@@ -75,6 +77,38 @@ struct AccountBar: View {
             Text(title).font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
             Text(value).font(.system(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(color)
         }
+    }
+}
+
+/// Turns the charts' indicator lines on and off (the same settings as Settings › Appearance),
+/// styled like the charts' timeframe switch: the lit chips are the lines being drawn.
+private struct IndicatorToggles: View {
+    @AppStorage(Indicators.vwapKey) private var showVWAP = true
+    @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
+    @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
+
+    var body: some View {
+        HStack(spacing: 1) {
+            chip("VWAP", isOn: $showVWAP)
+            chip("SMA9", isOn: $showFastSMA)
+            chip("SMA21", isOn: $showSlowSMA)
+        }
+    }
+
+    private func chip(_ title: String, isOn: Binding<Bool>) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+        } label: {
+            Text(title)
+                .font(.system(size: 10, weight: isOn.wrappedValue ? .semibold : .regular).monospacedDigit())
+                .foregroundStyle(isOn.wrappedValue ? Color.primary : Color.secondary.opacity(0.7))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(isOn.wrappedValue ? 0.12 : 0)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Show or hide \(title) on the charts")
     }
 }
 
