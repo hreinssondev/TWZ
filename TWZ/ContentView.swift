@@ -4,6 +4,7 @@
 //
 //  ┌──── ●●● account bar (in the title bar) ──────┐
 //  │  chart 1  │  chart 2  ┃  list A  ┃  list B  │
+//  │ ──────────●────────── ┃          ┃          │
 //  │  chart 3  │  chart 4  ┃          ┃          │
 //  ╞═══ handle ════════════╡┃━━━━━ handle ━━━━━━━┥
 //  │  hotkeys (6×2) │ NOK  ┃ orders ┃ filled ┃ pos │
@@ -11,7 +12,8 @@
 //
 //  Every ┃/═/━ separator is a drag handle (resize cursor on hover, double-click resets):
 //  charts ↕ hotkeys, left column ↔ right column, list A ↔ list B, lists ↕ orders, and
-//  the Orders / Filled / Positions columns. The hotkey buttons keep a fixed size; only
+//  the Orders / Filled / Positions columns. The ● where the four charts meet drags the
+//  chart column and row splits together. The hotkey buttons keep a fixed size; only
 //  the free space around them changes, down to the height they need.
 //
 
@@ -57,16 +59,7 @@ struct ContentView: View {
 
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
-                        Grid(horizontalSpacing: gap, verticalSpacing: gap) {
-                            GridRow {
-                                ChartPane(chart: workspace.charts[0])
-                                ChartPane(chart: workspace.charts[1])
-                            }
-                            GridRow {
-                                ChartPane(chart: workspace.charts[2])
-                                ChartPane(chart: workspace.charts[3])
-                            }
-                        }
+                        ChartGrid(gap: gap)
                         ResizeHandle(resizes: .vertical, thickness: gap, current: rowHeight,
                                      range: minBottom...maxBottom, inverted: true,
                                      onChange: { bottomHeight = $0 }, onReset: { bottomHeight = 190 })
