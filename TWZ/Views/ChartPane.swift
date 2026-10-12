@@ -28,6 +28,8 @@ struct ChartPane: View {
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @State private var symbolText = ""
+    /// The closed round trip whose exit lines were cleared by a click or a new order.
+    @State private var dismissedTrip: String?
     @FocusState private var symbolFocused: Bool
 
     private var isSelected: Bool { workspace.selectedChartIndex == chart.id }
@@ -52,7 +54,8 @@ struct ChartPane: View {
                           !broker.protectiveFillsNow(symbol: chart.symbol, kind: kind, at: price) else { return nil }
                     return kind == .stopLoss ? .red : .green
                 },
-                onCancelOrder: { id in broker.cancelOrder(id) }
+                onCancelOrder: { id in broker.cancelOrder(id) },
+                onClick: { dismissedTrip = closedTrip?.id ?? dismissedTrip }
             )
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
@@ -68,6 +71,12 @@ struct ChartPane: View {
         }
         .onChange(of: chart.symbol) { _, new in
             if !symbolFocused { symbolText = new }
+        }
+        // A new order in the symbol clears the last trade's exit lines.
+        .onChange(of: symbolOrders) { old, new in
+            if old.symbol == new.symbol, !new.ids.isSubset(of: old.ids) {
+                dismissedTrip = closedTrip?.id ?? dismissedTrip
+            }
         }
         // Leaving the field without pressing Return drops the edit.
         .onChange(of: symbolFocused) { _, focused in
@@ -121,8 +130,36 @@ struct ChartPane: View {
         .frame(height: 26)
     }
 
+    private struct SymbolOrders: Equatable {
+        var symbol: String
+        var ids: Set<Int>
+    }
+
+    private var symbolOrders: SymbolOrders {
+        SymbolOrders(symbol: chart.symbol,
+                     ids: Set(broker.orders.values.filter { $0.symbol == chart.symbol }.map(\.id)))
+    }
+
+    /// The symbol's latest round trip once it's closed, until a click on the chart or a new order.
+    private var closedTrip: RoundTrip? {
+        let fills = broker.fills.values.filter { $0.symbol == chart.symbol }
+        guard let trip = RoundTrip.build(fills: fills, positions: broker.positions).first,
+              !trip.isOpen, trip.id != dismissedTrip else { return nil }
+        return trip
+    }
+
     private var priceLines: [PriceLine] {
         var lines: [PriceLine] = []
+        if let trip = closedTrip {
+            // Just exited: dotted red at the average exit, dotted green at the average entry (unknown
+            // for shares held from before today).
+            if let exit = trip.exitPrice {
+                lines.append(PriceLine(price: exit, color: .red, label: "Exit"))
+            }
+            if trip.carried == 0, let entry = trip.entryPrice {
+                lines.append(PriceLine(price: entry, color: .green, label: "Avg"))
+            }
+        }
         if let p = broker.positions[chart.symbol] {
             // Avg cost: solid line, number only on the axis.
             lines.append(PriceLine(price: p.avgCost, color: LineColors.resolve(avgCostHex, default: LineColors.defaultAvgCost),

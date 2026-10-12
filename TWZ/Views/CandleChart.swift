@@ -37,6 +37,8 @@ struct CandleChart: View {
     var controlClickColor: ((Double) -> Color?)?
     /// Double-click on an order line: called with its order id.
     var onCancelOrder: ((Int) -> Void)?
+    /// Any left click on the chart, modified or not (it still pans, zooms or places orders as usual).
+    var onClick: (() -> Void)?
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
@@ -89,6 +91,7 @@ struct CandleChart: View {
                 onMagnify: { magnification, location in
                     zoom(by: 1 / (1 + magnification), at: location.x, plotWidth: plotWidth)
                 },
+                onClick: { onClick?() },
                 onModifiedClick: { location, flags in
                     guard let handler = flags == .control ? onControlClick : onAltClick,
                           let price = price(at: location, size: geo.size) else { return false }
@@ -490,12 +493,14 @@ struct CandleChart: View {
 
 /// SwiftUI on macOS has no scroll-wheel or precise trackpad scroll gesture, so this background
 /// view watches the app's scroll and magnify events and forwards the ones over its own frame.
-/// It also takes ⌥-clicks (before SwiftUI's tap and drag gestures see them) and ⌥ key changes.
+/// It also reports every left click, takes ⌥-clicks (before SwiftUI's tap and drag gestures see them)
+/// and ⌥ key changes.
 private struct ScrollCatcher: NSViewRepresentable {
     /// (dx, dy, location): dx in points (positive = content moves right), dy in points
     /// (positive = zoom out), location in view coordinates with a top-left origin.
     var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
     var onMagnify: (CGFloat, CGPoint) -> Void
+    var onClick: () -> Void
     /// ⌥- or ⌃-click location and which of the two; return true to consume the click.
     var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
     var onModifierKeys: (NSEvent.ModifierFlags) -> Void
@@ -510,6 +515,7 @@ private struct ScrollCatcher: NSViewRepresentable {
     func updateNSView(_ view: CatcherView, context: Context) {
         view.onScroll = onScroll
         view.onMagnify = onMagnify
+        view.onClick = onClick
         view.onModifiedClick = onModifiedClick
         view.onModifierKeys = onModifierKeys
         view.onRightClick = onRightClick
@@ -522,6 +528,7 @@ private struct ScrollCatcher: NSViewRepresentable {
     final class CatcherView: NSView {
         var onScroll: ((CGFloat, CGFloat, CGPoint) -> Void)?
         var onMagnify: ((CGFloat, CGPoint) -> Void)?
+        var onClick: (() -> Void)?
         var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
         var onModifierKeys: ((NSEvent.ModifierFlags) -> Void)?
         var onRightClick: (() -> Void)?
@@ -549,6 +556,7 @@ private struct ScrollCatcher: NSViewRepresentable {
                 case .rightMouseDown:
                     self.onRightClick?()
                 case .leftMouseDown:
+                    self.onClick?()
                     let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
                     guard flags == .option || flags == .control, let onModifiedClick = self.onModifiedClick,
                           onModifiedClick(location, flags) else { return event }
