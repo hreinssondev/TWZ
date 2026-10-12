@@ -223,7 +223,6 @@ struct OrdersPanel: View {
                     HStack(spacing: 4) {
                         Text("\(Fmt.shares(t.entryShares)) / \(t.entryPrice.map { Fmt.price($0) } ?? "earlier")"
                              + " → \(t.exitPrice.map { Fmt.price($0) } ?? "…")")
-                            .foregroundStyle(sideColor(t.isLong))
                         Spacer(minLength: 2)
                         Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
                     }
