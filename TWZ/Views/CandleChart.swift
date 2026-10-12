@@ -11,6 +11,8 @@
 //  overnight in indigo.
 //  Indicators: SMA 9 and SMA 21 on every chart, plus VWAP (from 04:00 ET) on intraday charts;
 //  each can be turned off, and their thickness set, in Settings › Appearance.
+//  Holding ⌃ over the price area with a position open shows, left of the price tag, the P/L if the
+//  position closed at that price.
 //
 
 import SwiftUI
@@ -35,6 +37,8 @@ struct CandleChart: View {
     var onControlClick: ((Double) -> Void)?
     /// Price tag color while ⌃ is held: what a ⌃-click there would place (nil: nothing).
     var controlClickColor: ((Double) -> Color?)?
+    /// While ⌃ is held: the open position's P/L if it closed at that price (nil: no position).
+    var controlHoverPnL: ((Double) -> Double?)?
     /// Double-click on an order line: called with its order id.
     var onCancelOrder: ((Int) -> Void)?
     /// Any left click on the chart, modified or not (it still pans, zooms or places orders as usual).
@@ -368,6 +372,9 @@ struct CandleChart: View {
                     tagColor = LineColors.resolve(altClickHex, default: LineColors.defaultAltClick)
                 }
                 drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor)
+                if controlHeld, let pnl = controlHoverPnL?(hoverPrice) {
+                    drawPnLTag(in: &ctx, pnl: pnl, y: hover.y, plot: plot)
+                }
             }
         }
     }
@@ -449,6 +456,16 @@ struct CandleChart: View {
         let rect = CGRect(x: plot.maxX + 1, y: y - 8, width: max(axisWidth - 2, textSize.width + 8), height: 16)
         ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color))
         ctx.draw(resolved, at: CGPoint(x: rect.minX + 4, y: y), anchor: .leading)
+    }
+
+    /// The P/L at the hovered price, in a green (gain) or red (loss) tag just left of the price axis.
+    private func drawPnLTag(in ctx: inout GraphicsContext, pnl: Double, y: CGFloat, plot: CGRect) {
+        let resolved = ctx.resolve(Text(Fmt.money(pnl, signed: true))
+            .font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
+        let width = resolved.measure(in: CGSize(width: 200, height: 20)).width + 8
+        let rect = CGRect(x: plot.maxX - width - 2, y: y - 8, width: width, height: 16)
+        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(pnl >= 0 ? .green : .red))
+        ctx.draw(resolved, at: CGPoint(x: rect.midX, y: y))
     }
 
     private static func sessionTint(_ phase: MarketSession.Phase) -> Color? {

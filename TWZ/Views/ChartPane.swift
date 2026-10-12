@@ -54,6 +54,10 @@ struct ChartPane: View {
                           !broker.protectiveFillsNow(symbol: chart.symbol, kind: kind, at: price) else { return nil }
                     return kind == .stopLoss ? .red : .green
                 },
+                controlHoverPnL: { price in
+                    guard let p = broker.positions[chart.symbol], p.quantity != 0 else { return nil }
+                    return (price - p.avgCost) * p.quantity
+                },
                 onCancelOrder: { id in broker.cancelOrder(id) },
                 onClick: { dismissedTrip = closedTrip?.id ?? dismissedTrip }
             )
