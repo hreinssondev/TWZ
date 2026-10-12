@@ -98,6 +98,17 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// A short first request that shows the latest bars quickly while `duration` loads;
+    /// nil where the full range comes back fast anyway.
+    var quickDuration: String? {
+        switch self {
+        case .m1, .m5: "1 D"
+        case .m15: "2 D"
+        case .h1: "5 D"
+        case .d1: nil
+        }
+    }
+
     var isIntraday: Bool { self != .d1 }
 
     /// Bar length in seconds; nil for daily bars, which follow the ET trading day.
