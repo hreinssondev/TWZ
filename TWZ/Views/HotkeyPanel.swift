@@ -63,7 +63,7 @@ struct HotkeyPanel: View {
                 HStack(spacing: Self.spacing) {
                     LazyVGrid(columns: Self.gridColumns(workspace.hotkeys.count), spacing: Self.spacing) {
                         ForEach(Array(workspace.hotkeys.enumerated()), id: \.element.id) { index, hotkey in
-                            HotkeyButton(hotkey: hotkey, height: height) {
+                            HotkeyButton(hotkey: hotkey, height: height, firesOnPress: true) {
                                 broker.run(hotkey, symbol: workspace.selectedChart.symbol)
                             }
                             .contextMenu {
@@ -134,35 +134,60 @@ private struct HotkeyButton: View {
     let hotkey: Hotkey
     var height: CGFloat = HotkeyPanel.buttonHeight
     var selected = false
+    /// Fire as the mouse goes down instead of on release (the panel's buttons; the customizer keeps
+    /// a normal click so its slots can be dragged).
+    var firesOnPress = false
     let action: () -> Void
+
+    @State private var pressed = false
 
     /// Below this the button shows only its label.
     private static let subtitleMinHeight: CGFloat = 30
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 1) {
-                if height >= Self.subtitleMinHeight {
-                    Text(hotkey.label).font(.system(size: 12, weight: .bold))
-                    Text(hotkey.subtitle).font(.system(size: 9)).opacity(0.75)
-                } else {
-                    Text(hotkey.compactLabel).font(.system(size: 12, weight: .bold))
-                }
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .padding(.horizontal, 3)
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
-            .foregroundStyle(.white)
-            .background(RoundedRectangle(cornerRadius: 5).fill(hotkey.tint.opacity(0.75)))
-            .overlay(
-                RoundedRectangle(cornerRadius: 5)
-                    .strokeBorder(Color.accentColor, lineWidth: selected ? 2.5 : 0)
-            )
-            .contentShape(Rectangle())
+        if firesOnPress {
+            face
+                .brightness(pressed ? -0.12 : 0)
+                // A zero-distance drag reports the mouse-down itself; one press fires once.
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in
+                            guard !pressed else { return }
+                            pressed = true
+                            action()
+                        }
+                        .onEnded { _ in pressed = false }
+                )
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { action() }
+        } else {
+            Button(action: action) { face }
+                .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+    }
+
+    private var face: some View {
+        VStack(spacing: 1) {
+            if height >= Self.subtitleMinHeight {
+                Text(hotkey.label).font(.system(size: 12, weight: .bold))
+                Text(hotkey.subtitle).font(.system(size: 9)).opacity(0.75)
+            } else {
+                Text(hotkey.compactLabel).font(.system(size: 12, weight: .bold))
+            }
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .padding(.horizontal, 3)
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .foregroundStyle(.white)
+        .background(RoundedRectangle(cornerRadius: 5).fill(hotkey.tint.opacity(0.75)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 5)
+                .strokeBorder(Color.accentColor, lineWidth: selected ? 2.5 : 0)
+        )
+        .contentShape(Rectangle())
     }
 }
 

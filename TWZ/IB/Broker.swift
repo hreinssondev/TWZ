@@ -133,8 +133,9 @@ final class Broker {
         engine.perform { $0.loadChart(spec, generation: generation) }
     }
 
-    func cancelOrder(_ orderId: Int) {
-        order { $0.cancelOrder(orderId) }
+    /// `why` goes in the order log, e.g. "Orders panel ✕".
+    func cancelOrder(_ orderId: Int, why: String) {
+        order { $0.cancelOrder(orderId, why: why) }
     }
 
     /// ⌥Z: cancels the most recently placed order that's still working.

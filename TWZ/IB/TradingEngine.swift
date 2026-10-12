@@ -304,6 +304,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     }
 
     private func resetSession() {
+        if apiReady { log("DISCONNECTED") }
         serverVersion = 0
         nextOrderId = nil
         apiReady = false
@@ -747,7 +748,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// Passing `modifying` an existing order id changes that order instead of placing a new one.
     private func placeOrder(symbol: String, action: String, quantity: Double, limit: Double?, stop: Double? = nil,
                             tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART",
-                            ocaGroup: String = "", modifying: Int? = nil) -> Int? {
+                            ocaGroup: String = "", modifying: Int? = nil, why: String) -> Int? {
         guard apiReady, let next = nextOrderId else {
             lastMessage = "Not connected"
             return nil
@@ -790,6 +791,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if serverVersion >= 169 { f += [""] }                             // manualOrderTime
         sendFields(f)
         logLatency("Order #\(orderId)")
+        log("SEND #\(orderId)\(modifying != nil ? " (modify)" : "") \(action) \(Fmt.shares(quantity)) \(symbol) \(orderType)"
+            + (stop.map { " stp \(Fmt.price($0))" } ?? "") + (limit.map { " lmt \(Fmt.price($0))" } ?? "")
+            + " \(tif.rawValue)\(outsideRth && limit != nil ? " outsideRTH" : "") \(exchange)"
+            + (ocaGroup.isEmpty ? "" : " oca=\(ocaGroup)") + " — \(why)")
 
         var row = OrderRow(
             id: orderId, symbol: symbol, action: action, quantity: quantity,
@@ -803,6 +808,18 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return orderId
     }
 
+    /// Order log line (Settings › Connection); built only while logging is on.
+    private func log(_ line: @autoclosure () -> String) {
+        if OrderLog.shared.isEnabled { OrderLog.shared.write(line()) }
+    }
+
+    private func describe(_ o: OrderRow?) -> String {
+        guard let o else { return "(unknown order)" }
+        return "\(o.action) \(Fmt.shares(o.quantity)) \(o.symbol) \(o.orderType)"
+            + (o.auxPrice.map { " stp \(Fmt.price($0))" } ?? "") + (o.limitPrice.map { " lmt \(Fmt.price($0))" } ?? "")
+            + " [\(o.status)]"
+    }
+
     /// How long the order command took from the UI to the socket (the first message it sent).
     private func logLatency(_ what: String) {
         guard let start = commandStart else { return }
@@ -811,11 +828,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         Self.log.notice("\(what, privacy: .public) sent \(micros) µs after the UI handed it over")
     }
 
-    func cancelOrder(_ orderId: Int) {
+    func cancelOrder(_ orderId: Int, why: String) {
         guard apiReady else { return }
         if serverVersion >= 169 { send(4, 1, orderId, "") } else { send(4, 1, orderId) }
         logLatency("Cancel #\(orderId)")
         cancelsSent.insert(orderId)
+        log("CANCEL #\(orderId) \(describe(orders[orderId])) — \(why)")
     }
 
     /// ⌥Z: cancels the most recently placed order that's still working.
@@ -829,7 +847,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "No working orders to cancel"
             return
         }
-        cancelOrder(o.id)
+        cancelOrder(o.id, why: "⌥Z cancel last order")
         lastMessage = "Cancelling \(o.action) \(Fmt.shares(o.quantity - o.filled)) \(o.symbol) #\(o.id)"
     }
 
@@ -842,7 +860,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         stopsAwaitingCancel = stopsAwaitingCancel.filter { $0.value.symbol != symbol }
         let working = orders.values.filter { $0.isActive && $0.symbol == symbol }
-        for o in working { cancelOrder(o.id) }
+        for o in working { cancelOrder(o.id, why: "cancel symbol orders") }
         lastMessage = working.isEmpty
             ? "No working orders in \(symbol)"
             : "Cancelling \(working.count) order\(working.count == 1 ? "" : "s") in \(symbol)"
@@ -852,6 +870,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard apiReady else { return }
         send(58, 1)                                                       // reqGlobalCancel
         logLatency("Cancel all")
+        log("CANCEL ALL (global cancel)")
     }
 
     // MARK: - Hotkeys
@@ -901,7 +920,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 lastMessage = "Size too small for \(symbol)"
                 return
             }
-            submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif)
+            submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
+                   why: "hotkey \"\(hotkey.label)\"")
         }
     }
 
@@ -910,7 +930,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         var quantity = (abs(p.quantity) * fraction).rounded(.down)
         if quantity < 1 { quantity = abs(p.quantity) }
         guard let price = orderPrice(symbol: p.symbol, action: action, hotkey: hotkey) else { return }
-        submit(symbol: p.symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif)
+        submit(symbol: p.symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
+               why: "hotkey \"\(hotkey.label)\" closing \(Int(fraction * 100))% of \(Fmt.shares(p.quantity))")
     }
 
     // MARK: - Chart orders
@@ -989,7 +1010,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if MarketSession.phase() == .overnight { price.exchange = "OVERNIGHT" }
         let summary = "\(label) (\(OrderAmount.format(nok)) NOK)"
         guard let id = submit(symbol: symbol, action: "BUY", quantity: quantity, price: price, tif: .day,
-                              summary: summary) else { return }
+                              summary: summary, why: "⌥-click \(summary)") else { return }
         chartOrderIds.insert(id)
         defaults.set(Array(chartOrderIds.sorted().suffix(500)), forKey: "chartOrderIds")
     }
@@ -1039,12 +1060,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 + "would fill right away (last \(Fmt.price(last))), so it wasn't sent"
             return
         }
-        placeProtective(kind, symbol: symbol, price: price)
+        placeProtective(kind, symbol: symbol, price: price, why: "⌃-click")
     }
 
     /// Stop loss: a stop-limit with the limit 1% (at least 2¢) past the stop, so it can fill
     /// outside regular hours too. Take profit: a limit.
-    private func placeProtective(_ kind: Protective.Kind, symbol: String, price: Double) {
+    private func placeProtective(_ kind: Protective.Kind, symbol: String, price: Double, why: String) {
         guard let qty = positions[symbol]?.quantity, qty != 0 else { return }
         let action = qty > 0 ? "SELL" : "BUY"
         let active = activeProtective(symbol)
@@ -1052,7 +1073,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let group = active.first?.value.ocaGroup ?? "TWZ-\(symbol)-\(Int(Date().timeIntervalSince1970))"
         let (limit, stop) = Self.protectivePrices(kind, action: action, price: price)
         guard let id = placeOrder(symbol: symbol, action: action, quantity: abs(qty), limit: limit, stop: stop,
-                                  tif: .gtc, outsideRth: true, ocaGroup: group, modifying: existing) else { return }
+                                  tif: .gtc, outsideRth: true, ocaGroup: group, modifying: existing,
+                                  why: "\(kind == .stopLoss ? "stop loss" : "take profit") for \(Fmt.shares(qty)) held (\(why))")
+        else { return }
         protectiveOrders[id] = Protective(symbol: symbol, kind: kind, ocaGroup: group)
         saveProtective()
         var message = "\(symbol): \(kind == .stopLoss ? "stop loss" : "take profit") \(action) \(Fmt.shares(abs(qty))) @ \(Fmt.price(price))"
@@ -1101,6 +1124,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             positions[symbol] == nil && !activeProtective(symbol).isEmpty
         }
         guard !orphaned.isEmpty else { return }
+        log("LEFTOVER stop loss / take profit with no position in \(orphaned.sorted().joined(separator: ", ")); cancelling")
         for symbol in orphaned { syncProtective(symbol) }      // no position: cancels them
         lastMessage = "Cancelled leftover stop loss / take profit orders with no position: "
             + orphaned.sorted().joined(separator: ", ")
@@ -1120,14 +1144,16 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         for (id, p) in activeProtective(symbol) {
             guard let o = orders[id] else { continue }
             guard (o.action == "SELL" && qty > 0) || (o.action == "BUY" && qty < 0) else {
-                cancelOrder(id)
+                cancelOrder(id, why: "\(p.kind == .stopLoss ? "stop loss" : "take profit") no longer matches the position (\(Fmt.shares(qty)) held)")
                 continue
             }
             guard o.filled == 0, o.quantity != abs(qty),
                   let price = p.kind == .stopLoss ? o.auxPrice : o.limitPrice else { continue }
             let (limit, stop) = Self.protectivePrices(p.kind, action: o.action, price: price)
             guard placeOrder(symbol: symbol, action: o.action, quantity: abs(qty), limit: limit, stop: stop,
-                             tif: .gtc, outsideRth: true, ocaGroup: p.ocaGroup, modifying: id) != nil else { continue }
+                             tif: .gtc, outsideRth: true, ocaGroup: p.ocaGroup, modifying: id,
+                             why: "resize \(p.kind == .stopLoss ? "stop loss" : "take profit") to the position (\(Fmt.shares(qty)) held)")
+                    != nil else { continue }
             resized.append(p.kind == .stopLoss ? "stop loss" : "take profit")
         }
         if !resized.isEmpty {
@@ -1144,7 +1170,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             guard let price = o.auxPrice, let tp = activeProtective(p.symbol).first(where: { $0.value.kind == .takeProfit })?.key
             else { return }
             stopsAwaitingCancel[tp] = (p.symbol, price)
-            cancelOrder(tp)
+            cancelOrder(tp, why: "stop loss #\(id) rejected; cancelling the take profit to place it again")
             lastMessage = "\(p.symbol): stop loss rejected (\(text)); cancelling the take profit to place it"
         case .takeProfit:
             if activeProtective(p.symbol).contains(where: { $0.value.kind == .stopLoss }) {
@@ -1158,17 +1184,17 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// work until a later session, after `summary` when one is given.
     @discardableResult
     private func submit(symbol: String, action: String, quantity: Double, price: HotkeyPrice,
-                        tif: TimeInForce, summary: String? = nil) -> Int? {
+                        tif: TimeInForce, summary: String? = nil, why: String) -> Int? {
         guard apiReady, nextOrderId != nil else {
             lastMessage = "Not connected"
             return nil
         }
         let replaced = replaceableOrders(symbol)
-        for o in replaced { cancelOrder(o.id) }
+        for o in replaced { cancelOrder(o.id, why: "replaced by a new \(symbol) order (\(why))") }
         let overnight = price.exchange == "OVERNIGHT"
         guard let id = placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
                                   stop: price.stop, tif: overnight ? .day : tif, outsideRth: price.outsideRth,
-                                  exchange: price.exchange) else { return nil }
+                                  exchange: price.exchange, why: why) else { return nil }
         var notes = summary.map { [$0] } ?? []
         if !replaced.isEmpty {
             notes.append("replaced \(replaced.count == 1 ? "the previous order" : "\(replaced.count) orders")")
@@ -1282,6 +1308,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case 5: openOrder(f)
         case 9:
             nextOrderId = max(nextOrderId ?? 0, f.int(2))
+            log("CONNECTED client \(clientId), next order id \(f.str(2))")
             checkReady()
         case 11: execDetails(f)
         case 15:
@@ -1290,10 +1317,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case 17: historicalData(f)
         case 20: scannerData(f)
         case 53:
+            log("LOADED open orders (\(orders.values.filter(\.isActive).count) working)")
             openOrdersLoaded = true
             cancelOrphanedProtective()
         case 61: position(f)
         case 62:
+            log("LOADED positions (\(positions.count))")
             positionsLoaded = true
             cancelOrphanedProtective()
         case 63: accountSummary(f)
@@ -1338,14 +1367,24 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private func orderStatus(_ f: [String]) {
         // orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice
         let id = Self.orderKey(orderId: f.int(1), permId: f.int(6))
-        guard var o = orders[id] else { return }
+        guard var o = orders[id] else {
+            log("STATUS #\(id) for an order not seen yet: \(f.str(2)), filled \(f.str(3)), client \(f.str(9))")
+            return
+        }
+        let changed = o.status != f.str(2) || o.filled != f.double(3)
         o.status = f.str(2)
         o.filled = f.double(3)
         o.avgFillPrice = f.double(5)
         o.updated = Date()
         orders[id] = o
+        if changed {
+            let why = f.str(10)
+            log("STATUS #\(id) \(o.action) \(o.symbol) \(o.status) filled \(Fmt.shares(o.filled))/\(Fmt.shares(o.quantity))"
+                + (o.filled > 0 ? " avg \(Fmt.price(o.avgFillPrice))" : "")
+                + (f.int(9) != clientId ? " (client \(f.str(9)))" : "") + (why.isEmpty ? "" : " held: \(why)"))
+        }
         if !o.isActive, let stop = stopsAwaitingCancel.removeValue(forKey: id) {
-            placeProtective(.stopLoss, symbol: stop.symbol, price: stop.price)
+            placeProtective(.stopLoss, symbol: stop.symbol, price: stop.price, why: "placed again after its take profit was cancelled")
         }
     }
 
@@ -1354,6 +1393,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let id = Self.orderKey(orderId: f.int(1), permId: f.int(25))
         let lmt = f.double(16)
         let aux = f.double(17)
+        let before = orders[id]
         var o = orders[id] ?? OrderRow(
             id: id, symbol: f.str(3), action: f.str(13), quantity: 0,
             orderType: f.str(15), limitPrice: nil, status: "Submitted"
@@ -1365,6 +1405,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         o.limitPrice = (lmt > 0 && lmt < Self.unsetDouble) ? lmt : nil
         o.auxPrice = (aux > 0 && aux < Self.unsetDouble) ? aux : nil
         orders[id] = o
+        if before == nil {
+            log("OPEN #\(id) \(describe(o)) — first seen from IB (not sent by this session)")
+        } else if let b = before, b.action != o.action || b.quantity != o.quantity || b.orderType != o.orderType
+                    || b.limitPrice != o.limitPrice || b.auxPrice != o.auxPrice || b.symbol != o.symbol {
+            log("OPEN #\(id) now \(describe(o)), was \(describe(b))")
+        }
     }
 
     /// Orders entered manually in TWS have orderId 0; key those by negative permId.
@@ -1383,6 +1429,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             price: f.double(20),
             time: Self.parseExecTime(f.str(15)) ?? Date()
         )
+        if fills[fill.id] == nil {
+            log("FILL #\(fill.orderId) \(fill.side) \(Fmt.shares(fill.shares)) \(fill.symbol) @ \(Fmt.price(fill.price)) exec \(fill.id)")
+        }
         fills[fill.id] = fill
     }
 
@@ -1455,6 +1504,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             }
             orders[reqId] = o
             lastMessage = "Order \(o.symbol) #\(reqId): \(text)"
+            log("ERROR #\(reqId) [\(code)] \(text) → \(describe(o))")
             if o.status == "Rejected" { protectiveRejected(reqId, text) }
             return
         }
@@ -1557,6 +1607,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard f.str(2) == account, f.str(5) == "STK" else { return }
         let symbol = f.str(4)
         let qty = f.double(14)
+        let old = positions[symbol]?.quantity ?? 0
+        if old != qty { log("POSITION \(symbol) \(Fmt.shares(old)) → \(Fmt.shares(qty)) avg \(Fmt.price(f.double(15)))") }
         if qty == 0 {
             positions[symbol] = nil
         } else {

@@ -70,6 +70,7 @@ private struct ConnectionSettings: View {
     @State private var port = 4002
     @State private var clientId = 1
     @State private var confirmLive = false
+    @AppStorage(OrderLog.enabledKey) private var orderLog = true
 
     private let presets: [(String, Int)] = [
         ("IB Gateway – Paper", 4002), ("IB Gateway – Live", 4001),
@@ -93,6 +94,21 @@ private struct ConnectionSettings: View {
             Section("Market data") {
                 Text("Real-time data only. Stocks you aren't subscribed for show no quote; if no real-time data comes through at all, the app goes offline.")
                     .foregroundStyle(.secondary)
+            }
+            Section("Diagnostics") {
+                Toggle("Order log", isOn: $orderLog)
+                    .onChange(of: orderLog) { _, on in OrderLog.shared.isEnabled = on }
+                HStack {
+                    Text("Every order sent, changed or cancelled and why, with IB's replies. One file per day, kept \(OrderLog.keptDays) days.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Show in Finder") {
+                        try? FileManager.default.createDirectory(at: OrderLog.shared.directory, withIntermediateDirectories: true)
+                        NSWorkspace.shared.open(OrderLog.shared.directory)
+                    }
+                    .controlSize(.small)
+                }
             }
             if port == 4001 || port == 7496 {
                 Text("⚠︎ Live trading: hotkeys will send real orders.")

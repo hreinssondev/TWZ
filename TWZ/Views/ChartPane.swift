@@ -58,7 +58,7 @@ struct ChartPane: View {
                     guard let p = broker.positions[chart.symbol], p.quantity != 0 else { return nil }
                     return (price - p.avgCost) * p.quantity
                 },
-                onCancelOrder: { id in broker.cancelOrder(id) },
+                onCancelOrder: { id in broker.cancelOrder(id, why: "chart: double-clicked the order line") },
                 onClick: { dismissedTrip = closedTrip?.id ?? dismissedTrip }
             )
         }

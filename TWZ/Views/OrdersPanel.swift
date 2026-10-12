@@ -109,7 +109,7 @@ struct OrdersPanel: View {
                     symbolButton(o.symbol)
                     Spacer(minLength: 2)
                     Button {
-                        broker.cancelOrder(o.id)
+                        broker.cancelOrder(o.id, why: "Orders panel ✕")
                     } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
                     }
