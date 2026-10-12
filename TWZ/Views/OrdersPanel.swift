@@ -119,11 +119,8 @@ struct OrdersPanel: View {
                     .disabled(o.id <= 0)
                 }
                 HStack(spacing: 4) {
-                    Group {
-                        Text("\(Fmt.shares(o.filled))/\(Fmt.shares(o.quantity))")
-                        Text(o.priceSummary)
-                    }
-                    .foregroundStyle(sideColor(o.action == "BUY"))
+                    Text("\(Fmt.shares(o.filled))/\(Fmt.shares(o.quantity))")
+                    Text(o.priceSummary)
                     Spacer(minLength: 2)
                     Text(o.status).foregroundStyle(.secondary)
                 }
@@ -175,7 +172,6 @@ struct OrdersPanel: View {
                 }
                 Text("\(Fmt.shares(f.shares)) / \(Fmt.price(f.price))")
                     .font(.system(size: 10).monospacedDigit())
-                    .foregroundStyle(sideColor(f.side == "BOT"))
             }
             .rowStyle()
         }
@@ -195,7 +191,6 @@ struct OrdersPanel: View {
                 }
                 HStack(spacing: 4) {
                     Text("\(Fmt.shares(p.quantity)) / \(Fmt.price(p.avgCost))")
-                        .foregroundStyle(sideColor(p.quantity > 0))
                 }
                 .font(.system(size: 10).monospacedDigit())
             }
