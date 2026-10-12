@@ -4,6 +4,7 @@
 //
 //  Orders, Filled and Positions side by side as three always-visible columns,
 //  with draggable dividers between them. Rows are two lines so they fit the narrow columns.
+//  A working order's row has a thin bar along its bottom that fills to the right as the order fills.
 //  Below them, behind a draggable divider, today's round trips with their profit or loss.
 //
 
@@ -126,7 +127,21 @@ struct OrdersPanel: View {
                 .font(.system(size: 10).monospacedDigit())
             }
             .rowStyle()
+            .overlay(alignment: .bottom) { fillBar(o) }
         }
+    }
+
+    /// Filled share of the order, growing to the right; a scaled shape, so updates cost no layout.
+    private func fillBar(_ o: OrderRow) -> some View {
+        let fraction = o.quantity > 0 ? min(1, max(0, o.filled / o.quantity)) : 0
+        let color = o.action == "BUY" ? Color.green : Color.red
+        return Rectangle()
+            .fill(color.opacity(0.7))
+            .scaleEffect(x: fraction, y: 1, anchor: .leading)
+            .background(color.opacity(0.12))
+            .frame(height: 2)
+            .animation(.easeOut(duration: 0.25), value: fraction)
+            .allowsHitTesting(false)
     }
 
     @ViewBuilder private var filledRows: some View {
