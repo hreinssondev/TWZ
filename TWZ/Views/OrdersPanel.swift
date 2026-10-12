@@ -218,8 +218,8 @@ struct OrdersPanel: View {
                         if let pnl { pnlText(pnl) } else { Text("—").foregroundStyle(.secondary) }
                     }
                     HStack(spacing: 4) {
-                        Text("\(Fmt.shares(t.entryShares)) - \(t.entryPrice.map { Fmt.price($0) } ?? "earlier")"
-                             + " → \(t.exitPrice.map { Fmt.price($0) } ?? "…")")
+                        let prices = "\(t.entryPrice.map { Fmt.price($0) } ?? "earlier") → \(t.exitPrice.map { Fmt.price($0) } ?? "…")"
+                        Text("\(Text(Fmt.shares(t.entryShares)).foregroundStyle(sideColor(t.isLong))) - \(prices)")
                         Spacer(minLength: 2)
                         Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
                     }
