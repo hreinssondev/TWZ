@@ -4,6 +4,7 @@
 //
 //  Orders, Filled and Positions side by side as three always-visible columns,
 //  with draggable dividers between them. Rows are two lines so they fit the narrow columns.
+//  Below them, behind a draggable divider, today's round trips with their profit or loss.
 //
 
 import SwiftUI
@@ -14,10 +15,34 @@ struct OrdersPanel: View {
     // Widths of the Orders and Filled columns as shares of the panel; Positions takes the rest.
     @AppStorage("ordersColumn") private var ordersShare: Double = 1 / 3
     @AppStorage("filledColumn") private var filledShare: Double = 1 / 3
+    /// Height of the three columns as a share of the panel; round trips take the rest.
+    @AppStorage("roundTripsSplit") private var columnsShare: Double = 0.5
 
     private static let minColumnWidth: CGFloat = 90
+    private static let minSectionHeight: CGFloat = 40
 
     var body: some View {
+        GeometryReader { geo in
+            let total = max(geo.size.height - 1, Self.minSectionHeight * 2)   // minus the 1pt divider
+            let minH = Self.minSectionHeight
+            let columnsH = min(max(total * columnsShare, minH), total - minH)
+            VStack(spacing: 0) {
+                columns
+                    .frame(height: columnsH)
+                ResizeHandle(resizes: .vertical, style: .line, thickness: 1, current: columnsH,
+                             range: minH...(total - minH),
+                             onChange: { columnsShare = $0 / total },
+                             onReset: { columnsShare = 0.5 })
+                roundTrips
+            }
+        }
+        .font(.system(size: 11).monospacedDigit())
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
+    }
+
+    private var columns: some View {
         GeometryReader { geo in
             let total = max(geo.size.width - 2, Self.minColumnWidth * 3)   // minus the two 1pt dividers
             let minW = Self.minColumnWidth
@@ -43,10 +68,6 @@ struct OrdersPanel: View {
                 column("Positions", count: broker.positions.count) { positionRows }
             }
         }
-        .font(.system(size: 11).monospacedDigit())
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
     }
 
     private func resetColumns() {
@@ -55,12 +76,14 @@ struct OrdersPanel: View {
     }
 
     /// One always-visible column: a compact header and its own scrolling rows.
-    private func column<Rows: View>(_ title: String, count: Int, @ViewBuilder rows: () -> Rows) -> some View {
+    private func column<Rows: View>(_ title: String, count: Int, trailing: Text? = nil,
+                                    @ViewBuilder rows: () -> Rows) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
                 Text(title).fontWeight(.semibold)
                 Text("\(count)").foregroundStyle(.secondary)
                 Spacer(minLength: 0)
+                if let trailing { trailing }
             }
             .font(.system(size: 10))
             .padding(.horizontal, 6)
@@ -145,6 +168,41 @@ struct OrdersPanel: View {
             }
             .rowStyle()
         }
+    }
+
+    /// Today's round trips, newest first; the header sums the closed ones.
+    private var roundTrips: some View {
+        let trips = RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions)
+        let closed = trips.filter { !$0.isOpen }.compactMap { $0.pnl(last: nil) }
+        let realized = closed.isEmpty ? nil : closed.reduce(0, +)
+        return column("Round trips", count: trips.count,
+                      trailing: realized.map { pnlText($0).fontWeight(.semibold) }) {
+            if trips.isEmpty { empty("No trades today") }
+            ForEach(trips) { t in
+                let pnl = t.pnl(last: broker.quotes[t.symbol]?.last)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        side(t.isLong, long: true)
+                        symbolButton(t.symbol)
+                        if t.isOpen { Text("open").foregroundStyle(.secondary) }
+                        Spacer(minLength: 2)
+                        if let pnl { pnlText(pnl) } else { Text("—").foregroundStyle(.secondary) }
+                    }
+                    HStack(spacing: 4) {
+                        Text("\(Fmt.shares(t.entryShares)) @ \(t.entryPrice.map { Fmt.price($0) } ?? "earlier")"
+                             + " → \(t.exitPrice.map { Fmt.price($0) } ?? "…")")
+                        Spacer(minLength: 2)
+                        Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
+                    }
+                    .font(.system(size: 10).monospacedDigit())
+                }
+                .rowStyle()
+            }
+        }
+    }
+
+    private func pnlText(_ pnl: Double) -> Text {
+        Text(Fmt.money(pnl, signed: true)).foregroundStyle(pnl >= 0 ? .green : .red)
     }
 
     private func side(_ isBuy: Bool, long: Bool = false) -> some View {

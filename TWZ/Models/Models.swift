@@ -77,6 +77,87 @@ nonisolated struct Fill: Identifiable, Equatable {
     var time: Date
 }
 
+/// One trade in a symbol, from flat back to flat, built from the day's fills.
+nonisolated struct RoundTrip: Identifiable, Equatable {
+    var id: String              // first fill's execId, plus the part of it when a fill flips the position
+    var symbol: String
+    var isLong: Bool
+    var start: Date
+    var lastFill: Date
+    var buyShares = 0.0, buyValue = 0.0
+    var sellShares = 0.0, sellValue = 0.0
+    /// Shares still held; 0 once the trip is closed.
+    var openShares = 0.0
+    /// Shares held from before today's fills, whose entry price is unknown.
+    var carried = 0.0
+
+    var isOpen: Bool { abs(openShares) > 1e-9 }
+    var entryShares: Double { (isLong ? buyShares : sellShares) + abs(carried) }
+    var entryPrice: Double? { Self.average(isLong ? buyValue : sellValue, isLong ? buyShares : sellShares) }
+    var exitPrice: Double? { Self.average(isLong ? sellValue : buyValue, isLong ? sellShares : buyShares) }
+
+    /// Closed: proceeds minus cost (before commissions). Open: also values the shares still held at `last`.
+    /// nil when part of the trip was opened before today, or an open trip has no last price.
+    func pnl(last: Double?) -> Double? {
+        guard carried == 0 else { return nil }
+        guard isOpen else { return sellValue - buyValue }
+        return last.map { sellValue - buyValue + openShares * $0 }
+    }
+
+    private static func average(_ value: Double, _ shares: Double) -> Double? {
+        shares > 0 ? value / shares : nil
+    }
+
+    /// Round trips, newest activity first. `positions` give each symbol's current holding, so shares
+    /// held before the first fill (net of today's fills) are known.
+    static func build(fills: [Fill], positions: [String: Position]) -> [RoundTrip] {
+        var trips: [RoundTrip] = []
+        for (symbol, symbolFills) in Dictionary(grouping: fills, by: \.symbol) {
+            let sorted = symbolFills.sorted { ($0.time, $0.id) < ($1.time, $1.id) }
+            let net = sorted.reduce(0) { $0 + ($1.side == "BOT" ? $1.shares : -$1.shares) }
+            var qty = (positions[symbol]?.quantity ?? 0) - net
+            if abs(qty) < 1e-9 { qty = 0 }
+            var trip: RoundTrip?
+            if qty != 0, let first = sorted.first {
+                trip = RoundTrip(id: first.id + "#carried", symbol: symbol, isLong: qty > 0, start: first.time,
+                                 lastFill: first.time, openShares: qty, carried: qty)
+            }
+            for fill in sorted {
+                var remaining = fill.side == "BOT" ? fill.shares : -fill.shares
+                var part = 0
+                while abs(remaining) > 1e-9 {
+                    if trip == nil {
+                        trip = RoundTrip(id: part == 0 ? fill.id : "\(fill.id)#\(part)", symbol: symbol,
+                                         isLong: remaining > 0, start: fill.time, lastFill: fill.time)
+                    }
+                    // Up to the whole fill adds to the trip; a fill against it closes at most what's held.
+                    let opening = qty == 0 || (qty > 0) == (remaining > 0)
+                    let step = opening ? remaining : (remaining > 0 ? min(remaining, -qty) : max(remaining, -qty))
+                    if step > 0 {
+                        trip!.buyShares += step
+                        trip!.buyValue += step * fill.price
+                    } else {
+                        trip!.sellShares -= step
+                        trip!.sellValue -= step * fill.price
+                    }
+                    qty += step
+                    if abs(qty) < 1e-9 { qty = 0 }
+                    remaining -= step
+                    trip!.openShares = qty
+                    trip!.lastFill = fill.time
+                    if qty == 0 {
+                        trips.append(trip!)
+                        trip = nil
+                        part += 1
+                    }
+                }
+            }
+            if let trip { trips.append(trip) }
+        }
+        return trips.sorted { ($0.lastFill, $0.id) > ($1.lastFill, $1.id) }
+    }
+}
+
 nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
     case m1 = "1m", m5 = "5m", m15 = "15m", h1 = "1h", d1 = "D"
     var id: String { rawValue }
