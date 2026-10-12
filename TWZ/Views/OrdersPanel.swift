@@ -170,7 +170,7 @@ struct OrdersPanel: View {
                     Spacer(minLength: 2)
                     Text(f.time, format: .dateTime.hour().minute().second()).foregroundStyle(.secondary)
                 }
-                Text("\(Fmt.shares(f.shares)) / \(Fmt.price(f.price))")
+                Text("\(Fmt.shares(f.shares)) - \(Fmt.price(f.price))")
                     .font(.system(size: 10).monospacedDigit())
             }
             .rowStyle()
@@ -190,7 +190,7 @@ struct OrdersPanel: View {
                     Text(Fmt.money(pnl, signed: true)).foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
                 }
                 HStack(spacing: 4) {
-                    Text("\(Fmt.shares(p.quantity)) / \(Fmt.price(p.avgCost))")
+                    Text("\(Fmt.shares(p.quantity)) - \(Fmt.price(p.avgCost))")
                 }
                 .font(.system(size: 10).monospacedDigit())
             }
@@ -216,7 +216,7 @@ struct OrdersPanel: View {
                         if let pnl { pnlText(pnl) } else { Text("—").foregroundStyle(.secondary) }
                     }
                     HStack(spacing: 4) {
-                        Text("\(Fmt.shares(t.entryShares)) / \(t.entryPrice.map { Fmt.price($0) } ?? "earlier")"
+                        Text("\(Fmt.shares(t.entryShares)) - \(t.entryPrice.map { Fmt.price($0) } ?? "earlier")"
                              + " → \(t.exitPrice.map { Fmt.price($0) } ?? "…")")
                         Spacer(minLength: 2)
                         Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
