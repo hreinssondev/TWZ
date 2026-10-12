@@ -94,9 +94,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var overnightChartByReq: [Int: Int] = [:]
     private var overnightReqByChart: [Int: Int] = [:]
     private var overnightBars: [Int: [Bar]] = [:]
-    /// A chart given a new symbol or timeframe first asks for just the latest day or so, which IB
-    /// answers quickly, and shows that until the full range arrives. By request id.
-    private var quickChartByReq: [Int: (chart: Int, overnight: Bool)] = [:]
 
     /// Tick-by-tick streams for the chart symbols: every trade (which also builds the live candle)
     /// and every bid/ask change. The selected chart's come first when IB's limit is reached.
@@ -322,7 +319,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         overnightChartByReq.removeAll()
         overnightReqByChart.removeAll()
         overnightBars.removeAll()
-        quickChartByReq.removeAll()
         tickReqByStream.removeAll()
         tickStreamByReq.removeAll()
         tickRefused.removeAll()
@@ -700,15 +696,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         c.symbol = spec.symbol
         c.timeframe = spec.timeframe
         c.generation = generation
-        requestChart(spec.id, quick: true)
+        requestChart(spec.id)
         if symbolChanged { syncTickByTick() }
     }
 
-    /// `quick` adds the short requests first. Charts loaded all at once on connect skip them, since
-    /// IB refuses six or more requests for the same contract within two seconds.
-    private func requestChart(_ id: Int, quick: Bool = false) {
+    private func requestChart(_ id: Int) {
         guard let c = charts[id] else { return }
-        quickChartByReq = quickChartByReq.filter { $0.value.chart != id }
         if let old = reqByChart.removeValue(forKey: id) {
             if apiReady { send(25, 1, old) }                                      // cancelHistoricalData
             chartByReq[old] = nil
@@ -727,26 +720,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         chartByReq[reqId] = id
         reqByChart[id] = reqId
         let tf = c.timeframe
-        let quickDuration = quick ? tf.quickDuration : nil
-        if let quickDuration {
-            let quickReq = makeReqId()
-            quickChartByReq[quickReq] = (id, false)
-            sendFields([20, quickReq] + contract(c.symbol) + [
-                false, "", tf.barSize, quickDuration, tf.isIntraday ? 0 : 1, "TRADES", 2, false, "",
-            ])
-        }
         // reqHistoricalData: endDateTime "" + keepUpToDate streams live bar updates.
         sendFields([20, reqId] + contract(c.symbol) + [
             false, "", tf.barSize, tf.duration, tf.isIntraday ? 0 : 1, "TRADES", 2, true, "",
         ])
         guard tf.isIntraday else { return }
-        if let quickDuration {
-            let quickReq = makeReqId()
-            quickChartByReq[quickReq] = (id, true)
-            sendFields([20, quickReq] + contract(c.symbol, exchange: "OVERNIGHT") + [
-                false, "", tf.barSize, quickDuration, 0, "TRADES", 2, false, "",
-            ])
-        }
         let overnightReq = makeReqId()
         overnightChartByReq[overnightReq] = id
         overnightReqByChart[id] = overnightReq
@@ -1371,8 +1349,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
         // The overnight venue is extra: a symbol it can't serve just keeps its SMART data.
         if overnightSymbolByReq[reqId] != nil { return }
-        // A short first request is only a head start; the full one still reports its own errors.
-        if quickChartByReq.removeValue(forKey: reqId) != nil { return }
         if let id = overnightChartByReq.removeValue(forKey: reqId) {
             overnightReqByChart[id] = nil
             return
@@ -1433,21 +1409,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                             close: f.double(i + 4), volume: max(0, f.double(i + 5))))
             i += 8
         }
-        if let quick = quickChartByReq.removeValue(forKey: reqId), let c = charts[quick.chart] {
-            // SMART's bars win over the overnight venue's, as in the full load. Overnight bars that
-            // come first wait for SMART's, so the chart doesn't flash last night's bars alone.
-            if quick.overnight {
-                guard !c.isLoading else { overnightBars[quick.chart] = bars; return }
-                c.bars = Self.merge(c.bars, bars)
-            } else {
-                c.bars = Self.merge(bars, Self.merge(overnightBars[quick.chart] ?? [], c.bars))
-                if !c.bars.isEmpty { c.isLoading = false }
-            }
-            chartChanged(c, all: true)
-            return
-        }
         if let id = overnightChartByReq[reqId], let c = charts[id] {
-            dropQuick(chart: id, overnight: true)
             overnightBars[id] = bars
             if !c.isLoading, !c.bars.isEmpty {
                 c.bars = Self.merge(c.bars, bars)
@@ -1456,17 +1418,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             return
         }
         guard let id = chartByReq[reqId], let c = charts[id] else { return }
-        dropQuick(chart: id, overnight: false)
-        // The full range wins over the short head start, whose overnight bars stay until theirs arrive.
-        c.bars = Self.merge(bars, Self.merge(overnightBars[id] ?? [], c.bars))
+        c.bars = Self.merge(bars, overnightBars[id] ?? [])
         c.isLoading = false
         c.error = c.bars.isEmpty ? "No data" : nil
         chartChanged(c, all: true)
-    }
-
-    /// Once a full series is in, a short one still on its way would only roll it back.
-    private func dropQuick(chart id: Int, overnight: Bool) {
-        quickChartByReq = quickChartByReq.filter { $0.value.chart != id || $0.value.overnight != overnight }
     }
 
     /// Both series in time order; where both have a bar for the same time, `primary`'s wins.
