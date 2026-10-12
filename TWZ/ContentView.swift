@@ -13,8 +13,8 @@
 //  Every ┃/═/━ separator is a drag handle (resize cursor on hover, double-click resets):
 //  charts ↕ hotkeys, left column ↔ right column, list A ↔ list B, lists ↕ orders, and
 //  the Orders / Filled / Positions columns. The ● where the four charts meet drags the
-//  chart column and row splits together. The hotkey buttons keep a fixed size; only
-//  the free space around them changes, down to the height they need.
+//  chart column and row splits together. The hotkey buttons keep a fixed size while there's
+//  room (the free space around them changes); dragged shorter, they and the amount box shrink.
 //
 
 import SwiftUI

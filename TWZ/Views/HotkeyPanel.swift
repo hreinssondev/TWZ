@@ -17,11 +17,13 @@ struct HotkeyPanel: View {
     @State private var showingCustomizer = false
 
     static let buttonHeight: CGFloat = 44
+    /// Buttons shrink down to this when the panel is dragged shorter than they need at full height.
+    static let minButtonHeight: CGFloat = 20
     private static let spacing: CGFloat = 6
     private static let headerHeight: CGFloat = 14
     private static let padding: CGFloat = 8
-    /// Height at which the buttons fit with no free space around them.
-    static let minHeight = padding * 2 + headerHeight + spacing + buttonHeight * 2 + spacing
+    /// Height at which the shrunk buttons fit with no free space around them.
+    static let minHeight = padding * 2 + headerHeight + spacing + minButtonHeight * 2 + spacing
 
     var body: some View {
         VStack(alignment: .leading, spacing: Self.spacing) {
@@ -53,13 +55,15 @@ struct HotkeyPanel: View {
             .frame(height: Self.headerHeight)
             // The order amount box, two buttons tall, keeps a seventh of the width; the hotkeys share
             // the rest in two rows, narrowing as buttons are added beyond 6 × 2.
-            // Buttons keep a fixed height; any extra height becomes space above and below them.
+            // Buttons are full height when there's room, any extra becoming space above and below
+            // them; a shorter panel shrinks them (and the amount box) down to minButtonHeight.
             GeometryReader { geo in
                 let column = (geo.size.width - Self.spacing * 6) / 7
+                let height = min(Self.buttonHeight, max(Self.minButtonHeight, (geo.size.height - Self.spacing) / 2))
                 HStack(spacing: Self.spacing) {
                     LazyVGrid(columns: Self.gridColumns(workspace.hotkeys.count), spacing: Self.spacing) {
                         ForEach(Array(workspace.hotkeys.enumerated()), id: \.element.id) { index, hotkey in
-                            HotkeyButton(hotkey: hotkey) {
+                            HotkeyButton(hotkey: hotkey, height: height) {
                                 broker.run(hotkey, symbol: workspace.selectedChart.symbol)
                             }
                             .contextMenu {
@@ -68,12 +72,12 @@ struct HotkeyPanel: View {
                         }
                     }
                     .frame(width: max(0, geo.size.width - column - Self.spacing))
-                    OrderAmountBox()
+                    OrderAmountBox(height: height * 2 + Self.spacing)
                         .frame(width: max(0, column))
                 }
+                .frame(height: height * 2 + Self.spacing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(height: Self.buttonHeight * 2 + Self.spacing)
-            .frame(maxHeight: .infinity)
         }
         .padding(Self.padding)
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
@@ -123,11 +127,16 @@ private struct HotkeyButton: View {
     var selected = false
     let action: () -> Void
 
+    /// Below this the button shows only its label.
+    private static let subtitleMinHeight: CGFloat = 30
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 1) {
                 Text(hotkey.label).font(.system(size: 12, weight: .bold))
-                Text(hotkey.subtitle).font(.system(size: 9)).opacity(0.75)
+                if height >= Self.subtitleMinHeight {
+                    Text(hotkey.subtitle).font(.system(size: 9)).opacity(0.75)
+                }
             }
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -148,7 +157,9 @@ private struct HotkeyButton: View {
 
 /// The NOK amount ⌥-clicking a chart buys (a DAY limit at the clicked price), converted to shares
 /// at the live USD.NOK rate. Type it, or step it in 5 000 NOK steps with ↑/↓ or the arrows.
+/// When the panel is short it drops the title, then the size line, keeping just the field.
 private struct OrderAmountBox: View {
+    let height: CGFloat
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     @AppStorage(OrderAmount.storageKey) private var amount = OrderAmount.initial
@@ -159,9 +170,11 @@ private struct OrderAmountBox: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("⌥-click buy · NOK")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
+            if height >= 64 {
+                Text("⌥-click buy · NOK")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
             HStack(spacing: 2) {
                 TextField("", text: $text)
                     .textFieldStyle(.plain)
@@ -182,12 +195,14 @@ private struct OrderAmountBox: View {
             .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: .textBackgroundColor)))
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.15)))
             Spacer(minLength: 0)
-            Text(sizeText)
-                .font(.system(size: 10).monospacedDigit())
+            if height >= 44 {
+                Text(sizeText)
+                    .font(.system(size: 10).monospacedDigit())
+            }
         }
         .lineLimit(1)
         .minimumScaleFactor(0.7)
-        .padding(5)
+        .padding(height >= 64 ? 5 : 3)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
