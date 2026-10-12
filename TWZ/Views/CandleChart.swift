@@ -333,7 +333,7 @@ struct CandleChart: View {
         plotCtx.fill(upBodies, with: .color(up))
         plotCtx.fill(downBodies, with: .color(down))
 
-        drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, plot: plot, x: x, y: y)
+        drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
 
         // Position / order lines.
         for line in lines where line.price > lo && line.price < hi {
@@ -376,9 +376,8 @@ struct CandleChart: View {
     private static let slowSMAColor = Color(red: 0.75, green: 0.4, blue: 1)
 
     /// VWAP (intraday only, from 04:00 ET), SMA 9 and SMA 21 over the visible bars, each if turned on
-    /// in Settings, plus a legend
-    /// with their values at the latest visible bar.
-    private func drawIndicators(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, plot: CGRect,
+    /// in Settings.
+    private func drawIndicators(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int,
                                 x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
         func stroke(_ values: [Double?], color: Color, breakBefore: (Int) -> Bool = { _ in false }) {
             var path = Path()
@@ -392,28 +391,13 @@ struct CandleChart: View {
             ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: indicatorWidth, lineJoin: .round))
         }
 
-        var legend: [(String, Double?, Color)] = []
         if showVWAP, chart.timeframe.isIntraday {
-            let vwap = Self.vwap(bars, start: start, end: end)
-            stroke(vwap, color: Self.vwapColor) { i in i > 0 && bars[i].vwapDay != bars[i - 1].vwapDay }
-            legend.append(("VWAP", vwap.last ?? nil, Self.vwapColor))
+            stroke(Self.vwap(bars, start: start, end: end), color: Self.vwapColor) { i in
+                i > 0 && bars[i].vwapDay != bars[i - 1].vwapDay
+            }
         }
-        let fast = showFastSMA ? Self.sma(bars, period: 9, start: start, end: end) : nil
-        let slow = showSlowSMA ? Self.sma(bars, period: 21, start: start, end: end) : nil
-        if let slow { stroke(slow, color: Self.slowSMAColor) }
-        if let fast {
-            stroke(fast, color: Self.fastSMAColor)
-            legend.append(("SMA 9", fast.last ?? nil, Self.fastSMAColor))
-        }
-        if let slow { legend.append(("SMA 21", slow.last ?? nil, Self.slowSMAColor)) }
-
-        var text = Text("")
-        for (index, (name, value, color)) in legend.enumerated() {
-            let item = Text("\(name) \(Fmt.price(value))").foregroundStyle(color)
-            text = index == 0 ? item : Text("\(text)   \(item)")
-        }
-        ctx.draw(text.font(.system(size: 9, weight: .semibold).monospacedDigit()),
-                 at: CGPoint(x: plot.minX + 6, y: plot.minY + 2), anchor: .topLeading)
+        if showSlowSMA { stroke(Self.sma(bars, period: 21, start: start, end: end), color: Self.slowSMAColor) }
+        if showFastSMA { stroke(Self.sma(bars, period: 9, start: start, end: end), color: Self.fastSMAColor) }
     }
 
     /// Simple moving average of closes for bars start..<end; nil until `period` bars exist.
