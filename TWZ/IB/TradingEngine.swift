@@ -1076,6 +1076,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// resized when it changes (unless partly filled, where the OCA group already shrinks them).
     private func syncProtective(_ symbol: String) {
         let qty = positions[symbol]?.quantity ?? 0
+        var resized: [String] = []
         for (id, p) in activeProtective(symbol) {
             guard let o = orders[id] else { continue }
             guard (o.action == "SELL" && qty > 0) || (o.action == "BUY" && qty < 0) else {
@@ -1085,8 +1086,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             guard o.filled == 0, o.quantity != abs(qty),
                   let price = p.kind == .stopLoss ? o.auxPrice : o.limitPrice else { continue }
             let (limit, stop) = Self.protectivePrices(p.kind, action: o.action, price: price)
-            placeOrder(symbol: symbol, action: o.action, quantity: abs(qty), limit: limit, stop: stop,
-                       tif: .gtc, outsideRth: true, ocaGroup: p.ocaGroup, modifying: id)
+            guard placeOrder(symbol: symbol, action: o.action, quantity: abs(qty), limit: limit, stop: stop,
+                             tif: .gtc, outsideRth: true, ocaGroup: p.ocaGroup, modifying: id) != nil else { continue }
+            resized.append(p.kind == .stopLoss ? "stop loss" : "take profit")
+        }
+        if !resized.isEmpty {
+            lastMessage = "\(symbol): \(resized.sorted().joined(separator: " and ")) resized to \(Fmt.shares(abs(qty))) shares"
         }
     }
 
@@ -1108,16 +1113,26 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
     }
 
-    /// Places the order and says in the status line when it was priced off a fallback or
-    /// won't work until a later session, after `summary` when one is given.
+    /// Places the order, replacing the symbol's other working orders (its stop loss and take profit
+    /// stay), and says in the status line when it replaced any, was priced off a fallback or won't
+    /// work until a later session, after `summary` when one is given.
     @discardableResult
     private func submit(symbol: String, action: String, quantity: Double, price: HotkeyPrice,
                         tif: TimeInForce, summary: String? = nil) -> Int? {
+        guard apiReady, nextOrderId != nil else {
+            lastMessage = "Not connected"
+            return nil
+        }
+        let replaced = replaceableOrders(symbol)
+        for o in replaced { cancelOrder(o.id) }
         let overnight = price.exchange == "OVERNIGHT"
         guard let id = placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
                                   stop: price.stop, tif: overnight ? .day : tif, outsideRth: price.outsideRth,
                                   exchange: price.exchange) else { return nil }
         var notes = summary.map { [$0] } ?? []
+        if !replaced.isEmpty {
+            notes.append("replaced \(replaced.count == 1 ? "the previous order" : "\(replaced.count) orders")")
+        }
         if let source = price.fallback, let limit = price.limit {
             notes.append("no live quote, priced off \(source) → \(Fmt.price(limit))")
         }
@@ -1128,6 +1143,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         if !notes.isEmpty { lastMessage = "\(symbol): " + notes.joined(separator: "; ") }
         return id
+    }
+
+    /// Working orders in `symbol` a new order replaces: everything but its stop loss and take profit,
+    /// and orders entered in TWS, which the API can't cancel.
+    private func replaceableOrders(_ symbol: String) -> [OrderRow] {
+        orders.values.filter { o in
+            o.symbol == symbol && o.isActive && o.status != "PendingCancel" && o.id > 0
+                && protectiveOrders[o.id] == nil && !cancelsSent.contains(o.id)
+        }
     }
 
     /// The quote a price reference points at. When it's missing (market closed, no data yet) this
