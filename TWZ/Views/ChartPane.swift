@@ -182,11 +182,11 @@ struct ChartPane: View {
                 continue
             }
             if broker.chartOrderIds.contains(o.id) {
-                // Placed by ⌥-clicking the chart: one solid line (a stop-limit's stop equals its limit).
+                // Placed by ⌥-clicking the chart: one solid line (a stop-limit's stop equals its limit),
+                // just the price on the axis.
                 if let price = o.auxPrice ?? o.limitPrice {
-                    let label = o.orderType.hasPrefix("STP") ? "STP \(side)" : side
                     lines.append(PriceLine(price: price, color: LineColors.resolve(altClickHex, default: LineColors.defaultAltClick),
-                                           label: label, dashed: false, orderId: o.id))
+                                           label: "", dashed: false, orderId: o.id))
                 }
                 continue
             }
