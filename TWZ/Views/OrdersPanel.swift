@@ -119,7 +119,8 @@ struct OrdersPanel: View {
                     .disabled(o.id <= 0)
                 }
                 HStack(spacing: 4) {
-                    Text("\(Fmt.shares(o.filled))/\(Fmt.shares(o.quantity))")
+                    // Shares still to fill; the bar below shows how much has filled.
+                    Text(Fmt.shares(o.quantity - o.filled))
                         .foregroundStyle(sideColor(o.action == "BUY"))
                     Text(o.priceSummary)
                     Spacer(minLength: 2)
