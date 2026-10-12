@@ -108,6 +108,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var cancelsSent: Set<Int> = []
     /// Stop losses to place again once the take profit blocking them is cancelled, by its order id.
     private var stopsAwaitingCancel: [Int: (symbol: String, price: Double)] = [:]
+    /// IB has sent every position / open order since connecting (positionEnd, openOrderEnd).
+    private var positionsLoaded = false
+    private var openOrdersLoaded = false
     private var fxReq: Int?
     private var fxBid: Double?
     private var fxAsk: Double?
@@ -324,6 +327,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         tickRefused.removeAll()
         tickLimit = nil
         stopsAwaitingCancel.removeAll()
+        positionsLoaded = false
+        openOrdersLoaded = false
         cancelsSent.removeAll()
         scanReqByOwner.removeAll()
         scanOwnerByReq.removeAll()
@@ -752,7 +757,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             return nil
         }
         let orderId = modifying ?? next
-        if modifying == nil { nextOrderId = next + 1 }
+        if modifying == nil {
+            nextOrderId = next + 1
+            forgetTags(orderId)
+        }
 
         let orderType = stop != nil && limit != nil ? "STP LMT" : (limit == nil ? "MKT" : "LMT")
         let triggerMethod = stop != nil ? 2 : 0                           // 2 = last trade
@@ -1062,8 +1070,40 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return (roundToTick(max(0.0001, action == "SELL" ? price - cushion : price + cushion)), price)
     }
 
+    /// Working stop loss / take profit orders in `symbol`. An order only counts if it still looks
+    /// like the one placed (same symbol and order type), so a reused id never passes for one.
     private func activeProtective(_ symbol: String) -> [Int: Protective] {
-        protectiveOrders.filter { $0.value.symbol == symbol && (orders[$0.key]?.isActive ?? false) }
+        protectiveOrders.filter { id, p in
+            guard p.symbol == symbol, let o = orders[id], o.isActive, o.symbol == symbol else { return false }
+            return o.orderType == (p.kind == .stopLoss ? "STP LMT" : "LMT")
+        }
+    }
+
+    /// A new order under an id the app has tagged before (IB's id sequence was reset, or another
+    /// client id used it) is a different order: drop the old stop loss / take profit / ⌥-click tags.
+    private func forgetTags(_ orderId: Int) {
+        if protectiveOrders[orderId] != nil {
+            protectiveOrders[orderId] = nil
+            saveProtective()
+        }
+        if chartOrderIds.contains(orderId) {
+            chartOrderIds.remove(orderId)
+            defaults.set(Array(chartOrderIds.sorted().suffix(500)), forKey: "chartOrderIds")
+        }
+    }
+
+    /// Once IB has sent all positions and open orders: a stop loss or take profit whose position
+    /// closed while the app wasn't watching (sold in TWS, say) would sit at IB as a lone SELL/BUY,
+    /// then be picked up and resized by the next position in that symbol. Cancel those.
+    private func cancelOrphanedProtective() {
+        guard positionsLoaded, openOrdersLoaded else { return }
+        let orphaned = Set(protectiveOrders.values.map(\.symbol)).filter { symbol in
+            positions[symbol] == nil && !activeProtective(symbol).isEmpty
+        }
+        guard !orphaned.isEmpty else { return }
+        for symbol in orphaned { syncProtective(symbol) }      // no position: cancels them
+        lastMessage = "Cancelled leftover stop loss / take profit orders with no position: "
+            + orphaned.sorted().joined(separator: ", ")
     }
 
     private func saveProtective() {
@@ -1249,7 +1289,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             checkReady()
         case 17: historicalData(f)
         case 20: scannerData(f)
+        case 53:
+            openOrdersLoaded = true
+            cancelOrphanedProtective()
         case 61: position(f)
+        case 62:
+            positionsLoaded = true
+            cancelOrphanedProtective()
         case 63: accountSummary(f)
         case 90: historicalDataUpdate(f)
         case 94: pnl(f)
