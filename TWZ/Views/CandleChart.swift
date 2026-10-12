@@ -9,6 +9,7 @@
 //  anywhere but an order line; double-clicking an order line cancels that order.
 //  Intraday charts shade the sessions outside regular hours: pre-market and after hours in grey,
 //  overnight in indigo.
+//  Indicators: SMA 9 and SMA 21 on every chart, plus VWAP (from 04:00 ET) on intraday charts.
 //
 
 import SwiftUI
@@ -327,6 +328,8 @@ struct CandleChart: View {
         plotCtx.fill(upBodies, with: .color(up))
         plotCtx.fill(downBodies, with: .color(down))
 
+        drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, plot: plot, x: x, y: y)
+
         // Position / order lines.
         for line in lines where line.price > lo && line.price < hi {
             drawLine(in: &ctx, y: y(line.price), plot: plot, color: line.color, dashed: line.dashed,
@@ -359,6 +362,82 @@ struct CandleChart: View {
                 drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor)
             }
         }
+    }
+
+    // MARK: Indicators
+
+    private static let vwapColor = Color.orange
+    private static let fastSMAColor = Color(red: 0.3, green: 0.65, blue: 1)
+    private static let slowSMAColor = Color(red: 0.75, green: 0.4, blue: 1)
+
+    /// VWAP (intraday only, from 04:00 ET), SMA 9 and SMA 21 over the visible bars, plus a legend
+    /// with their values at the latest visible bar.
+    private func drawIndicators(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, plot: CGRect,
+                                x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
+        func stroke(_ values: [Double?], color: Color, width: CGFloat, breakBefore: (Int) -> Bool = { _ in false }) {
+            var path = Path()
+            var drawing = false
+            for (offset, value) in values.enumerated() {
+                guard let value else { drawing = false; continue }
+                if breakBefore(start + offset) { drawing = false }
+                let point = CGPoint(x: x(start + offset), y: y(value))
+                if drawing { path.addLine(to: point) } else { path.move(to: point); drawing = true }
+            }
+            ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: width, lineJoin: .round))
+        }
+
+        var legend: [(String, Double?, Color)] = []
+        if chart.timeframe.isIntraday {
+            let vwap = Self.vwap(bars, start: start, end: end)
+            stroke(vwap, color: Self.vwapColor, width: 1.5) { i in i > 0 && bars[i].vwapDay != bars[i - 1].vwapDay }
+            legend.append(("VWAP", vwap.last ?? nil, Self.vwapColor))
+        }
+        let fast = Self.sma(bars, period: 9, start: start, end: end)
+        let slow = Self.sma(bars, period: 21, start: start, end: end)
+        stroke(slow, color: Self.slowSMAColor, width: 1.2)
+        stroke(fast, color: Self.fastSMAColor, width: 1.2)
+        legend.append(("SMA 9", fast.last ?? nil, Self.fastSMAColor))
+        legend.append(("SMA 21", slow.last ?? nil, Self.slowSMAColor))
+
+        var text = Text("")
+        for (index, (name, value, color)) in legend.enumerated() {
+            let item = Text("\(name) \(Fmt.price(value))").foregroundStyle(color)
+            text = index == 0 ? item : Text("\(text)   \(item)")
+        }
+        ctx.draw(text.font(.system(size: 9, weight: .semibold).monospacedDigit()),
+                 at: CGPoint(x: plot.minX + 6, y: plot.minY + 2), anchor: .topLeading)
+    }
+
+    /// Simple moving average of closes for bars start..<end; nil until `period` bars exist.
+    static func sma(_ bars: [Bar], period: Int, start: Int, end: Int) -> [Double?] {
+        var sum = 0.0
+        let from = max(0, start - period + 1)
+        var values: [Double?] = []
+        values.reserveCapacity(end - start)
+        for i in from..<end {
+            sum += bars[i].close
+            if i - from >= period { sum -= bars[i - period].close }
+            if i >= start { values.append(i + 1 >= period ? sum / Double(period) : nil) }
+        }
+        return values
+    }
+
+    /// Volume-weighted average of typical price ((H+L+C)/3), restarting each VWAP day, for bars start..<end.
+    static func vwap(_ bars: [Bar], start: Int, end: Int) -> [Double?] {
+        guard start < end else { return [] }
+        var from = start
+        while from > 0, bars[from - 1].vwapDay == bars[start].vwapDay { from -= 1 }
+        var pv = 0.0, volume = 0.0
+        var values: [Double?] = []
+        values.reserveCapacity(end - start)
+        for i in from..<end {
+            let b = bars[i]
+            if i > from, b.vwapDay != bars[i - 1].vwapDay { pv = 0; volume = 0 }
+            pv += (b.high + b.low + b.close) / 3 * b.volume
+            volume += b.volume
+            if i >= start { values.append(volume > 0 ? pv / volume : nil) }
+        }
+        return values
     }
 
     private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, tag: String) {

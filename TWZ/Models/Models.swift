@@ -14,6 +14,8 @@ nonisolated struct Bar: Equatable {
     var volume: Double
     /// Trading session the bar starts in; worked out once so the chart can shade sessions cheaply.
     var phase: MarketSession.Phase
+    /// Trading day the bar's VWAP accumulates into (see MarketSession.vwapDay).
+    var vwapDay: Int
 
     init(time: Date, open: Double, high: Double, low: Double, close: Double, volume: Double) {
         self.time = time
@@ -23,6 +25,7 @@ nonisolated struct Bar: Equatable {
         self.close = close
         self.volume = volume
         phase = MarketSession.phase(time)
+        vwapDay = MarketSession.vwapDay(time)
     }
 }
 
@@ -367,6 +370,13 @@ nonisolated enum MarketSession {
     /// True during regular US equity hours (09:30–16:00 ET, Mon–Fri).
     static func isRegularHours(_ date: Date = Date()) -> Bool {
         phase(date) == .regular
+    }
+
+    /// Day number for VWAP: days run 04:00–04:00 ET, so VWAP resets as pre-market opens and the
+    /// evening and overnight sessions continue the day before.
+    static func vwapDay(_ date: Date) -> Int {
+        let local = date.timeIntervalSince1970 + Double(eastern.secondsFromGMT(for: date)) - 4 * 3600
+        return Int((local / 86400).rounded(.down))
     }
 
     /// ET calendar day, "yyyyMMdd".
