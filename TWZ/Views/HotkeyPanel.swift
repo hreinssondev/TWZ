@@ -106,6 +106,15 @@ struct HotkeyPanel: View {
 private extension Hotkey {
     var tint: Color { (color ?? action.defaultColor).color }
 
+    /// One-line label for buttons too short for a subtitle: the price it sends at and the size,
+    /// e.g. "Mid 1000$", "Ask 100" or "MKT 500"; other actions keep their label.
+    var compactLabel: String {
+        guard action.needsSize else { return label }
+        let price = orderType == .market ? "MKT" : priceReference.label(isBuy: action == .buy)
+        let size = amount.formatted(.number.grouping(.never).precision(.fractionLength(0...2)))
+        return "\(price) \(size)\(sizing == .dollars ? "$" : "")"
+    }
+
     /// Compact description of what the button sends, e.g. "MKT" or "LMT Mid +0.02 · GTC".
     var subtitle: String {
         guard action.placesOrder else { return action.rawValue }
@@ -133,9 +142,11 @@ private struct HotkeyButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 1) {
-                Text(hotkey.label).font(.system(size: 12, weight: .bold))
                 if height >= Self.subtitleMinHeight {
+                    Text(hotkey.label).font(.system(size: 12, weight: .bold))
                     Text(hotkey.subtitle).font(.system(size: 9)).opacity(0.75)
+                } else {
+                    Text(hotkey.compactLabel).font(.system(size: 12, weight: .bold))
                 }
             }
             .lineLimit(1)
