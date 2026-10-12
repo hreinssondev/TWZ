@@ -139,7 +139,7 @@ struct OrdersPanel: View {
             .fill(color.opacity(0.7))
             .scaleEffect(x: fraction, y: 1, anchor: .leading)
             .background(color.opacity(0.12))
-            .frame(height: 2)
+            .frame(height: 3)
             .animation(.easeOut(duration: 0.25), value: fraction)
             .allowsHitTesting(false)
     }
