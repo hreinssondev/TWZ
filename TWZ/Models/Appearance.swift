@@ -42,11 +42,11 @@ enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
-        LineColors.stopLossKey, LineColors.takeProfitKey,
+        LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
-    ]
+    ] + LineDashes.keys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.
     static func reset() {
@@ -107,16 +107,40 @@ enum LineColors {
     static let hoverKey = "hoverPriceColor"
     static let stopLossKey = "stopLossLineColor"
     static let takeProfitKey = "takeProfitLineColor"
+    static let ordersKey = "orderLineColor"
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
     static let defaultAltClick = Color.purple
     static let defaultHover = Color.gray
     static let defaultStopLoss = Color.red
     static let defaultTakeProfit = Color.green
+    static let defaultOrders = Color.orange
 
     static func resolve(_ hex: String, default fallback: Color) -> Color {
         Color(hex: hex) ?? fallback
     }
+}
+
+/// Whether each chart line is dashed (true) or solid, picked in Settings.
+enum LineDashes {
+    static let lastPriceKey = "lastPriceLineDashed"
+    static let avgCostKey = "avgCostLineDashed"
+    static let altClickKey = "altClickLineDashed"
+    static let hoverKey = "hoverLineDashed"
+    static let stopLossKey = "stopLossLineDashed"
+    static let takeProfitKey = "takeProfitLineDashed"
+    static let ordersKey = "orderLineDashed"
+    static let lastTradeKey = "lastTradeLineDashed"
+    static let keys = [lastPriceKey, avgCostKey, altClickKey, hoverKey, stopLossKey, takeProfitKey, ordersKey, lastTradeKey]
+
+    static let defaultLastPrice = true
+    static let defaultAvgCost = false
+    static let defaultAltClick = false
+    static let defaultHover = true
+    static let defaultStopLoss = false
+    static let defaultTakeProfit = false
+    static let defaultOrders = true
+    static let defaultLastTrade = true
 }
 
 /// Preset colors a hotkey button can use instead of its action's default.

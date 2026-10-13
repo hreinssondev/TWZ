@@ -158,6 +158,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.hoverKey) private var hoverHex = ""
     @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
     @AppStorage(LineColors.takeProfitKey) private var takeProfitHex = ""
+    @AppStorage(LineColors.ordersKey) private var ordersHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
@@ -197,17 +198,29 @@ private struct AppearanceSettings: View {
             }
             Section("Chart lines") {
                 lineColorRow("Last price", key: LineColors.lastPriceKey, hex: $lastPriceHex,
-                             default: LineColors.defaultLastPrice)
+                             default: LineColors.defaultLastPrice,
+                             dashedKey: LineDashes.lastPriceKey, dashedDefault: LineDashes.defaultLastPrice)
                 lineColorRow("Average position", key: LineColors.avgCostKey, hex: $avgCostHex,
-                             default: LineColors.defaultAvgCost)
+                             default: LineColors.defaultAvgCost,
+                             dashedKey: LineDashes.avgCostKey, dashedDefault: LineDashes.defaultAvgCost)
+                lineColorRow("Orders", key: LineColors.ordersKey, hex: $ordersHex,
+                             default: LineColors.defaultOrders,
+                             dashedKey: LineDashes.ordersKey, dashedDefault: LineDashes.defaultOrders)
                 lineColorRow("⌥-click orders", key: LineColors.altClickKey, hex: $altClickHex,
-                             default: LineColors.defaultAltClick)
+                             default: LineColors.defaultAltClick,
+                             dashedKey: LineDashes.altClickKey, dashedDefault: LineDashes.defaultAltClick)
                 lineColorRow("Hover price", key: LineColors.hoverKey, hex: $hoverHex,
-                             default: LineColors.defaultHover)
+                             default: LineColors.defaultHover,
+                             dashedKey: LineDashes.hoverKey, dashedDefault: LineDashes.defaultHover)
                 lineColorRow("Stop loss (⌃-click)", key: LineColors.stopLossKey, hex: $stopLossHex,
-                             default: LineColors.defaultStopLoss)
+                             default: LineColors.defaultStopLoss,
+                             dashedKey: LineDashes.stopLossKey, dashedDefault: LineDashes.defaultStopLoss)
                 lineColorRow("Take profit (⌃-click)", key: LineColors.takeProfitKey, hex: $takeProfitHex,
-                             default: LineColors.defaultTakeProfit)
+                             default: LineColors.defaultTakeProfit,
+                             dashedKey: LineDashes.takeProfitKey, dashedDefault: LineDashes.defaultTakeProfit)
+                LabeledContent("Last trade (Exit / Avg)") {
+                    LineStylePicker(key: LineDashes.lastTradeKey, default: LineDashes.defaultLastTrade)
+                }
             }
             Section("Indicators") {
                 Toggle("VWAP (intraday charts)", isOn: $showVWAP)
@@ -276,15 +289,37 @@ private struct AppearanceSettings: View {
         .formStyle(.grouped)
     }
 
-    /// Color swatch plus a Reset button while a custom color is set (empty hex = default).
-    private func lineColorRow(_ title: String, key: String, hex: Binding<String>, default fallback: Color) -> some View {
+    /// Color swatch, solid / dashed switch, and a Reset button while a custom color is set (empty hex = default).
+    private func lineColorRow(_ title: String, key: String, hex: Binding<String>, default fallback: Color,
+                              dashedKey: String, dashedDefault: Bool) -> some View {
         HStack {
             ColorWell(title: title, key: key, color: LineColors.resolve(hex.wrappedValue, default: fallback))
+            LineStylePicker(key: dashedKey, default: dashedDefault)
             if !hex.wrappedValue.isEmpty {
                 Button("Reset") { hex.wrappedValue = "" }
                     .controlSize(.small)
             }
         }
+    }
+}
+
+/// Solid / dashed switch for the chart line whose style is stored under `key`.
+private struct LineStylePicker: View {
+    @AppStorage private var dashed: Bool
+
+    init(key: String, default dashedDefault: Bool) {
+        _dashed = AppStorage(wrappedValue: dashedDefault, key)
+    }
+
+    var body: some View {
+        Picker("", selection: $dashed) {
+            Text("Solid").tag(false)
+            Text("Dashed").tag(true)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .fixedSize()
     }
 }
 

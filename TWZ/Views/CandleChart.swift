@@ -53,6 +53,8 @@ struct CandleChart: View {
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.hoverKey) private var hoverHex = ""
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
+    @AppStorage(LineDashes.lastPriceKey) private var lastPriceDashed = LineDashes.defaultLastPrice
+    @AppStorage(LineDashes.hoverKey) private var hoverDashed = LineDashes.defaultHover
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
@@ -368,10 +370,10 @@ struct CandleChart: View {
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice }.forEach(draw)
 
-        // Last price: dotted, color from Settings.
+        // Last price: color and dashes from Settings.
         if let last {
             drawLine(in: &ctx, y: y(last), plot: plot,
-                     color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: true,
+                     color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: lastPriceDashed,
                      tag: Fmt.price(last), tagOpacity: lastPriceOpacity)
         }
         visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
@@ -381,7 +383,7 @@ struct CandleChart: View {
             var cross = Path()
             cross.move(to: CGPoint(x: plot.minX, y: hover.y)); cross.addLine(to: CGPoint(x: plot.maxX, y: hover.y))
             let hoverColor = LineColors.resolve(hoverHex, default: LineColors.defaultHover)
-            ctx.stroke(cross, with: .color(hoverColor.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            ctx.stroke(cross, with: .color(hoverColor.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: hoverDashed ? [3, 3] : []))
             if priceRect.contains(hover) {
                 let hoverPrice = v.price(at: hover.y)
                 // Holding ⌥ turns the price tag the ⌥-click order color: an alt-click buys there.
