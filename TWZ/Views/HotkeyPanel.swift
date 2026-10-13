@@ -223,7 +223,7 @@ private struct OrderAmountBox: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if height >= 64 {
-                Text("⌥-click buy · NOK")
+                Text("⌥-click buy")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
