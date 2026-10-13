@@ -436,13 +436,11 @@ struct CandleChart: View {
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice }.forEach(draw)
 
-        // Last price: color and dashes from Settings; the line runs from the live candle body's right
-        // edge to the axis.
+        // Last price: color and dashes from Settings.
         if let last {
             drawLine(in: &ctx, y: y(last), plot: plot,
                      color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: lastPriceDashed,
-                     tag: Fmt.price(last), tagOpacity: lastPriceOpacity,
-                     fromX: max(plot.minX, x(bars.count - 1) + bodyWidth / 2))
+                     tag: Fmt.price(last), tagOpacity: lastPriceOpacity)
         }
         visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
 
@@ -534,14 +532,11 @@ struct CandleChart: View {
     }
 
     private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, tag: String,
-                          tagOpacity: Double = 1, tagInside: Bool = false, fromX: CGFloat? = nil) {
-        let startX = fromX ?? plot.minX
-        if startX < plot.maxX {
-            var path = Path()
-            path.move(to: CGPoint(x: startX, y: y))
-            path.addLine(to: CGPoint(x: plot.maxX, y: y))
-            ctx.stroke(path, with: .color(color.opacity(0.8)), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
-        }
+                          tagOpacity: Double = 1, tagInside: Bool = false) {
+        var path = Path()
+        path.move(to: CGPoint(x: plot.minX, y: y))
+        path.addLine(to: CGPoint(x: plot.maxX, y: y))
+        ctx.stroke(path, with: .color(color.opacity(0.8)), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
         drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside)
     }
 
