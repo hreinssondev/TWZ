@@ -468,7 +468,34 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             q.ask = o.ask ?? q.ask
             q.last = o.last ?? q.last
         }
+        let oldLast = quotes[symbol]?.last
         if quotes[symbol] != q { quotes[symbol] = q }
+        if let last = q.last, last != oldLast { followLast(symbol, price: last) }
+    }
+
+    /// Moves the live candle of every chart showing `symbol` to the latest price as soon as it's
+    /// known, so the candle never trails the last price line (the market data feed can report a
+    /// trade before the tick-by-tick stream, and charts past IB's tick-by-tick limit have no
+    /// trade stream at all). New candles still start from trades or IB's bar updates.
+    private func followLast(_ symbol: String, price: Double) {
+        let now = Date()
+        for c in charts.values where c.symbol == symbol && !c.isLoading {
+            guard let i = c.bars.indices.last else { continue }
+            let start: Date
+            if let seconds = c.timeframe.barSeconds {
+                start = Date(timeIntervalSince1970: (now.timeIntervalSince1970 / seconds).rounded(.down) * seconds)
+            } else {
+                guard phase == .regular else { continue }
+                start = Self.easternCalendar.startOfDay(for: now)
+            }
+            var bar = c.bars[i]
+            guard bar.time == start, bar.close != price else { continue }
+            bar.high = max(bar.high, price)
+            bar.low = min(bar.low, price)
+            bar.close = price
+            c.bars[i] = bar
+            chartChanged(c, from: start)
+        }
     }
 
     private func scheduleNoDataCheck() {
@@ -1588,12 +1615,17 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if c.bars[lastIndex].time < time {
             c.bars.append(bar)
         } else if let i = c.bars[max(0, lastIndex - 2)...].lastIndex(where: { $0.time == time }) {
+            // IB's bar update can be older than the trades and prices already folded in; keep those.
+            let current = c.bars[i]
             if isStreamingTrades(c.symbol) {
-                let current = c.bars[i]
                 bar.high = max(bar.high, current.high)
                 bar.low = min(bar.low, current.low)
                 bar.volume = max(bar.volume, current.volume)
                 if i == lastIndex { bar.close = current.close }
+            } else if i == lastIndex {
+                bar.high = max(bar.high, current.high)
+                bar.low = min(bar.low, current.low)
+                if let last = quotes[c.symbol]?.last { bar.close = last }
             }
             c.bars[i] = bar
         } else {
