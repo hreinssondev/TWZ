@@ -3,6 +3,7 @@
 //  TWZ
 //
 //  Two-row grid (6 × 2 by default) of configurable order buttons acting on the selected chart's symbol.
+//  Clicking a button selects it; ⌘A sends the selected one (see TradingShortcuts).
 //  Click the "Hotkeys" title to customize them all, or right-click a button to edit just that one.
 //  Beside them, the NOK amount that ⌥-clicking a chart buys.
 //
@@ -63,9 +64,11 @@ struct HotkeyPanel: View {
                 HStack(spacing: Self.spacing) {
                     LazyVGrid(columns: Self.gridColumns(workspace.hotkeys.count), spacing: Self.spacing) {
                         ForEach(Array(workspace.hotkeys.enumerated()), id: \.element.id) { index, hotkey in
-                            HotkeyButton(hotkey: hotkey, height: height, firesOnPress: true) {
-                                broker.run(hotkey, symbol: workspace.selectedChart.symbol)
+                            HotkeyButton(hotkey: hotkey, height: height,
+                                         selected: hotkey.id == workspace.selectedHotkeyID, firesOnPress: true) {
+                                workspace.selectedHotkeyID = hotkey.id
                             }
+                            .help("Click to select · ⌘A sends it · ⌘S closes 100% at market")
                             .contextMenu {
                                 Button("Edit…") { editing = index }
                             }

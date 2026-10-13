@@ -37,6 +37,11 @@ final class Workspace {
     var selectedChartIndex = 0
 
     var hotkeys: [Hotkey] { didSet { save() } }
+    /// The hotkey ⌘A sends; picked by clicking a hotkey button.
+    var selectedHotkeyID: UUID? {
+        didSet { defaults.set(selectedHotkeyID?.uuidString, forKey: "selectedHotkey") }
+    }
+    var selectedHotkey: Hotkey? { hotkeys.first { $0.id == selectedHotkeyID } }
     /// Scanner filters per list panel and scanner, keyed "panelId|scanner".
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
 
@@ -63,6 +68,8 @@ final class Workspace {
         } else {
             hotkeys = Hotkey.defaults
         }
+
+        selectedHotkeyID = defaults.string(forKey: "selectedHotkey").flatMap(UUID.init(uuidString:))
 
         if let data = defaults.data(forKey: "scanFilters"),
            let filters = try? JSONDecoder().decode([String: ScannerFilter].self, from: data) {
