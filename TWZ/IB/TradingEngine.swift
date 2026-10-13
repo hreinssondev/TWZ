@@ -477,14 +477,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         let oldLast = quotes[symbol]?.last
         if quotes[symbol] != q { quotes[symbol] = q }
-        if let last = q.last, last != oldLast { followLast(symbol, price: last) }
+        if let last = q.last, last != oldLast { followLast(symbol, price: last, isTrade: oldLast != nil) }
     }
 
     /// Moves the live candle of every chart showing `symbol` to the latest price as soon as it's
     /// known, so the candle never trails the last price line (the market data feed can report a
     /// trade before the tick-by-tick stream, and charts past IB's tick-by-tick limit have no
-    /// trade stream at all). New candles still start from trades or IB's bar updates.
-    private func followLast(_ symbol: String, price: Double) {
+    /// trade stream at all). A changed price (`isTrade`) in a new period starts its candle; the first
+    /// quote after subscribing doesn't, as that trade may be from long before.
+    private func followLast(_ symbol: String, price: Double, isTrade: Bool) {
         let now = Date()
         for c in charts.values where c.symbol == symbol && !c.isLoading {
             guard let i = c.bars.indices.last else { continue }
@@ -496,6 +497,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 start = Self.easternCalendar.startOfDay(for: now)
             }
             var bar = c.bars[i]
+            if bar.time < start, isTrade {
+                c.bars.append(Bar(time: start, open: price, high: price, low: price, close: price, volume: 0))
+                chartChanged(c, from: start)
+                continue
+            }
             guard bar.time == start, bar.close != price else { continue }
             bar.high = max(bar.high, price)
             bar.low = min(bar.low, price)

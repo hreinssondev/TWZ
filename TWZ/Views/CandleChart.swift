@@ -436,13 +436,13 @@ struct CandleChart: View {
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice }.forEach(draw)
 
-        // Last price: color and dashes from Settings; the line runs from the live candle's right edge
-        // to the axis.
+        // Last price: color and dashes from Settings; the line runs from the live candle body's right
+        // edge to the axis.
         if let last {
             drawLine(in: &ctx, y: y(last), plot: plot,
                      color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: lastPriceDashed,
                      tag: Fmt.price(last), tagOpacity: lastPriceOpacity,
-                     fromX: max(plot.minX, x(bars.count - 1) + barWidth / 2))
+                     fromX: max(plot.minX, x(bars.count - 1) + bodyWidth / 2))
         }
         visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
 
