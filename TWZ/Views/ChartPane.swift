@@ -25,7 +25,6 @@ struct ChartPane: View {
     @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
-    @AppStorage(TopBar.positionColorKey) private var topBarHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @State private var symbolText = ""
@@ -35,11 +34,11 @@ struct ChartPane: View {
 
     private var isSelected: Bool { workspace.selectedChartIndex == chart.id }
     private var quote: Quote? { broker.quotes[chart.symbol] }
-    private var hasPosition: Bool { (broker.positions[chart.symbol]?.quantity ?? 0) != 0 }
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            Divider().opacity(0.5)
             CandleChart(
                 chart: chart, lastPrice: quote?.last, lines: priceLines,
                 onAltClick: { price in
@@ -133,8 +132,6 @@ struct ChartPane: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
-        // Tinted while a position is open in the symbol.
-        .background(hasPosition ? LineColors.resolve(topBarHex, default: TopBar.defaultPositionColor).opacity(TopBar.opacity) : .clear)
     }
 
     private struct SymbolOrders: Equatable {
