@@ -4,6 +4,8 @@
 //
 //  Drag handle between two panes. Shows a resize cursor on hover, drags a size
 //  in points (clamped to a range) and resets to the default on double-click.
+//  A collapsible pane snaps shut (size 0) when dragged more than halfway below its minimum,
+//  and opens again when dragged back past that point.
 //
 
 import SwiftUI
@@ -23,6 +25,8 @@ struct ResizeHandle: View {
     let range: ClosedRange<CGFloat>
     /// True when dragging right/down should shrink the size (the pane sits after the handle).
     var inverted = false
+    /// Dragging well below the range's minimum collapses the pane to 0.
+    var collapsible = false
     let onChange: (CGFloat) -> Void
     let onReset: () -> Void
 
@@ -58,7 +62,11 @@ struct ResizeHandle: View {
                     dragStart = start
                     let delta = vertical ? value.translation.height : value.translation.width
                     let size = start + (inverted ? -delta : delta)
-                    onChange(min(range.upperBound, max(range.lowerBound, size)))
+                    if collapsible, size < range.lowerBound / 2 {
+                        onChange(0)
+                    } else {
+                        onChange(min(range.upperBound, max(range.lowerBound, size)))
+                    }
                 }
                 .onEnded { _ in dragStart = nil }
         )

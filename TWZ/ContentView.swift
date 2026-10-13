@@ -14,13 +14,15 @@
 //  charts ↕ hotkeys, left column ↔ right column, list A ↔ list B, lists ↕ orders, and
 //  the Orders / Filled / Positions columns ↕ round trips. The ● where the four charts meet drags the
 //  chart column and row splits together. The hotkey buttons keep a fixed size while there's
-//  room (the free space around them changes); dragged shorter, they and the amount box shrink.
+//  room (the free space around them changes); dragged shorter, they and the amount box shrink,
+//  and dragged on down the hotkey row collapses, giving the charts the space (drag up to bring it back).
 //
 
 import SwiftUI
 
 struct ContentView: View {
     @Environment(Workspace.self) private var workspace
+    /// 0 = the hotkey row is collapsed.
     @AppStorage("bottomRowHeight") private var bottomHeight: Double = 190
     @AppStorage("sideWidth") private var storedSideWidth: Double = 0      // 0 = default (a third)
     @AppStorage("listSplit") private var listSplit: Double = 0.5          // left list's share of the lists
@@ -43,7 +45,7 @@ struct ContentView: View {
 
                 let minBottom = HotkeyPanel.minHeight
                 let maxBottom = max(minBottom, inner.height - gap - Self.minTopHeight)
-                let rowHeight = clamp(bottomHeight, minBottom...maxBottom)
+                let rowHeight = bottomHeight <= 0 ? 0 : clamp(bottomHeight, minBottom...maxBottom)
 
                 let minSide = Self.minListWidth * 2 + gap
                 let maxSide = max(minSide, inner.width - gap - Self.minChartsWidth)
@@ -61,10 +63,12 @@ struct ContentView: View {
                     VStack(spacing: 0) {
                         ChartGrid(gap: gap)
                         ResizeHandle(resizes: .vertical, thickness: gap, current: rowHeight,
-                                     range: minBottom...maxBottom, inverted: true,
+                                     range: minBottom...maxBottom, inverted: true, collapsible: true,
                                      onChange: { bottomHeight = $0 }, onReset: { bottomHeight = 190 })
-                        HotkeyPanel()
-                            .frame(height: rowHeight)
+                        if rowHeight > 0 {
+                            HotkeyPanel()
+                                .frame(height: rowHeight)
+                        }
                     }
                     ResizeHandle(resizes: .horizontal, thickness: gap, current: sideWidth,
                                  range: minSide...maxSide, inverted: true,
