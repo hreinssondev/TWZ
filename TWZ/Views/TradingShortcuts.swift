@@ -8,7 +8,8 @@
 //  keyboards (⌥⇧, on US ones).
 //  In the main window (not while a sheet or popover is open): a hotkey's own keyboard shortcut
 //  sends that hotkey; ⌘A sends the selected hotkey (while typing in a text field it stays Select
-//  All); ⌘S closes 100% of the selected chart's position at market. All for the selected chart's
+//  All); ⌘S closes 100% of the selected chart's position at market; ⌘Z, like ⌥Z, cancels the last
+//  order placed (while typing in a text field it stays Undo). All for the selected chart's
 //  symbol. While typing in a text field, shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  Nothing fires while a shortcut is being recorded.
 //
@@ -49,6 +50,9 @@ struct TradingShortcuts: ViewModifier {
                                 NSSound.beep()
                             }
                         case "s": broker.run(.closeAllMarket, symbol: symbol)
+                        case "z":
+                            if window.firstResponder is NSTextView { return event }
+                            broker.cancelLastOrder()
                         default: return event
                         }
                         return nil
@@ -86,7 +90,8 @@ extension KeyShortcut {
         if command, !option, !control {
             if k == "a" { return "⌘A sends the selected hotkey" }
             if k == "s" { return "⌘S closes 100% at market" }
-            if ["q", "w", "h", "m", ",", "c", "v", "x", "z"].contains(k) { return "\(display) is a standard macOS shortcut" }
+            if k == "z" { return "⌘Z cancels the last order" }
+            if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }
         if option, !command, !control, k == "z" || k == "<" { return "\(display) cancels orders" }
         return nil
