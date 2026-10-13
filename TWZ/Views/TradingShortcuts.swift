@@ -6,11 +6,12 @@
 //  ⌥Z cancels the last order placed; ⌥< cancels every order in the selected chart's symbol,
 //  stop loss and take profit included. Matched by character, so ⌥< is the < key on Nordic
 //  keyboards (⌥⇧, on US ones).
-//  In the main window (not while a sheet or popover is open): a hotkey's own keyboard shortcut
-//  sends that hotkey; ⌘A sends the selected hotkey (while typing in a text field it stays Select
-//  All); ⌘S closes 100% of the selected chart's position at market; ⌘Z, like ⌥Z, cancels the last
-//  order placed (while typing in a text field it stays Undo). All for the selected chart's
-//  symbol. While typing in a text field, shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
+//  In the main window (not while a sheet or popover is open), for the selected chart's symbol:
+//  a hotkey's own keyboard shortcut sends that hotkey; ⌘↩ sends the selected hotkey; ⌘A, like ⌥<,
+//  cancels every order in the symbol, stop loss and take profit included; ⌘S closes 100% of the
+//  position at market; ⌘Z, like ⌥Z, cancels the last order placed.
+//  While typing in a text field, ⌘↩ does nothing, ⌘A / ⌘Z stay Select All / Undo, and shortcuts
+//  without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  Nothing fires while a shortcut is being recorded.
 //
 
@@ -41,17 +42,24 @@ struct TradingShortcuts: ViewModifier {
                     }
                     if modifiers == .command, inMainWindow, let window = event.window {
                         let symbol = workspace.selectedChart.symbol
-                        switch event.charactersIgnoringModifiers?.lowercased() {
-                        case "a":
-                            if window.firstResponder is NSTextView { return event }
+                        let typing = window.firstResponder is NSTextView
+                        // ⌘↩ (Return or keypad Enter): a symbol still being typed isn't the chart's yet.
+                        if event.keyCode == 36 || event.keyCode == 76 {
+                            if typing { return event }
                             if let hotkey = workspace.selectedHotkey {
                                 broker.run(hotkey, symbol: symbol)
                             } else {
                                 NSSound.beep()
                             }
+                            return nil
+                        }
+                        switch event.charactersIgnoringModifiers?.lowercased() {
+                        case "a":
+                            if typing { return event }
+                            broker.cancelOrders(for: symbol)
                         case "s": broker.run(.closeAllMarket, symbol: symbol)
                         case "z":
-                            if window.firstResponder is NSTextView { return event }
+                            if typing { return event }
                             broker.cancelLastOrder()
                         default: return event
                         }
@@ -88,7 +96,8 @@ extension KeyShortcut {
     var reservedFor: String? {
         let k = key.lowercased()
         if command, !option, !control {
-            if k == "a" { return "⌘A sends the selected hotkey" }
+            if keyCode == 36 || keyCode == 76 { return "⌘↩ sends the selected hotkey" }
+            if k == "a" { return "⌘A cancels the symbol's orders" }
             if k == "s" { return "⌘S closes 100% at market" }
             if k == "z" { return "⌘Z cancels the last order" }
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }

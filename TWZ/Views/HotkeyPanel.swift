@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  Two-row grid (6 × 2 by default) of configurable order buttons acting on the selected chart's symbol.
-//  Clicking a button selects it; ⌘A sends the selected one (see TradingShortcuts).
+//  Clicking a button selects it; ⌘↩ sends the selected one (see TradingShortcuts).
 //  Click the "Hotkeys" title to customize them all, or right-click a button to edit just that one.
 //  Beside them, the NOK amount that ⌥-clicking a chart buys.
 //
@@ -68,7 +68,7 @@ struct HotkeyPanel: View {
                                          selected: hotkey.id == workspace.selectedHotkeyID, firesOnPress: true) {
                                 workspace.selectedHotkeyID = hotkey.id
                             }
-                            .help("Click to select · ⌘A sends it" + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
+                            .help("Click to select · ⌘↩ sends it" + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
                                   + " · ⌘S closes 100% at market")
                             .contextMenu {
                                 Button("Edit…") { editing = index }
