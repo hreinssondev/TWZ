@@ -73,6 +73,7 @@ struct CandleChart: View {
     private var tagHeight: CGFloat { axisFontSize + 6 }
     private let timeAxisHeight: CGFloat = 16
     private let rightPaddingBars = 3.0
+    private let defaultVisibleBars = 120.0
 
     var body: some View {
         GeometryReader { geo in
@@ -125,7 +126,40 @@ struct CandleChart: View {
     // MARK: Viewport
 
     private func barWidth(plotWidth: CGFloat) -> CGFloat {
-        plotWidth / (chart.visibleBars + rightPaddingBars)
+        plotWidth / (chart.visibleBars + rightPadding(restOfDay))
+    }
+
+    /// The rest of today's extended session after the last intraday bar, as empty slots to its right.
+    private struct RestOfDay {
+        var from: Date                // where the first empty slot starts
+        var barSeconds: Double
+        var sessions: [(start: Date, end: Date, phase: MarketSession.Phase)]
+        var slots: Int                // empty slots up to 20:00 ET
+        var todayBars: Int            // bars since 04:00 ET
+
+        /// Fractional bar index of a time in the empty slots.
+        func index(_ time: Date, barCount: Int) -> Double {
+            Double(barCount) + time.timeIntervalSince(from) / barSeconds
+        }
+    }
+
+    private var restOfDay: RestOfDay? {
+        let bars = chart.bars
+        guard let seconds = chart.timeframe.barSeconds, let last = bars.last else { return nil }
+        let from = last.time.addingTimeInterval(seconds)
+        let sessions = MarketSession.restOfDay(from: from)
+        guard let end = sessions.last?.end else { return nil }
+        let todayBars = bars.reversed().prefix { $0.vwapDay == last.vwapDay }.count
+        return RestOfDay(from: from, barSeconds: seconds, sessions: sessions,
+                         slots: Int((end.timeIntervalSince(from) / seconds).rounded(.up)), todayBars: todayBars)
+    }
+
+    /// Empty slots right of the last bar: a few normally; zooming out past today's bars (and the default
+    /// zoom) uses the room for the rest of the day, until all of it through after hours (20:00 ET) is on screen.
+    private func rightPadding(_ rest: RestOfDay?) -> Double {
+        guard let rest else { return rightPaddingBars }
+        return min(max(rightPaddingBars, Double(rest.slots)),
+                   max(rightPaddingBars, chart.visibleBars - max(Double(rest.todayBars), defaultVisibleBars)))
     }
 
     /// Clamped write: never past the oldest bars, and at most half a screen into the future.
@@ -142,18 +176,19 @@ struct CandleChart: View {
     /// Scales the number of visible bars by `factor`, keeping the bar under `anchorX` in place.
     private func zoom(by factor: Double, at anchorX: CGFloat, plotWidth: CGFloat) {
         let x = min(plotWidth, max(0, anchorX))
-        let oldWidth = barWidth(plotWidth: plotWidth)
+        let rest = restOfDay
+        let oldWidth = barWidth(plotWidth: plotWidth), oldPadding = rightPadding(rest)
         // Zooms out as far as all the loaded bars (at least 600).
         chart.visibleBars = min(max(600, Double(chart.bars.count)), max(15, chart.visibleBars * factor))
-        let newWidth = barWidth(plotWidth: plotWidth)
+        let newWidth = barWidth(plotWidth: plotWidth), newPadding = rightPadding(rest)
         let fromRight = Double(plotWidth - x)
-        setScrollBack(chart.scrollBack + fromRight / oldWidth - fromRight / newWidth)
+        setScrollBack(chart.scrollBack + (newPadding - oldPadding) + fromRight / oldWidth - fromRight / newWidth)
     }
 
     /// Latest bars at the right edge, default zoom, price range fitted to the bars again.
     private func resetView() {
         chart.scrollBack = 0
-        chart.visibleBars = 120
+        chart.visibleBars = defaultVisibleBars
         chart.priceShift = 0
     }
 
@@ -185,6 +220,7 @@ struct CandleChart: View {
         var end: Int
         var lo: Double
         var hi: Double
+        var rest: RestOfDay?
 
         func y(_ price: Double) -> CGFloat {
             priceRect.maxY - CGFloat((price - lo) / (hi - lo)) * priceRect.height
@@ -206,11 +242,13 @@ struct CandleChart: View {
         guard plot.width > 20, plot.height > 20, !bars.isEmpty else { return nil }
 
         // Visible window, anchored to the right edge. scrollBack is fractional so panning is smooth.
-        let slots = chart.visibleBars + rightPaddingBars
+        let rest = restOfDay
+        let padding = rightPadding(rest)
+        let slots = chart.visibleBars + padding
         let barWidth = plot.width / slots
         let anchor = Double(bars.count) - chart.scrollBack
-        let anchorX = plot.maxX - CGFloat(rightPaddingBars) * barWidth
-        let end = min(bars.count, max(1, Int((anchor + rightPaddingBars).rounded(.up))))
+        let anchorX = plot.maxX - CGFloat(padding) * barWidth
+        let end = min(bars.count, max(1, Int((anchor + padding).rounded(.up))))
         let start = min(end - 1, max(0, Int((anchor - chart.visibleBars).rounded(.down))))
         let visible = bars[start..<end]
 
@@ -227,7 +265,7 @@ struct CandleChart: View {
         let shift = (hi - lo) * chart.priceShift
         lo += shift; hi += shift
         return Viewport(plot: plot, priceRect: priceRect, volumeHeight: volumeHeight, barWidth: barWidth,
-                        anchor: anchor, anchorX: anchorX, start: start, end: end, lo: lo, hi: hi)
+                        anchor: anchor, anchorX: anchorX, start: start, end: end, lo: lo, hi: hi, rest: rest)
     }
 
     /// The order line closest to `point` vertically, if one is within a few points of it.
@@ -290,6 +328,18 @@ struct CandleChart: View {
                 }
                 i = j + 1
             }
+            // The rest of today, still to come.
+            if let rest = v.rest {
+                func edge(_ t: Date) -> CGFloat {
+                    anchorX - CGFloat(anchor - rest.index(t, barCount: bars.count)) * barWidth
+                }
+                for session in rest.sessions {
+                    guard let tint = Self.sessionTint(session.phase) else { continue }
+                    let left = edge(session.start)
+                    plotCtx.fill(Path(CGRect(x: left, y: plot.minY, width: edge(session.end) - left, height: plot.height)),
+                                 with: .color(tint))
+                }
+            }
         }
 
         // Horizontal grid + price labels.
@@ -318,6 +368,19 @@ struct CandleChart: View {
             plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
             plotCtx.draw(Text(timeLabel(bars[i].time)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
                      at: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1))
+        }
+        if let rest = v.rest {
+            for k in 0..<rest.slots where (bars.count + k) % labelEvery == 0 {
+                let xx = x(bars.count + k)
+                guard xx > plot.minX, xx < plot.maxX else { continue }
+                var path = Path()
+                path.move(to: CGPoint(x: xx, y: plot.minY))
+                path.addLine(to: CGPoint(x: xx, y: plot.maxY))
+                plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
+                let time = rest.from.addingTimeInterval(Double(k) * rest.barSeconds)
+                plotCtx.draw(Text(timeLabel(time)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
+                             at: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1))
+            }
         }
 
         // Volume.

@@ -448,6 +448,18 @@ nonisolated enum MarketSession {
         }
     }
 
+    /// What's left of the extended trading day (04:00–20:00 ET) from `date` on, session by session;
+    /// empty outside pre-market, regular and after hours.
+    static func restOfDay(from date: Date) -> [(start: Date, end: Date, phase: Phase)] {
+        guard [.preMarket, .regular, .afterHours].contains(phase(date)) else { return [] }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = eastern
+        func at(_ h: Int, _ m: Int) -> Date? { cal.date(bySettingHour: h, minute: m, second: 0, of: date) }
+        guard let pre = at(4, 0), let open = at(9, 30), let close = at(16, 0), let end = at(20, 0) else { return [] }
+        return [(pre, open, Phase.preMarket), (open, close, .regular), (close, end, .afterHours)]
+            .compactMap { s, e, p in max(s, date) < e ? (max(s, date), e, p) : nil }
+    }
+
     /// True during regular US equity hours (09:30–16:00 ET, Mon–Fri).
     static func isRegularHours(_ date: Date = Date()) -> Bool {
         phase(date) == .regular
