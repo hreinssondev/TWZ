@@ -930,6 +930,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "Not connected to IB Gateway"
             return
         }
+        // No chart selected (or no symbol in it): only the account-wide actions have something to do.
+        if symbol.isEmpty, hotkey.action != .cancelAll, hotkey.action != .flattenAll {
+            lastMessage = "Select a chart with a symbol first"
+            return
+        }
 
         switch hotkey.action {
         case .cancelAll:

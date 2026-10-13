@@ -154,7 +154,7 @@ struct ListPanel: View {
     private func row(_ symbol: String) -> some View {
         let values = rowValues[symbol]
         let change = values?.change
-        let isCharted = workspace.selectedChart.symbol == symbol
+        let isCharted = workspace.targetSymbol == symbol
         let unavailable = broker.unavailableQuotes[symbol]
         return HStack(spacing: 4) {
             Text(symbol).fontWeight(.semibold)
@@ -174,7 +174,7 @@ struct ListPanel: View {
         .help(unavailable.map { "No real-time data: \($0)" } ?? "")
         .contentShape(Rectangle())
         .onTapGesture {
-            workspace.load(symbol, into: workspace.selectedChart, broker: broker)
+            workspace.loadIntoSelectedChart(symbol, broker: broker)
         }
         .contextMenu {
             ForEach(workspace.charts) { chart in

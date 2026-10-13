@@ -36,7 +36,11 @@ final class ChartModel: Identifiable {
 @Observable
 final class Workspace {
     let charts: [ChartModel]
-    var selectedChartIndex = 0
+    /// The selected chart, or the last one selected while none is (see `isChartSelected`).
+    var selectedChartIndex = 0 { didSet { isChartSelected = true } }
+    /// False after clicking empty space in the Orders or Positions column: no chart is selected, so
+    /// hotkeys and order shortcuts have no symbol to act on until a chart is selected again.
+    var isChartSelected = true
 
     var hotkeys: [Hotkey] { didSet { save() } }
     /// The hotkey ⌘A sends; picked by clicking a hotkey button.
@@ -48,6 +52,8 @@ final class Workspace {
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
 
     var selectedChart: ChartModel { charts[selectedChartIndex] }
+    /// The symbol orders go to: the selected chart's, or "" with no chart selected (nothing is sent).
+    var targetSymbol: String { isChartSelected ? selectedChart.symbol : "" }
 
     @ObservationIgnored private let defaults = UserDefaults.standard
 

@@ -12,7 +12,8 @@
 //  position at market; ⌘Z, like ⌥Z, cancels the last order placed.
 //  While typing in a text field, ⌘↩ does nothing, ⌘A / ⌘Z stay Select All / Undo, and shortcuts
 //  without ⌘, ⌃ or ⌥ (other than F-keys) type.
-//  Nothing fires while a shortcut is being recorded.
+//  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
+//  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
 //
 
 import AppKit
@@ -37,11 +38,11 @@ struct TradingShortcuts: ViewModifier {
                         if typing, !shortcut.command, !shortcut.option, !shortcut.control, !shortcut.isFunctionKey {
                             return event
                         }
-                        broker.run(hotkey, symbol: workspace.selectedChart.symbol)
+                        broker.run(hotkey, symbol: workspace.targetSymbol)
                         return nil
                     }
                     if modifiers == .command, inMainWindow, let window = event.window {
-                        let symbol = workspace.selectedChart.symbol
+                        let symbol = workspace.targetSymbol
                         let typing = window.firstResponder is NSTextView
                         // ⌘↩ (Return or keypad Enter): a symbol still being typed isn't the chart's yet.
                         if event.keyCode == 36 || event.keyCode == 76 {
@@ -56,7 +57,7 @@ struct TradingShortcuts: ViewModifier {
                         switch event.charactersIgnoringModifiers?.lowercased() {
                         case "a":
                             if typing { return event }
-                            broker.cancelOrders(for: symbol)
+                            if symbol.isEmpty { NSSound.beep() } else { broker.cancelOrders(for: symbol) }
                         case "s": broker.run(.closeAllMarket, symbol: symbol)
                         case "z":
                             if typing { return event }
@@ -68,7 +69,9 @@ struct TradingShortcuts: ViewModifier {
                     guard event.modifierFlags.intersection([.option, .command, .control]) == .option else { return event }
                     switch event.charactersIgnoringModifiers?.lowercased() {
                     case "z": broker.cancelLastOrder()
-                    case "<": broker.cancelOrders(for: workspace.selectedChart.symbol)
+                    case "<":
+                        let symbol = workspace.targetSymbol
+                        if symbol.isEmpty { NSSound.beep() } else { broker.cancelOrders(for: symbol) }
                     default: return event
                     }
                     return nil

@@ -48,7 +48,7 @@ struct HotkeyPanel: View {
                 .popover(isPresented: $showingCustomizer, arrowEdge: .bottom) {
                     HotkeyCustomizer()
                 }
-                Text("→ \(workspace.selectedChart.symbol.isEmpty ? "no symbol" : workspace.selectedChart.symbol)")
+                Text("→ \(!workspace.isChartSelected ? "no chart selected" : workspace.targetSymbol.isEmpty ? "no symbol" : workspace.targetSymbol)")
                     .font(.system(size: 11, weight: .bold))
                 Spacer()
                 if let msg = broker.lastMessage {
@@ -69,7 +69,7 @@ struct HotkeyPanel: View {
                             HotkeyButton(hotkey: hotkey, height: height,
                                          selected: hotkey.id == workspace.selectedHotkeyID, firesOnPress: true) {
                                 workspace.selectedHotkeyID = hotkey.id
-                                if clickMode == .send { broker.run(hotkey, symbol: workspace.selectedChart.symbol) }
+                                if clickMode == .send { broker.run(hotkey, symbol: workspace.targetSymbol) }
                             }
                             .help((clickMode == .send ? "Click sends · ⌘↩ sends it again" : "Click to select · ⌘↩ sends it")
                                   + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
@@ -294,7 +294,7 @@ private struct OrderAmountBox: View {
     private var sizeText: String {
         guard let rate = broker.usdNok, rate > 0 else { return "No USD.NOK rate" }
         var text = "≈ $" + Int(amount / rate).formatted()
-        let symbol = workspace.selectedChart.symbol
+        let symbol = workspace.targetSymbol
         if let last = broker.quote(symbol)?.last, let shares = broker.shares(forNOK: amount, at: last) {
             text += " · \(Fmt.shares(shares)) \(symbol)"
         }

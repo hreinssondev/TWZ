@@ -9,6 +9,8 @@
 //  Mkt, ⌥-click, or SL / TP.
 //  A working order's row has a thin bar along its bottom that fills to the right as the order fills.
 //  Below them, behind a draggable divider, today's round trips with their profit or loss.
+//  Clicking empty space in the Orders or Positions column deselects the chart, so no hotkey or
+//  order shortcut has a symbol to act on until a chart is clicked again.
 //
 
 import SwiftUI
@@ -53,7 +55,7 @@ struct OrdersPanel: View {
             let ordersW = min(max(total * ordersShare, minW), total - minW * 2)
             let filledW = min(max(total * filledShare, minW), total - ordersW - minW)
             HStack(spacing: 0) {
-                column("Orders", count: activeOrders.count) { activeRows }
+                column("Orders", count: activeOrders.count, onEmptyClick: deselectChart) { activeRows }
                     .frame(width: ordersW)
                 // Each divider trades width with its neighbour; the column on the far side stays put.
                 ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: ordersW,
@@ -69,9 +71,13 @@ struct OrdersPanel: View {
                              range: minW...(total - ordersW - minW),
                              onChange: { filledShare = $0 / total },
                              onReset: resetColumns)
-                column("Positions", count: broker.positions.count) { positionRows }
+                column("Positions", count: broker.positions.count, onEmptyClick: deselectChart) { positionRows }
             }
         }
+    }
+
+    private func deselectChart() {
+        workspace.isChartSelected = false
     }
 
     private func resetColumns() {
@@ -79,10 +85,13 @@ struct OrdersPanel: View {
         filledShare = 1 / 3
     }
 
-    /// One always-visible column: a compact header and its own scrolling rows.
+    /// One always-visible column: a compact header and its own scrolling rows. `onEmptyClick` is
+    /// called for clicks on the column's empty space (not on its rows' text or buttons).
     private func column<Rows: View>(_ title: String, count: Int, trailing: Text? = nil,
+                                    onEmptyClick: (() -> Void)? = nil,
                                     @ViewBuilder rows: () -> Rows) -> some View {
-        VStack(spacing: 0) {
+        let content = rows()
+        return VStack(spacing: 0) {
             HStack(spacing: 4) {
                 Text(title).fontWeight(.semibold)
                 Text("\(count)").foregroundStyle(.secondary)
@@ -93,8 +102,16 @@ struct OrdersPanel: View {
             .padding(.horizontal, 6)
             .frame(height: 16)
             .background(Color.primary.opacity(0.05))
-            ScrollView {
-                LazyVStack(spacing: 0) { rows() }
+            GeometryReader { geo in
+                ScrollView {
+                    LazyVStack(spacing: 0) { content }
+                        .frame(minHeight: geo.size.height, alignment: .top)
+                        .background {
+                            if let onEmptyClick {
+                                Color.clear.contentShape(Rectangle()).onTapGesture(perform: onEmptyClick)
+                            }
+                        }
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -267,7 +284,7 @@ struct OrdersPanel: View {
 
     private func symbolButton(_ symbol: String, color: Color = .primary) -> some View {
         Text(symbol).fontWeight(.semibold).foregroundStyle(color)
-            .onTapGesture { workspace.load(symbol, into: workspace.selectedChart, broker: broker) }
+            .onTapGesture { workspace.loadIntoSelectedChart(symbol, broker: broker) }
     }
 
     private func empty(_ text: String) -> some View {

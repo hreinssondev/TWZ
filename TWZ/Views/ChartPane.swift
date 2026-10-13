@@ -6,6 +6,12 @@
 import SwiftUI
 
 extension Workspace {
+    /// Loads a symbol into the selected chart (the last selected one while none is) and selects it.
+    func loadIntoSelectedChart(_ symbol: String, broker: Broker) {
+        load(symbol, into: selectedChart, broker: broker)
+        isChartSelected = true
+    }
+
     /// Loads a symbol into a chart and (re)subscribes its data.
     func load(_ symbol: String, into chart: ChartModel, broker: Broker) {
         let s = symbol.trimmingCharacters(in: .whitespaces).uppercased()
@@ -41,7 +47,7 @@ struct ChartPane: View {
     @State private var dismissedTrip: String?
     @FocusState private var symbolFocused: Bool
 
-    private var isSelected: Bool { workspace.selectedChartIndex == chart.id }
+    private var isSelected: Bool { workspace.isChartSelected && workspace.selectedChartIndex == chart.id }
 
     var body: some View {
         VStack(spacing: 0) {
