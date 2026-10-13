@@ -57,6 +57,8 @@ final class Broker {
     private(set) var chartOrderIds: Set<Int> = []
     /// Stop loss / take profit orders placed by ⌃-clicking a chart, by order id.
     private(set) var protectiveOrders: [Int: Protective] = [:]
+    /// What placed each order this app sent ("Mid", "Mkt", "⌥-click", "SL", …), by order id.
+    private(set) var orderSources: [Int: String] = [:]
 
     /// Live market value of all positions in USD (falls back to cost when no quote yet).
     var totalPositionValue: Double? {
@@ -206,6 +208,16 @@ final class Broker {
         return box.quote
     }
 
+    /// The distinct sources of these orders, e.g. "Mid" or "Mid/Last"; nil if none are known
+    /// (orders placed in TWS, or before sources were recorded).
+    func sourceLabel(_ orderIds: [Int]) -> String? {
+        var labels: [String] = []
+        for id in orderIds {
+            if let label = orderSources[id], !labels.contains(label) { labels.append(label) }
+        }
+        return labels.isEmpty ? nil : labels.joined(separator: "/")
+    }
+
     // MARK: - Snapshots
 
     /// Copies what changed; values that stayed the same aren't reassigned, so views reading them
@@ -236,6 +248,7 @@ final class Broker {
         if let v = s.sessionCloses { update(\.sessionCloses, v) }
         if let v = s.chartOrderIds { update(\.chartOrderIds, v) }
         if let v = s.protectiveOrders { update(\.protectiveOrders, v) }
+        if let v = s.orderSources { update(\.orderSources, v) }
         for patch in s.charts {
             guard patch.generation == chartGeneration[patch.id] ?? 0,
                   let chart = charts.first(where: { $0.id == patch.id }) else { continue }

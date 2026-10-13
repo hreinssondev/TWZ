@@ -90,6 +90,9 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
     var openShares = 0.0
     /// Shares held from before today's fills, whose entry price is unknown.
     var carried = 0.0
+    /// Orders whose fills opened / closed the trip, in fill order.
+    var entryOrderIds: [Int] = []
+    var exitOrderIds: [Int] = []
 
     var isOpen: Bool { abs(openShares) > 1e-9 }
     var entryShares: Double { (isLong ? buyShares : sellShares) + abs(carried) }
@@ -133,6 +136,11 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
                     // Up to the whole fill adds to the trip; a fill against it closes at most what's held.
                     let opening = qty == 0 || (qty > 0) == (remaining > 0)
                     let step = opening ? remaining : (remaining > 0 ? min(remaining, -qty) : max(remaining, -qty))
+                    if (step > 0) == trip!.isLong {
+                        if !trip!.entryOrderIds.contains(fill.orderId) { trip!.entryOrderIds.append(fill.orderId) }
+                    } else if !trip!.exitOrderIds.contains(fill.orderId) {
+                        trip!.exitOrderIds.append(fill.orderId)
+                    }
                     if step > 0 {
                         trip!.buyShares += step
                         trip!.buyValue += step * fill.price

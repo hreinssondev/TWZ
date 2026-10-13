@@ -5,6 +5,8 @@
 //  Orders, Filled and Positions side by side as three always-visible columns,
 //  with draggable dividers between them. Rows are two lines so they fit the narrow columns.
 //  Fills in the same symbol, side and second show as one row at their average price.
+//  Fills and round trips name what placed their orders: the hotkey's price (Mid, Last, Bid, Ask),
+//  Mkt, ⌥-click, or SL / TP.
 //  A working order's row has a thin bar along its bottom that fills to the right as the order fills.
 //  Below them, behind a draggable divider, today's round trips with their profit or loss.
 //
@@ -146,34 +148,49 @@ struct OrdersPanel: View {
             .allowsHitTesting(false)
     }
 
+    /// A row of fills in one symbol, side and second, with the orders they came from.
+    private struct FillGroup: Identifiable {
+        var fill: Fill
+        var orderIds: [Int]
+        var id: String { fill.id }
+    }
+
     /// The day's fills, newest first, with fills in the same symbol, side and second added together
     /// at their volume-weighted average price.
-    private var groupedFills: [Fill] {
+    private var groupedFills: [FillGroup] {
         struct Key: Hashable { var symbol: String; var side: String; var second: Int }
-        var groups: [Key: Fill] = [:]
+        var groups: [Key: FillGroup] = [:]
         for f in broker.fills.values.sorted(by: { ($0.time, $0.id) < ($1.time, $1.id) }) {
             let key = Key(symbol: f.symbol, side: f.side, second: Int(f.time.timeIntervalSince1970.rounded(.down)))
-            guard var g = groups[key] else { groups[key] = f; continue }
-            let shares = g.shares + f.shares
-            if shares > 0 { g.price = (g.price * g.shares + f.price * f.shares) / shares }
-            g.shares = shares
+            guard var g = groups[key] else { groups[key] = FillGroup(fill: f, orderIds: [f.orderId]); continue }
+            let shares = g.fill.shares + f.shares
+            if shares > 0 { g.fill.price = (g.fill.price * g.fill.shares + f.price * f.shares) / shares }
+            g.fill.shares = shares
+            if !g.orderIds.contains(f.orderId) { g.orderIds.append(f.orderId) }
             groups[key] = g
         }
-        return groups.values.sorted { ($0.time, $0.id) > ($1.time, $1.id) }
+        return groups.values.sorted { ($0.fill.time, $0.fill.id) > ($1.fill.time, $1.fill.id) }
     }
 
     @ViewBuilder private var filledRows: some View {
         let fills = groupedFills
         if fills.isEmpty { empty("No fills today") }
-        ForEach(fills) { f in
+        ForEach(fills) { group in
+            let f = group.fill
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     symbolButton(f.symbol, color: sideColor(f.side == "BOT"))
                     Spacer(minLength: 2)
                     Text(f.time, format: .dateTime.hour().minute().second()).foregroundStyle(.secondary)
                 }
-                Text("\(Text(Fmt.shares(f.shares)).foregroundStyle(sideColor(f.side == "BOT"))) - \(Fmt.price(f.price))")
-                    .font(.system(size: 10).monospacedDigit())
+                HStack(spacing: 4) {
+                    Text("\(Text(Fmt.shares(f.shares)).foregroundStyle(sideColor(f.side == "BOT"))) - \(Fmt.price(f.price))")
+                    Spacer(minLength: 2)
+                    if let source = broker.sourceLabel(group.orderIds) {
+                        Text(source).foregroundStyle(.secondary)
+                    }
+                }
+                .font(.system(size: 10).monospacedDigit())
             }
             .rowStyle()
         }
@@ -213,6 +230,7 @@ struct OrdersPanel: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
                         symbolButton(t.symbol, color: sideColor(t.isLong))
+                        if let sources = tripSources(t) { Text(sources).foregroundStyle(.secondary) }
                         if t.isOpen { Text("open").foregroundStyle(.secondary) }
                         Spacer(minLength: 2)
                         if let pnl { pnlText(pnl) } else { Text("—").foregroundStyle(.secondary) }
@@ -228,6 +246,14 @@ struct OrdersPanel: View {
                 .rowStyle()
             }
         }
+    }
+
+    /// "Mid → Bid": what placed the entry and exit orders ("?" for an unknown side).
+    private func tripSources(_ t: RoundTrip) -> String? {
+        let entry = broker.sourceLabel(t.entryOrderIds), exit = broker.sourceLabel(t.exitOrderIds)
+        if entry == nil, exit == nil { return nil }
+        guard !t.exitOrderIds.isEmpty else { return entry }
+        return "\(entry ?? "?") → \(exit ?? "?")"
     }
 
     private func pnlText(_ pnl: Double) -> Text {

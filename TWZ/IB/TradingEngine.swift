@@ -54,6 +54,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var chartOrderIds: Set<Int> { didSet { changed(.chartOrders) } }
     /// Stop loss / take profit orders placed by ⌃-clicking a chart, by order id.
     private var protectiveOrders: [Int: Protective] { didSet { changed(.protective) } }
+    /// What placed each order this app sent ("Mid", "Mkt", "⌥-click", "SL", …), by order id; shown
+    /// with fills and round trips.
+    private var orderSources: [Int: String] { didSet { changed(.orderSources) } }
 
     // MARK: Private
 
@@ -143,6 +146,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         static let closes = Dirty(rawValue: 1 << 7)
         static let chartOrders = Dirty(rawValue: 1 << 8)
         static let protective = Dirty(rawValue: 1 << 9)
+        static let orderSources = Dirty(rawValue: 1 << 10)
     }
 
     /// One display frame at 120 Hz (ProMotion): the UI never gets more snapshots than it can show.
@@ -168,6 +172,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         chartOrderIds = Set(defaults.array(forKey: "chartOrderIds") as? [Int] ?? [])
         protectiveOrders = defaults.data(forKey: "protectiveOrders")
             .flatMap { try? JSONDecoder().decode([Int: Protective].self, from: $0) } ?? [:]
+        orderSources = Dictionary(uniqueKeysWithValues: (defaults.dictionary(forKey: "orderSources") as? [String: String] ?? [:])
+            .compactMap { key, value in Int(key).map { ($0, value) } })
         socket.onEvent = { [weak self] event in self?.handle(event) }
         queue.async { self.watchMainThread() }
     }
@@ -183,7 +189,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// Everything the UI shows, for its initial state. Call on the engine queue.
     func fullSnapshot() -> EngineSnapshot {
-        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective]
+        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources]
         return takeSnapshot()
     }
 
@@ -236,6 +242,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if dirty.contains(.closes) { s.sessionCloses = sessionCloses }
         if dirty.contains(.chartOrders) { s.chartOrderIds = chartOrderIds }
         if dirty.contains(.protective) { s.protectiveOrders = protectiveOrders }
+        if dirty.contains(.orderSources) { s.orderSources = orderSources }
         for id in dirtyCharts {
             guard let c = charts[id] else { continue }
             var patch = EngineSnapshot.ChartPatch(id: id, generation: c.generation, isLoading: c.isLoading, error: c.error)
@@ -957,7 +964,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 return
             }
             submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
-                   why: "hotkey \"\(hotkey.label)\"")
+                   source: Self.source(hotkey, isBuy: action == "BUY"), why: "hotkey \"\(hotkey.label)\"")
         }
     }
 
@@ -967,7 +974,24 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if quantity < 1 { quantity = abs(p.quantity) }
         guard let price = orderPrice(symbol: p.symbol, action: action, hotkey: hotkey) else { return }
         submit(symbol: p.symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
+               source: Self.source(hotkey, isBuy: action == "BUY"),
                why: "hotkey \"\(hotkey.label)\" closing \(Int(fraction * 100))% of \(Fmt.shares(p.quantity))")
+    }
+
+    /// A hotkey order's source label: "Mkt", or the quote its limit is priced off ("Mid", "Last", "Ask", …).
+    private static func source(_ hotkey: Hotkey, isBuy: Bool) -> String {
+        hotkey.orderType == .market ? "Mkt" : hotkey.priceReference.label(isBuy: isBuy)
+    }
+
+    /// Remembers what placed an order (kept across launches for the latest 500 orders).
+    private func recordSource(_ source: String, for id: Int) {
+        orderSources[id] = source
+        if orderSources.count > 500 {
+            let kept = Set(orderSources.keys.sorted().suffix(500))
+            orderSources = orderSources.filter { kept.contains($0.key) }
+        }
+        defaults.set(Dictionary(uniqueKeysWithValues: orderSources.map { (String($0.key), $0.value) }),
+                     forKey: "orderSources")
     }
 
     // MARK: - Chart orders
@@ -1046,7 +1070,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if MarketSession.phase() == .overnight { price.exchange = "OVERNIGHT" }
         let summary = "\(label) (\(OrderAmount.format(nok)) NOK)"
         guard let id = submit(symbol: symbol, action: "BUY", quantity: quantity, price: price, tif: .day,
-                              summary: summary, why: "⌥-click \(summary)") else { return }
+                              summary: summary, source: "⌥-click", why: "⌥-click \(summary)") else { return }
         chartOrderIds.insert(id)
         defaults.set(Array(chartOrderIds.sorted().suffix(500)), forKey: "chartOrderIds")
     }
@@ -1114,6 +1138,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         else { return }
         protectiveOrders[id] = Protective(symbol: symbol, kind: kind, ocaGroup: group)
         saveProtective()
+        recordSource(kind == .stopLoss ? "SL" : "TP", for: id)
         var message = "\(symbol): \(kind == .stopLoss ? "stop loss" : "take profit") \(action) \(Fmt.shares(abs(qty))) @ \(Fmt.price(price))"
         if existing != nil { message += " (moved)" }
         if MarketSession.phase() == .overnight || MarketSession.phase() == .closed {
@@ -1220,7 +1245,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// work until a later session, after `summary` when one is given.
     @discardableResult
     private func submit(symbol: String, action: String, quantity: Double, price: HotkeyPrice,
-                        tif: TimeInForce, summary: String? = nil, why: String) -> Int? {
+                        tif: TimeInForce, summary: String? = nil, source: String, why: String) -> Int? {
         guard apiReady, nextOrderId != nil else {
             lastMessage = "Not connected"
             return nil
@@ -1231,6 +1256,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard let id = placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
                                   stop: price.stop, tif: overnight ? .day : tif, outsideRth: price.outsideRth,
                                   exchange: price.exchange, why: why) else { return nil }
+        recordSource(source, for: id)
         var notes = summary.map { [$0] } ?? []
         if !replaced.isEmpty {
             notes.append("replaced \(replaced.count == 1 ? "the previous order" : "\(replaced.count) orders")")
@@ -1815,6 +1841,7 @@ nonisolated struct EngineSnapshot: Sendable {
     var sessionCloses: [String: Double]?
     var chartOrderIds: Set<Int>?
     var protectiveOrders: [Int: TradingEngine.Protective]?
+    var orderSources: [Int: String]?
     var charts: [ChartPatch] = []
 }
 
