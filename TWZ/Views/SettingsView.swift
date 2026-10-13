@@ -236,10 +236,11 @@ private struct AppearanceSettings: View {
                         Text("More").font(.caption)
                     }
                 }
+                // All the way left removes the box, leaving the dotted line and the price.
                 LabeledContent("Last price box opacity") {
                     HStack {
                         Slider(value: $lastPriceOpacity, in: PriceAxis.lastPriceOpacityRange, step: 0.05)
-                        Text("\(Int((lastPriceOpacity * 100).rounded())) %")
+                        Text(PriceAxis.hidesLastPriceBox(lastPriceOpacity) ? "Off" : "\(Int((lastPriceOpacity * 100).rounded())) %")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
                     }
