@@ -44,6 +44,7 @@ enum AppearanceDefaults {
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.lineWidthKey,
+        PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
     ]
 
     /// Removing the stored values makes every @AppStorage fall back to its default.
@@ -76,6 +77,20 @@ enum Indicators {
     static let lineWidthKey = "indicatorLineWidth"
     static let defaultLineWidth = 1.25
     static let lineWidthRange = 0.5...4.0
+}
+
+/// The price axis: label size, how closely labels are packed, and the last price box's opacity.
+enum PriceAxis {
+    static let fontSizeKey = "axisPriceFontSize"
+    static let defaultFontSize = 10.0
+    static let fontSizeRange = 8.0...16.0
+    /// Target points between price labels; less space means more, finer-stepped labels.
+    static let labelSpacingKey = "axisPriceLabelSpacing"
+    static let defaultLabelSpacing = 45.0
+    static let labelSpacingRange = 20.0...120.0
+    static let lastPriceOpacityKey = "lastPriceBoxOpacity"
+    static let defaultLastPriceOpacity = 1.0
+    static let lastPriceOpacityRange = 0.1...1.0
 }
 
 /// Chart line colors picked in Settings, stored as "RRGGBB"; empty means the default.

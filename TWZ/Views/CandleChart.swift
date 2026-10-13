@@ -54,12 +54,18 @@ struct CandleChart: View {
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
     @AppStorage(Indicators.lineWidthKey) private var indicatorWidth = Indicators.defaultLineWidth
+    @AppStorage(PriceAxis.fontSizeKey) private var axisFontSize = PriceAxis.defaultFontSize
+    @AppStorage(PriceAxis.labelSpacingKey) private var labelSpacing = PriceAxis.defaultLabelSpacing
+    @AppStorage(PriceAxis.lastPriceOpacityKey) private var lastPriceOpacity = PriceAxis.defaultLastPriceOpacity
     @State private var hover: CGPoint?
     @State private var dragStart: (scroll: Double, shift: Double)?
     @State private var optionHeld = false
     @State private var controlHeld = false
 
-    private let axisWidth: CGFloat = 58
+    /// Widens with the axis text so larger prices still fit.
+    private var axisWidth: CGFloat { max(58, (axisFontSize * 5.8).rounded()) }
+    /// Height of the price boxes on the axis.
+    private var tagHeight: CGFloat { axisFontSize + 6 }
     private let timeAxisHeight: CGFloat = 16
     private let rightPaddingBars = 3.0
 
@@ -282,13 +288,18 @@ struct CandleChart: View {
         }
 
         // Horizontal grid + price labels.
-        for tick in Self.niceTicks(lo: lo, hi: hi, count: max(3, Int(priceRect.height / 45))) {
+        // Never finer than a cent (a hundredth of a cent under $1), the smallest step prices show.
+        let ticks = Self.niceTicks(lo: lo, hi: hi, count: max(2, Int(priceRect.height / labelSpacing)),
+                                   minStep: hi < 1 ? 0.0001 : 0.01)
+        let decimals = ticks.count > 1 ? Self.decimals(forStep: ticks[1] - ticks[0], atLeast: hi < 1 ? 4 : 2) : 2
+        for tick in ticks {
             let yy = y(tick)
             var path = Path()
             path.move(to: CGPoint(x: plot.minX, y: yy))
             path.addLine(to: CGPoint(x: plot.maxX, y: yy))
             ctx.stroke(path, with: .color(gridColor), lineWidth: 1)
-            ctx.draw(Text(Fmt.price(tick)).font(.system(size: 10).monospacedDigit()).foregroundStyle(labelColor),
+            ctx.draw(Text(tick.formatted(.number.precision(.fractionLength(decimals))))
+                        .font(.system(size: axisFontSize).monospacedDigit()).foregroundStyle(labelColor),
                      at: CGPoint(x: plot.maxX + 6, y: yy), anchor: .leading)
         }
 
@@ -352,7 +363,7 @@ struct CandleChart: View {
         if let last = lastPrice ?? bars.last?.close, last > lo, last < hi {
             drawLine(in: &ctx, y: y(last), plot: plot,
                      color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: true,
-                     tag: Fmt.price(last))
+                     tag: Fmt.price(last), tagOpacity: lastPriceOpacity)
         }
 
         // Crosshair (horizontal only).
@@ -442,28 +453,31 @@ struct CandleChart: View {
         return values
     }
 
-    private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, tag: String) {
+    private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, tag: String,
+                          tagOpacity: Double = 1) {
         var path = Path()
         path.move(to: CGPoint(x: plot.minX, y: y))
         path.addLine(to: CGPoint(x: plot.maxX, y: y))
         ctx.stroke(path, with: .color(color.opacity(0.8)), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
-        drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color)
+        drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity)
     }
 
-    private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color) {
-        let resolved = ctx.resolve(Text(text).font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
-        let textSize = resolved.measure(in: CGSize(width: 200, height: 20))
-        let rect = CGRect(x: plot.maxX + 1, y: y - 8, width: max(axisWidth - 2, textSize.width + 8), height: 16)
-        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color))
+    /// `opacity` fades only the box, not its text.
+    private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
+                         opacity: Double = 1) {
+        let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
+        let textSize = resolved.measure(in: CGSize(width: 300, height: 40))
+        let rect = CGRect(x: plot.maxX + 1, y: y - tagHeight / 2, width: max(axisWidth - 2, textSize.width + 8), height: tagHeight)
+        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color.opacity(opacity)))
         ctx.draw(resolved, at: CGPoint(x: rect.minX + 4, y: y), anchor: .leading)
     }
 
     /// The P/L at the hovered price, in a green (gain) or red (loss) tag just left of the price axis.
     private func drawPnLTag(in ctx: inout GraphicsContext, pnl: Double, y: CGFloat, plot: CGRect) {
         let resolved = ctx.resolve(Text(Fmt.money(pnl, signed: true))
-            .font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
-        let width = resolved.measure(in: CGSize(width: 200, height: 20)).width + 8
-        let rect = CGRect(x: plot.maxX - width - 2, y: y - 8, width: width, height: 16)
+            .font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
+        let width = resolved.measure(in: CGSize(width: 300, height: 40)).width + 8
+        let rect = CGRect(x: plot.maxX - width - 2, y: y - tagHeight / 2, width: width, height: tagHeight)
         ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(pnl >= 0 ? .green : .red))
         ctx.draw(resolved, at: CGPoint(x: rect.midX, y: y))
     }
@@ -490,10 +504,10 @@ struct CandleChart: View {
         let f = DateFormatter(); f.dateFormat = "MMM d"; return f
     }()
 
-    static func niceTicks(lo: Double, hi: Double, count: Int) -> [Double] {
+    static func niceTicks(lo: Double, hi: Double, count: Int, minStep: Double = 0) -> [Double] {
         let range = hi - lo
         guard range > 0, count > 0 else { return [] }
-        let rough = range / Double(count)
+        let rough = max(range / Double(count), minStep)
         let magnitude = pow(10, floor(log10(rough)))
         let step = [1.0, 2.0, 2.5, 5.0, 10.0].map { $0 * magnitude }.first { $0 >= rough } ?? rough
         var ticks: [Double] = []
@@ -503,6 +517,13 @@ struct CandleChart: View {
             t += step
         }
         return ticks
+    }
+
+    /// Decimals needed to show every tick `step` apart exactly (e.g. 3 for a 0.025 step), at least `atLeast`.
+    static func decimals(forStep step: Double, atLeast: Int) -> Int {
+        var d = atLeast
+        while d < 6, abs(step * pow(10, Double(d)) - (step * pow(10, Double(d))).rounded()) > 1e-6 { d += 1 }
+        return d
     }
 }
 

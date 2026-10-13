@@ -162,6 +162,9 @@ private struct AppearanceSettings: View {
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
     @AppStorage(Indicators.lineWidthKey) private var indicatorWidth = Indicators.defaultLineWidth
+    @AppStorage(PriceAxis.fontSizeKey) private var axisFontSize = PriceAxis.defaultFontSize
+    @AppStorage(PriceAxis.labelSpacingKey) private var labelSpacing = PriceAxis.defaultLabelSpacing
+    @AppStorage(PriceAxis.lastPriceOpacityKey) private var lastPriceOpacity = PriceAxis.defaultLastPriceOpacity
 
     var body: some View {
         Form {
@@ -208,6 +211,35 @@ private struct AppearanceSettings: View {
                     HStack {
                         Slider(value: $indicatorWidth, in: Indicators.lineWidthRange, step: 0.25)
                         Text("\(indicatorWidth.formatted(.number.precision(.fractionLength(0...2)))) pt")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+            }
+            Section("Price axis") {
+                LabeledContent("Text size") {
+                    HStack {
+                        Slider(value: $axisFontSize, in: PriceAxis.fontSizeRange, step: 1)
+                        Text("\(Int(axisFontSize)) pt")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+                LabeledContent("Price labels") {
+                    // Slider runs fewer → more, i.e. from the widest spacing to the tightest.
+                    Slider(value: Binding(get: { -labelSpacing }, set: { labelSpacing = -$0 }),
+                           in: -PriceAxis.labelSpacingRange.upperBound ... -PriceAxis.labelSpacingRange.lowerBound) {
+                        EmptyView()
+                    } minimumValueLabel: {
+                        Text("Fewer").font(.caption)
+                    } maximumValueLabel: {
+                        Text("More").font(.caption)
+                    }
+                }
+                LabeledContent("Last price box opacity") {
+                    HStack {
+                        Slider(value: $lastPriceOpacity, in: PriceAxis.lastPriceOpacityRange, step: 0.05)
+                        Text("\(Int((lastPriceOpacity * 100).rounded())) %")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
                     }
