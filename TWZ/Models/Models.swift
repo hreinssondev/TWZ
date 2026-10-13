@@ -234,6 +234,34 @@ nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// A key plus modifiers that fires a hotkey. Matched by the physical key (`keyCode`) and modifiers;
+/// `key` is only for display.
+nonisolated struct KeyShortcut: Codable, Hashable {
+    var keyCode: UInt16
+    var key: String
+    var command = false
+    var option = false
+    var control = false
+    var shift = false
+    /// F1–F20: never typed into a text field, so they fire while one is being edited too.
+    var isFunctionKey = false
+
+    /// "⌃⌥⇧⌘K", in the order macOS menus use.
+    var display: String {
+        (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "") + key
+    }
+
+    static func == (a: KeyShortcut, b: KeyShortcut) -> Bool {
+        a.keyCode == b.keyCode && a.command == b.command && a.option == b.option
+            && a.control == b.control && a.shift == b.shift
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(keyCode)
+        hasher.combine([command, option, control, shift])
+    }
+}
+
 nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     enum Action: String, Codable, CaseIterable, Identifiable {
         case buy = "Buy"
@@ -282,6 +310,8 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     var outsideRth = true
     /// Button color; nil follows the action's default.
     var color: HotkeyColor?
+    /// Sends this hotkey from anywhere in the main window, whichever hotkey is selected.
+    var shortcut: KeyShortcut?
 
     init(label: String, action: Action, sizing: Sizing = .shares, amount: Double = 100,
          orderType: OrderType = .limit, priceReference: PriceReference = .cross, offset: Double = 0.02) {
@@ -295,7 +325,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, label, action, sizing, amount, orderType, priceReference, offset, tif, outsideRth, color
+        case id, label, action, sizing, amount, orderType, priceReference, offset, tif, outsideRth, color, shortcut
         case priceType   // legacy: "Market" or "Limit (bid/ask ± offset)"
     }
 
@@ -316,6 +346,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         tif = (try? c.decodeIfPresent(TimeInForce.self, forKey: .tif)) ?? .day
         outsideRth = try c.decodeIfPresent(Bool.self, forKey: .outsideRth) ?? true
         color = try? c.decodeIfPresent(HotkeyColor.self, forKey: .color)
+        shortcut = try? c.decodeIfPresent(KeyShortcut.self, forKey: .shortcut)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -331,6 +362,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         try c.encode(tif, forKey: .tif)
         try c.encode(outsideRth, forKey: .outsideRth)
         try c.encodeIfPresent(color, forKey: .color)
+        try c.encodeIfPresent(shortcut, forKey: .shortcut)
     }
 
     /// What a hotkey for these settings is called automatically, e.g. "Buy 100" or "Sell 1000$".

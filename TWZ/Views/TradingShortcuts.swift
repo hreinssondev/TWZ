@@ -6,9 +6,11 @@
 //  ⌥Z cancels the last order placed; ⌥< cancels every order in the selected chart's symbol,
 //  stop loss and take profit included. Matched by character, so ⌥< is the < key on Nordic
 //  keyboards (⌥⇧, on US ones).
-//  In the main window (not while a sheet or popover is open): ⌘A sends the selected hotkey for
-//  the selected chart's symbol (while typing in a text field it stays Select All), and ⌘S closes
-//  100% of the selected chart's position at market.
+//  In the main window (not while a sheet or popover is open): a hotkey's own keyboard shortcut
+//  sends that hotkey; ⌘A sends the selected hotkey (while typing in a text field it stays Select
+//  All); ⌘S closes 100% of the selected chart's position at market. All for the selected chart's
+//  symbol. While typing in a text field, shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
+//  Nothing fires while a shortcut is being recorded.
 //
 
 import AppKit
@@ -24,9 +26,19 @@ struct TradingShortcuts: ViewModifier {
             .onAppear {
                 guard monitor == nil else { return }
                 monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [broker, workspace] event in
+                    if ShortcutRecorder.isRecording { return event }
                     let modifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
-                    if modifiers == .command, let window = event.window, window === NSApp.mainWindow,
-                       window.attachedSheet == nil {
+                    let inMainWindow = event.window.map { $0 === NSApp.mainWindow && $0.attachedSheet == nil } ?? false
+                    if inMainWindow, let hotkey = workspace.hotkeys.first(where: { $0.shortcut == KeyShortcut(event) }) {
+                        let shortcut = KeyShortcut(event)
+                        let typing = event.window?.firstResponder is NSTextView
+                        if typing, !shortcut.command, !shortcut.option, !shortcut.control, !shortcut.isFunctionKey {
+                            return event
+                        }
+                        broker.run(hotkey, symbol: workspace.selectedChart.symbol)
+                        return nil
+                    }
+                    if modifiers == .command, inMainWindow, let window = event.window {
                         let symbol = workspace.selectedChart.symbol
                         switch event.charactersIgnoringModifiers?.lowercased() {
                         case "a":
@@ -55,4 +67,39 @@ struct TradingShortcuts: ViewModifier {
                 monitor = nil
             }
     }
+}
+
+extension KeyShortcut {
+    init(_ event: NSEvent) {
+        let flags = event.modifierFlags
+        let function = Self.functionKeys[event.keyCode]
+        self.init(keyCode: event.keyCode,
+                  key: function ?? Self.named[event.keyCode] ?? (event.charactersIgnoringModifiers ?? "?").uppercased(),
+                  command: flags.contains(.command), option: flags.contains(.option),
+                  control: flags.contains(.control), shift: flags.contains(.shift),
+                  isFunctionKey: function != nil)
+    }
+
+    /// Why this shortcut can't be used, if it's one the app or macOS already uses.
+    var reservedFor: String? {
+        let k = key.lowercased()
+        if command, !option, !control {
+            if k == "a" { return "⌘A sends the selected hotkey" }
+            if k == "s" { return "⌘S closes 100% at market" }
+            if ["q", "w", "h", "m", ",", "c", "v", "x", "z"].contains(k) { return "\(display) is a standard macOS shortcut" }
+        }
+        if option, !command, !control, k == "z" || k == "<" { return "\(display) cancels orders" }
+        return nil
+    }
+
+    private static let functionKeys: [UInt16: String] = [
+        122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6", 98: "F7", 100: "F8",
+        101: "F9", 109: "F10", 103: "F11", 111: "F12", 105: "F13", 107: "F14", 113: "F15",
+        106: "F16", 64: "F17", 79: "F18", 80: "F19", 90: "F20",
+    ]
+
+    private static let named: [UInt16: String] = [
+        49: "Space", 36: "↩", 76: "⌤", 48: "⇥", 123: "←", 124: "→", 125: "↓", 126: "↑",
+        115: "↖", 119: "↘", 116: "⇞", 121: "⇟",
+    ]
 }

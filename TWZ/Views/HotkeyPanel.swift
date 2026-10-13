@@ -68,7 +68,8 @@ struct HotkeyPanel: View {
                                          selected: hotkey.id == workspace.selectedHotkeyID, firesOnPress: true) {
                                 workspace.selectedHotkeyID = hotkey.id
                             }
-                            .help("Click to select · ⌘A sends it · ⌘S closes 100% at market")
+                            .help("Click to select · ⌘A sends it" + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
+                                  + " · ⌘S closes 100% at market")
                             .contextMenu {
                                 Button("Edit…") { editing = index }
                             }
@@ -186,6 +187,14 @@ private struct HotkeyButton: View {
         .frame(height: height)
         .foregroundStyle(.white)
         .background(RoundedRectangle(cornerRadius: 5).fill(hotkey.tint.opacity(0.75)))
+        .overlay(alignment: .topTrailing) {
+            if let shortcut = hotkey.shortcut, height >= Self.subtitleMinHeight {
+                Text(shortcut.display)
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(.top, 2).padding(.trailing, 4)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 5)
                 .strokeBorder(Color.accentColor, lineWidth: selected ? 2.5 : 0)
@@ -421,6 +430,7 @@ private struct HotkeyFields: View {
                 ForEach(Hotkey.Action.allCases) { Text($0.rawValue).tag($0) }
             }
             LabeledContent("Color") { colorSwatches }
+            ShortcutRecorder(hotkey: $hotkey)
             if hotkey.action.needsSize {
                 Picker("Size in", selection: $hotkey.sizing) {
                     ForEach(Hotkey.Sizing.allCases) { Text($0.rawValue).tag($0) }
