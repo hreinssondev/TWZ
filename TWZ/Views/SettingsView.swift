@@ -171,6 +171,9 @@ private struct AppearanceSettings: View {
 
     var body: some View {
         Form {
+            Section("Presets") {
+                ForEach(Array(AppearancePresets.slots), id: \.self) { PresetRow(slot: $0) }
+            }
             Section("Candle colors") {
                 ForEach(CandleTheme.allCases) { option in
                     let colors = option.colors(customUp: customUp, customDown: customDown)
@@ -299,6 +302,38 @@ private struct AppearanceSettings: View {
                 Button("Reset") { hex.wrappedValue = "" }
                     .controlSize(.small)
             }
+        }
+    }
+}
+
+/// One preset slot: Load applies it, Save stores the current Appearance settings in it.
+private struct PresetRow: View {
+    let slot: Int
+    @AppStorage private var data: Data?
+    @State private var confirmReplace = false
+
+    init(slot: Int) {
+        self.slot = slot
+        _data = AppStorage(AppearancePresets.key(slot))
+    }
+
+    var body: some View {
+        LabeledContent("Preset \(slot)") {
+            HStack {
+                if data == nil {
+                    Text("Empty").foregroundStyle(.secondary)
+                }
+                Button("Load") { AppearancePresets.load(slot) }
+                    .disabled(data == nil)
+                Button("Save") {
+                    if data == nil { AppearancePresets.save(slot) } else { confirmReplace = true }
+                }
+            }
+            .controlSize(.small)
+        }
+        .confirmationDialog("Replace Preset \(slot) with the current settings?", isPresented: $confirmReplace) {
+            Button("Replace") { AppearancePresets.save(slot) }
+            Button("Cancel", role: .cancel) {}
         }
     }
 }

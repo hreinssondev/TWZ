@@ -54,6 +54,42 @@ enum AppearanceDefaults {
     }
 }
 
+/// Five slots, each a saved snapshot of every Appearance setting (the keys in AppearanceDefaults).
+enum AppearancePresets {
+    static let slots = 1...5
+
+    static func key(_ slot: Int) -> String { "appearancePreset\(slot)" }
+
+    /// The current settings saved into `slot`; only values changed from their defaults are stored.
+    static func save(_ slot: Int) {
+        var values: [String: Any] = [:]
+        for k in AppearanceDefaults.keys {
+            if let v = UserDefaults.standard.object(forKey: k) { values[k] = v }
+        }
+        guard let data = try? PropertyListSerialization.data(fromPropertyList: values, format: .binary, options: 0) else { return }
+        UserDefaults.standard.set(data, forKey: key(slot))
+    }
+
+    /// Applies `slot`'s settings; anything the preset doesn't hold goes back to its default.
+    static func load(_ slot: Int) {
+        guard let data = UserDefaults.standard.data(forKey: key(slot)),
+              let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return }
+        for k in AppearanceDefaults.keys {
+            if let v = values[k] {
+                UserDefaults.standard.set(v, forKey: k)
+            } else {
+                UserDefaults.standard.removeObject(forKey: k)
+            }
+        }
+    }
+
+    /// The first time presets exist, the settings in use become preset 1.
+    static func seedIfNeeded() {
+        if UserDefaults.standard.data(forKey: key(1)) == nil { save(1) }
+    }
+}
+
 /// How each chart's timeframe switch looks: quiet monochrome labels (default) or the system segmented control.
 enum TimeframePickerStyle: String, CaseIterable, Identifiable {
     case segmented = "Segmented"

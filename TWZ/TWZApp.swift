@@ -12,6 +12,10 @@ struct TWZApp: App {
     @State private var broker = Broker()
     @State private var workspace = Workspace()
 
+    init() {
+        AppearancePresets.seedIfNeeded()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
