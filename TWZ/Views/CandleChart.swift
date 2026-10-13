@@ -25,7 +25,8 @@ struct PriceLine {
     var dashed = true
     /// The order the line belongs to; double-clicking the line cancels it.
     var orderId: Int?
-    /// Its price box moves into the chart, just left of the axis, where the last price box would cover it.
+    /// Drawn above the last price line, and its price box moves into the chart, just left of the axis,
+    /// where the last price box would cover it.
     var movesAsideForLastPrice = false
 }
 
@@ -355,15 +356,17 @@ struct CandleChart: View {
 
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
 
-        // Position / order lines.
+        // Position / order lines; the ones that move aside for the last price (avg cost) go on top of it.
         let last = (lastPrice ?? bars.last?.close).flatMap { $0 > lo && $0 < hi ? $0 : nil }
-        for line in lines where line.price > lo && line.price < hi {
+        func draw(_ line: PriceLine) {
             let lineY = y(line.price)
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed,
                      tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))",
                      tagInside: covered)
         }
+        let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
+        visibleLines.filter { !$0.movesAsideForLastPrice }.forEach(draw)
 
         // Last price: dotted, color from Settings.
         if let last {
@@ -371,6 +374,7 @@ struct CandleChart: View {
                      color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: true,
                      tag: Fmt.price(last), tagOpacity: lastPriceOpacity)
         }
+        visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
 
         // Crosshair (horizontal only).
         if let hover, plot.contains(hover) {
