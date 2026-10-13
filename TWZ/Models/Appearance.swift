@@ -42,7 +42,7 @@ enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
-        LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey,
+        LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
@@ -144,6 +144,8 @@ enum LineColors {
     static let stopLossKey = "stopLossLineColor"
     static let takeProfitKey = "takeProfitLineColor"
     static let ordersKey = "orderLineColor"
+    /// Off hides the last price line itself; its price box on the axis stays.
+    static let showLastPriceLineKey = "showLastPriceLine"
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
     static let defaultAltClick = Color.purple

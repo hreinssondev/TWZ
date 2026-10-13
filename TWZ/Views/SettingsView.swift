@@ -159,6 +159,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
     @AppStorage(LineColors.takeProfitKey) private var takeProfitHex = ""
     @AppStorage(LineColors.ordersKey) private var ordersHex = ""
+    @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
@@ -203,6 +204,7 @@ private struct AppearanceSettings: View {
                 lineColorRow("Last price", key: LineColors.lastPriceKey, hex: $lastPriceHex,
                              default: LineColors.defaultLastPrice,
                              dashedKey: LineDashes.lastPriceKey, dashedDefault: LineDashes.defaultLastPrice)
+                Toggle("Show last price line (the price box stays)", isOn: $showLastPriceLine)
                 lineColorRow("Average position", key: LineColors.avgCostKey, hex: $avgCostHex,
                              default: LineColors.defaultAvgCost,
                              dashedKey: LineDashes.avgCostKey, dashedDefault: LineDashes.defaultAvgCost)

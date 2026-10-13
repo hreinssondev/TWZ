@@ -57,6 +57,7 @@ struct CandleChart: View {
     @AppStorage(LineColors.hoverKey) private var hoverHex = ""
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @AppStorage(LineDashes.lastPriceKey) private var lastPriceDashed = LineDashes.defaultLastPrice
+    @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
     @AppStorage(LineDashes.hoverKey) private var hoverDashed = LineDashes.defaultHover
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
@@ -436,11 +437,11 @@ struct CandleChart: View {
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice }.forEach(draw)
 
-        // Last price: color and dashes from Settings.
+        // Last price: color, dashes and whether the line shows (the box always does) from Settings.
         if let last {
             drawLine(in: &ctx, y: y(last), plot: plot,
                      color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: lastPriceDashed,
-                     tag: Fmt.price(last), tagOpacity: lastPriceOpacity)
+                     tag: Fmt.price(last), tagOpacity: lastPriceOpacity, showsLine: showLastPriceLine)
         }
         visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
 
@@ -532,11 +533,13 @@ struct CandleChart: View {
     }
 
     private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, tag: String,
-                          tagOpacity: Double = 1, tagInside: Bool = false) {
-        var path = Path()
-        path.move(to: CGPoint(x: plot.minX, y: y))
-        path.addLine(to: CGPoint(x: plot.maxX, y: y))
-        ctx.stroke(path, with: .color(color.opacity(0.8)), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
+                          tagOpacity: Double = 1, tagInside: Bool = false, showsLine: Bool = true) {
+        if showsLine {
+            var path = Path()
+            path.move(to: CGPoint(x: plot.minX, y: y))
+            path.addLine(to: CGPoint(x: plot.maxX, y: y))
+            ctx.stroke(path, with: .color(color.opacity(0.8)), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
+        }
         drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside)
     }
 
