@@ -165,9 +165,9 @@ struct ChartPane: View {
             }
         }
         if let p = broker.positions[chart.symbol] {
-            // Avg cost: solid line, number only on the axis.
+            // Avg cost: solid line, number only on the axis (just left of it when the last price box would cover it).
             lines.append(PriceLine(price: p.avgCost, color: LineColors.resolve(avgCostHex, default: LineColors.defaultAvgCost),
-                                   label: "", dashed: false))
+                                   label: "", dashed: false, movesAsideForLastPrice: true))
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"

@@ -25,6 +25,8 @@ struct PriceLine {
     var dashed = true
     /// The order the line belongs to; double-clicking the line cancels it.
     var orderId: Int?
+    /// Its price box moves into the chart, just left of the axis, where the last price box would cover it.
+    var movesAsideForLastPrice = false
 }
 
 struct CandleChart: View {
@@ -354,13 +356,17 @@ struct CandleChart: View {
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
 
         // Position / order lines.
+        let last = (lastPrice ?? bars.last?.close).flatMap { $0 > lo && $0 < hi ? $0 : nil }
         for line in lines where line.price > lo && line.price < hi {
-            drawLine(in: &ctx, y: y(line.price), plot: plot, color: line.color, dashed: line.dashed,
-                     tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))")
+            let lineY = y(line.price)
+            let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
+            drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed,
+                     tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))",
+                     tagInside: covered)
         }
 
         // Last price: dotted, color from Settings.
-        if let last = lastPrice ?? bars.last?.close, last > lo, last < hi {
+        if let last {
             drawLine(in: &ctx, y: y(last), plot: plot,
                      color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: true,
                      tag: Fmt.price(last), tagOpacity: lastPriceOpacity)
@@ -454,21 +460,24 @@ struct CandleChart: View {
     }
 
     private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, tag: String,
-                          tagOpacity: Double = 1) {
+                          tagOpacity: Double = 1, tagInside: Bool = false) {
         var path = Path()
         path.move(to: CGPoint(x: plot.minX, y: y))
         path.addLine(to: CGPoint(x: plot.maxX, y: y))
         ctx.stroke(path, with: .color(color.opacity(0.8)), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
-        drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity)
+        drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside)
     }
 
     /// `opacity` fades only the box, not its white text; at the opacity slider's minimum there's no box.
+    /// `inside` puts the box in the chart, just left of the price axis, instead of on it.
     private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
-                         opacity: Double = 1) {
+                         opacity: Double = 1, inside: Bool = false) {
         let boxed = !PriceAxis.hidesLastPriceBox(opacity)
         let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
         let textSize = resolved.measure(in: CGSize(width: 300, height: 40))
-        let rect = CGRect(x: plot.maxX + 1, y: y - tagHeight / 2, width: max(axisWidth - 2, textSize.width + 8), height: tagHeight)
+        let rect = inside
+            ? CGRect(x: plot.maxX - textSize.width - 10, y: y - tagHeight / 2, width: textSize.width + 8, height: tagHeight)
+            : CGRect(x: plot.maxX + 1, y: y - tagHeight / 2, width: max(axisWidth - 2, textSize.width + 8), height: tagHeight)
         if boxed { ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color.opacity(opacity))) }
         ctx.draw(resolved, at: CGPoint(x: rect.minX + 4, y: y), anchor: .leading)
     }
