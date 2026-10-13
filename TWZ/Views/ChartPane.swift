@@ -40,7 +40,6 @@ struct ChartPane: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider().opacity(0.5)
             CandleChart(
                 chart: chart, lastPrice: quote?.last, lines: priceLines,
                 onAltClick: { price in

@@ -61,6 +61,7 @@ struct CandleChart: View {
 
     private let axisWidth: CGFloat = 58
     private let timeAxisHeight: CGFloat = 16
+    private let priceTopInset: CGFloat = 4
     private let rightPaddingBars = 3.0
 
     var body: some View {
@@ -184,8 +185,9 @@ struct CandleChart: View {
         }
     }
 
+    /// Runs right up to the chart header; prices start a little lower so the top label isn't clipped.
     private func plotRect(size: CGSize) -> CGRect {
-        CGRect(x: 0, y: 4, width: size.width - axisWidth, height: size.height - timeAxisHeight - 4)
+        CGRect(x: 0, y: 0, width: size.width - axisWidth, height: size.height - timeAxisHeight)
     }
 
     /// nil while the chart is too small to draw or has no bars.
@@ -205,7 +207,7 @@ struct CandleChart: View {
 
         // Candles use the full height; volume fills the bottom 18% behind them and doesn't squeeze them.
         let volumeHeight = plot.height * 0.18
-        let priceRect = plot
+        let priceRect = CGRect(x: plot.minX, y: plot.minY + priceTopInset, width: plot.width, height: plot.height - priceTopInset)
 
         var lo = visible.map(\.low).min() ?? 0
         var hi = visible.map(\.high).max() ?? 1
