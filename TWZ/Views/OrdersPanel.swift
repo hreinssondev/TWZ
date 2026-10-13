@@ -183,7 +183,7 @@ struct OrdersPanel: View {
         let positions = broker.positions.values.sorted { $0.symbol < $1.symbol }
         if positions.isEmpty { empty("No positions") }
         ForEach(positions) { p in
-            let last = broker.last(p.symbol)
+            let last = broker.quotes[p.symbol]?.last
             let pnl = last.map { ($0 - p.avgCost) * p.quantity }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
@@ -209,7 +209,7 @@ struct OrdersPanel: View {
                       trailing: realized.map { pnlText($0).fontWeight(.semibold) }) {
             if trips.isEmpty { empty("No trades today") }
             ForEach(trips) { t in
-                let pnl = t.pnl(last: broker.last(t.symbol))
+                let pnl = t.pnl(last: broker.quotes[t.symbol]?.last)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
                         symbolButton(t.symbol, color: sideColor(t.isLong))

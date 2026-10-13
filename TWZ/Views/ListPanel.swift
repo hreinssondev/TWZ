@@ -117,7 +117,7 @@ struct ListPanel: View {
     }
 
     private func row(_ symbol: String) -> some View {
-        let q = broker.slowQuotes[symbol]
+        let q = broker.quotes[symbol]
         let change = changePercent(symbol, q)
         let isCharted = workspace.selectedChart.symbol == symbol
         let unavailable = broker.unavailableQuotes[symbol]
