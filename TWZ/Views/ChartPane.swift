@@ -25,6 +25,8 @@ struct ChartPane: View {
     @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
+    @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
+    @AppStorage(LineColors.takeProfitKey) private var takeProfitHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @State private var symbolText = ""
@@ -52,7 +54,7 @@ struct ChartPane: View {
                 controlClickColor: { price in
                     guard let kind = broker.protectiveKind(symbol: chart.symbol, at: price),
                           !broker.protectiveFillsNow(symbol: chart.symbol, kind: kind, at: price) else { return nil }
-                    return kind == .stopLoss ? .red : .green
+                    return protectiveColor(kind)
                 },
                 controlHoverPnL: { price in
                     guard let p = broker.positions[chart.symbol], p.quantity != 0 else { return nil }
@@ -152,6 +154,12 @@ struct ChartPane: View {
         return trip
     }
 
+    private func protectiveColor(_ kind: Broker.Protective.Kind) -> Color {
+        kind == .stopLoss
+            ? LineColors.resolve(stopLossHex, default: LineColors.defaultStopLoss)
+            : LineColors.resolve(takeProfitHex, default: LineColors.defaultTakeProfit)
+    }
+
     private var priceLines: [PriceLine] {
         var lines: [PriceLine] = []
         if let trip = closedTrip {
@@ -172,11 +180,11 @@ struct ChartPane: View {
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = "\(o.action == "BUY" ? "B" : "S") \(Fmt.shares(o.quantity - o.filled))"
             if let p = broker.protectiveOrders[o.id] {
-                // Placed by ⌃-clicking the chart: a solid red stop loss (at its stop) or green take profit,
-                // just the price on the axis.
+                // Placed by ⌃-clicking the chart: a solid stop loss (at its stop) or take profit line in
+                // its Settings color (red / green by default), just the price on the axis.
                 let isStop = p.kind == .stopLoss
                 if let price = isStop ? o.auxPrice : o.limitPrice {
-                    lines.append(PriceLine(price: price, color: isStop ? .red : .green,
+                    lines.append(PriceLine(price: price, color: protectiveColor(p.kind),
                                            label: "", dashed: false, orderId: o.id))
                 }
                 continue

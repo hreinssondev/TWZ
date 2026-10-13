@@ -42,6 +42,7 @@ enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
+        LineColors.stopLossKey, LineColors.takeProfitKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
@@ -104,10 +105,14 @@ enum LineColors {
     static let avgCostKey = "avgCostLineColor"
     static let altClickKey = "altClickOrderColor"
     static let hoverKey = "hoverPriceColor"
+    static let stopLossKey = "stopLossLineColor"
+    static let takeProfitKey = "takeProfitLineColor"
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
     static let defaultAltClick = Color.purple
     static let defaultHover = Color.gray
+    static let defaultStopLoss = Color.red
+    static let defaultTakeProfit = Color.green
 
     static func resolve(_ hex: String, default fallback: Color) -> Color {
         Color(hex: hex) ?? fallback

@@ -156,6 +156,8 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.hoverKey) private var hoverHex = ""
+    @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
+    @AppStorage(LineColors.takeProfitKey) private var takeProfitHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
@@ -202,6 +204,10 @@ private struct AppearanceSettings: View {
                              default: LineColors.defaultAltClick)
                 lineColorRow("Hover price", key: LineColors.hoverKey, hex: $hoverHex,
                              default: LineColors.defaultHover)
+                lineColorRow("Stop loss (⌃-click)", key: LineColors.stopLossKey, hex: $stopLossHex,
+                             default: LineColors.defaultStopLoss)
+                lineColorRow("Take profit (⌃-click)", key: LineColors.takeProfitKey, hex: $takeProfitHex,
+                             default: LineColors.defaultTakeProfit)
             }
             Section("Indicators") {
                 Toggle("VWAP (intraday charts)", isOn: $showVWAP)
