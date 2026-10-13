@@ -42,7 +42,7 @@ enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
-        SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
+        SelectedOutline.widthKey, TimeframePickerStyle.storageKey, TopBar.positionColorKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.lineWidthKey,
     ]
 
@@ -59,6 +59,14 @@ enum TimeframePickerStyle: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static let storageKey = "timeframePickerStyle"
+}
+
+/// Tint of a chart's top bar while a position is open in its symbol, stored as "RRGGBB"; empty means the default.
+enum TopBar {
+    static let positionColorKey = "positionTopBarColor"
+    static let defaultPositionColor = Color.green
+    /// Applied over the picked color so the symbol and timeframe labels stay readable.
+    static let opacity = 0.35
 }
 
 /// Thickness of the accent outline around the selected chart.

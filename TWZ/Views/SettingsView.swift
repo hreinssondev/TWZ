@@ -156,6 +156,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.hoverKey) private var hoverHex = ""
+    @AppStorage(TopBar.positionColorKey) private var topBarHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
@@ -218,6 +219,11 @@ private struct AppearanceSettings: View {
                     ForEach(TimeframePickerStyle.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                lineColorRow("Top bar color", key: TopBar.positionColorKey, hex: $topBarHex,
+                             default: TopBar.defaultPositionColor)
+                Text("Fills the chart's top bar while a position is open in its symbol.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Selected chart") {
                 LabeledContent("Outline thickness") {
