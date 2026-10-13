@@ -3,7 +3,8 @@
 //  TWZ
 //
 //  Live IB scanner list (gainers, losers, after-hours gainers, most active by
-//  dollar volume). Clicking a row loads it into the selected chart.
+//  dollar volume). Clicking a row loads it into the selected chart. Prices refresh every
+//  2 seconds rather than every tick, which keeps the UI free for the charts.
 //
 
 import SwiftUI
@@ -15,6 +16,16 @@ struct ListPanel: View {
     let panelId: String
     @AppStorage private var scanner: ScannerKind
     @State private var showFilter = false
+    /// Row values as of the last refresh, by symbol.
+    @State private var rowValues: [String: RowValues] = [:]
+
+    static let refreshInterval: Duration = .seconds(2)
+
+    private struct RowValues: Equatable {
+        var last: Double?
+        var change: Double?
+        var volume: String
+    }
 
     init(panelId: String, defaultScanner: ScannerKind) {
         self.panelId = panelId
@@ -74,7 +85,31 @@ struct ListPanel: View {
             broker.setQuoteSymbols(symbols, owner: panelId)
         }
         .onChange(of: scanSpec) { _, new in broker.setScanner(new, owner: panelId) }
-        .onChange(of: symbols) { _, new in broker.setQuoteSymbols(new, owner: panelId) }
+        .onChange(of: symbols) { _, new in
+            broker.setQuoteSymbols(new, owner: panelId)
+            refreshRows()
+        }
+        // Quotes read here, outside `body`, don't redraw the list on every tick.
+        .task(id: scanner) {
+            while !Task.isCancelled {
+                refreshRows()
+                try? await Task.sleep(for: Self.refreshInterval)
+            }
+        }
+    }
+
+    private func refreshRows() {
+        var values: [String: RowValues] = [:]
+        for symbol in symbols {
+            let q = broker.quote(symbol)
+            values[symbol] = RowValues(
+                last: q?.last,
+                change: changePercent(symbol, q),
+                volume: scanner == .dollarVolume
+                    ? Fmt.dollars(q?.volume.flatMap { v in q?.last.map { v * $0 } })
+                    : Fmt.volume(q?.volume))
+        }
+        if values != rowValues { rowValues = values }
     }
 
     private var columnHeader: some View {
@@ -117,22 +152,19 @@ struct ListPanel: View {
     }
 
     private func row(_ symbol: String) -> some View {
-        let q = broker.quotes[symbol]
-        let change = changePercent(symbol, q)
+        let values = rowValues[symbol]
+        let change = values?.change
         let isCharted = workspace.selectedChart.symbol == symbol
         let unavailable = broker.unavailableQuotes[symbol]
-        let volume = scanner == .dollarVolume
-            ? Fmt.dollars(q?.volume.flatMap { v in q?.last.map { v * $0 } })
-            : Fmt.volume(q?.volume)
         return HStack(spacing: 4) {
             Text(symbol).fontWeight(.semibold)
                 .foregroundStyle(unavailable == nil ? Color.primary : Color.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(Fmt.price(q?.last)).frame(width: 58, alignment: .trailing)
+            Text(Fmt.price(values?.last)).frame(width: 58, alignment: .trailing)
             Text(Fmt.percent(change))
                 .foregroundStyle(change == nil ? Color.secondary : (change! >= 0 ? Color.green : Color.red))
                 .frame(width: 52, alignment: .trailing)
-            Text(volume).foregroundStyle(.secondary).frame(width: 50, alignment: .trailing)
+            Text(values?.volume ?? Fmt.volume(nil)).foregroundStyle(.secondary).frame(width: 50, alignment: .trailing)
         }
         .font(.system(size: 11).monospacedDigit())
         .lineLimit(1)

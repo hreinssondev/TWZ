@@ -39,7 +39,10 @@ final class Broker {
     private(set) var positions: [String: Position] = [:]
     private(set) var orders: [Int: OrderRow] = [:]
     private(set) var fills: [String: Fill] = [:]
-    private(set) var quotes: [String: Quote] = [:]
+    /// Every quote, for code outside views. Views read `quote(_:)` instead, so a tick in one symbol
+    /// doesn't redraw every view that shows some other symbol's quote.
+    @ObservationIgnored private(set) var quotes: [String: Quote] = [:]
+    @ObservationIgnored private var quoteBoxes: [String: QuoteBox] = [:]
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private(set) var unavailableQuotes: [String: String] = [:]
     /// Latest scanner results per list panel.
@@ -60,7 +63,7 @@ final class Broker {
         guard state == .connected else { return nil }
         if positions.isEmpty { return 0 }
         return positions.values.reduce(0) { sum, p in
-            sum + abs(p.quantity) * (quotes[p.symbol]?.last ?? p.avgCost)
+            sum + abs(p.quantity) * (quote(p.symbol)?.last ?? p.avgCost)
         }
     }
 
@@ -195,6 +198,14 @@ final class Broker {
         return TradingEngine.protectiveFillsNow(positions[symbol], last: quotes[symbol]?.last, kind: kind, at: price)
     }
 
+    /// One symbol's quote; a view reading it is redrawn only when that symbol's quote changes.
+    func quote(_ symbol: String) -> Quote? {
+        if let box = quoteBoxes[symbol] { return box.quote }
+        let box = QuoteBox(quote: quotes[symbol])
+        quoteBoxes[symbol] = box
+        return box.quote
+    }
+
     // MARK: - Snapshots
 
     /// Copies what changed; values that stayed the same aren't reassigned, so views reading them
@@ -216,7 +227,10 @@ final class Broker {
         if let v = s.positions { update(\.positions, v) }
         if let v = s.orders { update(\.orders, v) }
         if let v = s.fills { update(\.fills, v) }
-        if let v = s.quotes { update(\.quotes, v) }
+        if let v = s.quotes {
+            quotes = v
+            for (symbol, box) in quoteBoxes where box.quote != v[symbol] { box.quote = v[symbol] }
+        }
         if let v = s.unavailableQuotes { update(\.unavailableQuotes, v) }
         if let v = s.scans { update(\.scans, v) }
         if let v = s.sessionCloses { update(\.sessionCloses, v) }
@@ -248,4 +262,11 @@ final class Broker {
             chart.bars.insert(bar, at: i + 1)
         }
     }
+}
+
+/// One symbol's quote, observed on its own (see `Broker.quote(_:)`).
+@Observable
+fileprivate final class QuoteBox {
+    var quote: Quote?
+    init(quote: Quote?) { self.quote = quote }
 }

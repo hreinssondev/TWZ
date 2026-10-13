@@ -31,8 +31,8 @@ struct PriceLine {
 }
 
 struct CandleChart: View {
+    @Environment(Broker.self) private var broker
     let chart: ChartModel
-    var lastPrice: Double?
     var lines: [PriceLine] = []
     /// ⌥-click in the price area: called with the price under the cursor.
     var onAltClick: ((Double) -> Void)?
@@ -48,6 +48,9 @@ struct CandleChart: View {
     var onClick: (() -> Void)?
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
+
+    /// Read here rather than passed in, so each tick redraws only the chart, not the pane around it.
+    private var lastPrice: Double? { broker.quote(chart.symbol)?.last }
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
     @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
