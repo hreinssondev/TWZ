@@ -603,6 +603,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             // reqTickByTickData: contract, tick type, number of ticks (0 = live only), ignoreSize
             sendFields([97, reqId] + contract(stream.symbol, exchange: stream.venue) + [stream.kind.rawValue, 0, false])
         }
+        logTickStreams()
+    }
+
+    /// Which tick-by-tick streams are open, and IB's limit once known, in the system log.
+    private func logTickStreams() {
+        let open = tickReqByStream.keys
+            .map { "\($0.symbol) \($0.kind.rawValue)\($0.venue == "OVERNIGHT" ? " (overnight)" : "")" }
+            .sorted().joined(separator: ", ")
+        Self.log.notice("Tick-by-tick: \(self.tickReqByStream.count) open [\(open, privacy: .public)], limit \(self.tickLimit.map(String.init) ?? "not reached", privacy: .public)")
     }
 
     private func isStreamingTrades(_ symbol: String) -> Bool {
@@ -1486,7 +1495,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                         + "the others partly or with IB's regular bar updates"
                 }
                 tickLimit = tickReqByStream.count
+                logTickStreams()
             } else {
+                Self.log.notice("Tick-by-tick refused for \(stream.symbol, privacy: .public) \(stream.kind.rawValue, privacy: .public): \(code) \(text, privacy: .public)")
                 tickRefused.insert(stream)
                 if stream.venue != "OVERNIGHT" { lastMessage = "\(stream.symbol) tick-by-tick: \(text)" }
             }
