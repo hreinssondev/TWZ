@@ -462,13 +462,11 @@ struct CandleChart: View {
         drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity)
     }
 
-    /// `opacity` fades only the box, not its text; at the opacity slider's minimum there's no box and
-    /// the text takes the box's color.
+    /// `opacity` fades only the box, not its white text; at the opacity slider's minimum there's no box.
     private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
                          opacity: Double = 1) {
         let boxed = !PriceAxis.hidesLastPriceBox(opacity)
-        let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit())
-            .foregroundStyle(boxed ? .white : color))
+        let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
         let textSize = resolved.measure(in: CGSize(width: 300, height: 40))
         let rect = CGRect(x: plot.maxX + 1, y: y - tagHeight / 2, width: max(axisWidth - 2, textSize.width + 8), height: tagHeight)
         if boxed { ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color.opacity(opacity))) }

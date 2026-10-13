@@ -92,7 +92,7 @@ enum PriceAxis {
     static let defaultLastPriceOpacity = 1.0
     static let lastPriceOpacityRange = 0.1...1.0
 
-    /// At the slider's minimum the box is gone: just the price, in the line's color.
+    /// At the slider's minimum the box is gone: just the price.
     static func hidesLastPriceBox(_ opacity: Double) -> Bool {
         opacity <= lastPriceOpacityRange.lowerBound + 1e-9
     }
