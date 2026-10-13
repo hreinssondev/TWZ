@@ -108,6 +108,7 @@ struct CandleChart: View {
                     if dx != 0 { pan(byPoints: dx, plotWidth: plotWidth) }
                     if dy != 0 { zoom(by: exp(dy * 0.01), at: location.x, plotWidth: plotWidth) }
                 },
+                onPriceScale: { dy in scalePrices(by: exp(dy * 0.01)) },
                 onMagnify: { magnification, location in
                     zoom(by: 1 / (1 + magnification), at: location.x, plotWidth: plotWidth)
                 },
@@ -189,11 +190,17 @@ struct CandleChart: View {
         setScrollBack(chart.scrollBack + (newPadding - oldPadding) + fromRight / oldWidth - fromRight / newWidth)
     }
 
+    /// Stretches (factor < 1) or squeezes (> 1) the price axis around the middle of the view.
+    private func scalePrices(by factor: Double) {
+        chart.priceScale = min(20, max(0.05, chart.priceScale * factor))
+    }
+
     /// Latest bars at the right edge, default zoom, price range fitted to the bars again.
     private func resetView() {
         chart.scrollBack = 0
         chart.visibleBars = defaultVisibleBars
         chart.priceShift = 0
+        chart.priceScale = 1
     }
 
     // MARK: Gestures
@@ -205,7 +212,8 @@ struct CandleChart: View {
                 let start = dragStart ?? (chart.scrollBack, chart.priceShift)
                 dragStart = start
                 setScrollBack(start.scroll + Double(value.translation.width / barWidth(plotWidth: plotWidth)))
-                chart.priceShift = start.shift + Double(value.translation.height / max(1, plotHeight))
+                // The shift is a fraction of the unscaled range; scaled, the content still follows the pointer.
+                chart.priceShift = start.shift + Double(value.translation.height / max(1, plotHeight)) * chart.priceScale
             }
             .onEnded { _ in dragStart = nil }
     }
@@ -268,6 +276,8 @@ struct CandleChart: View {
         lo -= pad; hi += pad
         let shift = (hi - lo) * chart.priceShift
         lo += shift; hi += shift
+        let mid = (lo + hi) / 2, half = (hi - lo) / 2 * chart.priceScale
+        lo = mid - half; hi = mid + half
         return Viewport(plot: plot, priceRect: priceRect, volumeHeight: volumeHeight, barWidth: barWidth,
                         anchor: anchor, anchorX: anchorX, start: start, end: end, lo: lo, hi: hi, rest: rest)
     }
@@ -616,12 +626,15 @@ struct CandleChart: View {
 
 /// SwiftUI on macOS has no scroll-wheel or precise trackpad scroll gesture, so this background
 /// view watches the app's scroll and magnify events and forwards the ones over its own frame.
+/// ⌘ + vertical scroll scales the price axis instead of zooming in time.
 /// It also reports every left click, takes ⌥-clicks (before SwiftUI's tap and drag gestures see them)
 /// and ⌥ key changes.
 private struct ScrollCatcher: NSViewRepresentable {
     /// (dx, dy, location): dx in points (positive = content moves right), dy in points
     /// (positive = zoom out), location in view coordinates with a top-left origin.
     var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
+    /// ⌘ + vertical scroll, in points (positive = squeeze the prices, like zooming out).
+    var onPriceScale: (CGFloat) -> Void
     var onMagnify: (CGFloat, CGPoint) -> Void
     var onClick: () -> Void
     /// ⌥- or ⌃-click location and which of the two; return true to consume the click.
@@ -637,6 +650,7 @@ private struct ScrollCatcher: NSViewRepresentable {
 
     func updateNSView(_ view: CatcherView, context: Context) {
         view.onScroll = onScroll
+        view.onPriceScale = onPriceScale
         view.onMagnify = onMagnify
         view.onClick = onClick
         view.onModifiedClick = onModifiedClick
@@ -650,6 +664,7 @@ private struct ScrollCatcher: NSViewRepresentable {
 
     final class CatcherView: NSView {
         var onScroll: ((CGFloat, CGFloat, CGPoint) -> Void)?
+        var onPriceScale: ((CGFloat) -> Void)?
         var onMagnify: ((CGFloat, CGPoint) -> Void)?
         var onClick: (() -> Void)?
         var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
@@ -714,6 +729,10 @@ private struct ScrollCatcher: NSViewRepresentable {
                 if abs(dy) < abs(dx) * 0.35 { dy = 0 } else if abs(dx) < abs(dy) * 0.35 { dx = 0 }
             }
             if event.isDirectionInvertedFromDevice { dy = -dy }
+            if event.modifierFlags.contains(.command) {
+                if dy != 0 { onPriceScale?(dy) }
+                return
+            }
             onScroll?(dx, dy, location)
         }
     }

@@ -23,6 +23,8 @@ final class ChartModel: Identifiable {
     var scrollBack: Double = 0
     /// Vertical drag, as a fraction of the auto-fitted price range (positive = moved down).
     var priceShift: Double = 0
+    /// ⌘-swipe vertical zoom: the auto-fitted price range times this (above 1 = zoomed out).
+    var priceScale: Double = 1
 
     init(id: Int, symbol: String, timeframe: Timeframe) {
         self.id = id

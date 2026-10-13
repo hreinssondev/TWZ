@@ -133,6 +133,7 @@ final class Broker {
         chart.error = nil
         chart.scrollBack = 0
         chart.priceShift = 0
+        chart.priceScale = 1
         chart.isLoading = state == .connected && !chart.symbol.isEmpty
         let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe)
         engine.perform { $0.loadChart(spec, generation: generation) }
