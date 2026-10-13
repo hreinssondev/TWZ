@@ -32,7 +32,8 @@ struct PriceLine {
 
 struct CandleChart: View {
     let chart: ChartModel
-    var lastPrice: Double?
+    /// Read in `body`, so the chart redraws on a new last price without its parent being re-evaluated.
+    var lastPrice: () -> Double? = { nil }
     var lines: [PriceLine] = []
     /// ⌥-click in the price area: called with the price under the cursor.
     var onAltClick: ((Double) -> Void)?
@@ -76,10 +77,13 @@ struct CandleChart: View {
     private let defaultVisibleBars = 120.0
 
     var body: some View {
+        // Everything the drawing depends on is read here, where SwiftUI tracks it, not only in the Canvas.
+        let last = lastPrice()
+        let _ = (chart.bars, chart.visibleBars, chart.scrollBack, chart.priceShift, chart.isLoading, chart.error)
         GeometryReader { geo in
             let plotWidth = max(1, geo.size.width - axisWidth)
             Canvas(rendersAsynchronously: false) { ctx, size in
-                draw(in: &ctx, size: size)
+                draw(in: &ctx, size: size, lastPrice: last)
             }
             .contentShape(Rectangle())
             .onContinuousHover { phase in
@@ -236,7 +240,7 @@ struct CandleChart: View {
     }
 
     /// nil while the chart is too small to draw or has no bars.
-    private func viewport(size: CGSize) -> Viewport? {
+    private func viewport(size: CGSize, lastPrice: Double?) -> Viewport? {
         let bars = chart.bars
         let plot = plotRect(size: size)
         guard plot.width > 20, plot.height > 20, !bars.isEmpty else { return nil }
@@ -270,7 +274,7 @@ struct CandleChart: View {
 
     /// The order line closest to `point` vertically, if one is within a few points of it.
     private func orderLine(near point: CGPoint, size: CGSize) -> Int? {
-        guard onCancelOrder != nil, let v = viewport(size: size),
+        guard onCancelOrder != nil, let v = viewport(size: size, lastPrice: lastPrice()),
               point.y >= v.plot.minY, point.y <= v.plot.maxY else { return nil }
         return lines
             .compactMap { line in
@@ -284,13 +288,13 @@ struct CandleChart: View {
 
     /// The price under a point in the price area, or nil outside it.
     private func price(at point: CGPoint, size: CGSize) -> Double? {
-        guard let v = viewport(size: size), v.priceRect.contains(point) else { return nil }
+        guard let v = viewport(size: size, lastPrice: lastPrice()), v.priceRect.contains(point) else { return nil }
         return v.price(at: point.y)
     }
 
-    private func draw(in ctx: inout GraphicsContext, size: CGSize) {
+    private func draw(in ctx: inout GraphicsContext, size: CGSize, lastPrice: Double?) {
         let bars = chart.bars
-        guard let v = viewport(size: size) else {
+        guard let v = viewport(size: size, lastPrice: lastPrice) else {
             let plot = plotRect(size: size)
             guard plot.width > 20, plot.height > 20 else { return }
             let msg = chart.isLoading ? "Loading…" : (chart.error ?? (chart.symbol.isEmpty ? "Enter a symbol" : "No data"))

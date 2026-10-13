@@ -39,7 +39,9 @@ final class Broker {
     private(set) var positions: [String: Position] = [:]
     private(set) var orders: [Int: OrderRow] = [:]
     private(set) var fills: [String: Fill] = [:]
-    private(set) var quotes: [String: Quote] = [:]
+    /// Quotes for views that don't need every tick (the scanner lists, size hints, totals): a copy
+    /// of the latest, refreshed a few times a second, so busy lists don't hold up the charts.
+    private(set) var slowQuotes: [String: Quote] = [:]
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private(set) var unavailableQuotes: [String: String] = [:]
     /// Latest scanner results per list panel.
@@ -60,7 +62,7 @@ final class Broker {
         guard state == .connected else { return nil }
         if positions.isEmpty { return 0 }
         return positions.values.reduce(0) { sum, p in
-            sum + abs(p.quantity) * (quotes[p.symbol]?.last ?? p.avgCost)
+            sum + abs(p.quantity) * (slowQuotes[p.symbol]?.last ?? p.avgCost)
         }
     }
 
@@ -79,6 +81,18 @@ final class Broker {
     @ObservationIgnored private var charts: [ChartModel] = []
     /// Bumped on every chart load, so bars still on their way from the previous load are dropped.
     @ObservationIgnored private var chartGeneration: [Int: Int] = [:]
+    /// The latest quotes. Not observed as a whole: views read them through `last(_:)`, so a trade
+    /// redraws only what shows that symbol, or through `slowQuotes`.
+    @ObservationIgnored private var quotes: [String: Quote] = [:]
+    @ObservationIgnored private var lastPrices: [String: LastPrice] = [:]
+    @ObservationIgnored private var slowQuotesScheduled = false
+    private static let slowQuotesInterval: Duration = .milliseconds(250)
+
+    /// One symbol's last trade price, observed on its own (bid/ask updates don't touch it).
+    @Observable final class LastPrice {
+        var value: Double?
+        init(_ value: Double?) { self.value = value }
+    }
 
     init() {
         host = defaults.string(forKey: "ib.host") ?? "127.0.0.1"
@@ -173,6 +187,14 @@ final class Broker {
 
     // MARK: - Queries (on the UI's copy)
 
+    /// The symbol's last trade price; a view reading it is redrawn only when that changes.
+    func last(_ symbol: String) -> Double? {
+        if let price = lastPrices[symbol] { return price.value }
+        let price = LastPrice(quotes[symbol]?.last)
+        lastPrices[symbol] = price
+        return price.value
+    }
+
     /// Regular-session close to measure after-hours moves against (today's 16:00 close).
     func sessionClose(_ symbol: String) -> Double? {
         sessionCloses["\(symbol)|\(MarketSession.dayKey())"]
@@ -216,7 +238,11 @@ final class Broker {
         if let v = s.positions { update(\.positions, v) }
         if let v = s.orders { update(\.orders, v) }
         if let v = s.fills { update(\.fills, v) }
-        if let v = s.quotes { update(\.quotes, v) }
+        if let v = s.quotes, v != quotes {
+            quotes = v
+            for (symbol, price) in lastPrices where price.value != v[symbol]?.last { price.value = v[symbol]?.last }
+            scheduleSlowQuotes()
+        }
         if let v = s.unavailableQuotes { update(\.unavailableQuotes, v) }
         if let v = s.scans { update(\.scans, v) }
         if let v = s.sessionCloses { update(\.sessionCloses, v) }
@@ -229,6 +255,18 @@ final class Broker {
             for bar in patch.tail { Self.upsert(bar, into: chart) }
             if chart.isLoading != patch.isLoading { chart.isLoading = patch.isLoading }
             if chart.error != patch.error { chart.error = patch.error }
+        }
+    }
+
+    /// Copies the latest quotes into `slowQuotes` once the interval has passed, however many came meanwhile.
+    private func scheduleSlowQuotes() {
+        guard !slowQuotesScheduled else { return }
+        slowQuotesScheduled = true
+        Task { [weak self] in
+            try? await Task.sleep(for: Self.slowQuotesInterval)
+            guard let self else { return }
+            slowQuotesScheduled = false
+            update(\.slowQuotes, quotes)
         }
     }
 

@@ -42,14 +42,14 @@ struct ChartPane: View {
     @FocusState private var symbolFocused: Bool
 
     private var isSelected: Bool { workspace.selectedChartIndex == chart.id }
-    private var quote: Quote? { broker.quotes[chart.symbol] }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
             CandleChart(
-                chart: chart, lastPrice: quote?.last, lines: priceLines,
+                // Read by the chart itself, so a trade redraws the chart and not this pane's lines.
+                chart: chart, lastPrice: { [broker, symbol = chart.symbol] in broker.last(symbol) }, lines: priceLines,
                 onAltClick: { price in
                     workspace.selectedChartIndex = chart.id
                     broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)

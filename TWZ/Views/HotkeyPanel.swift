@@ -279,7 +279,7 @@ private struct OrderAmountBox: View {
         guard let rate = broker.usdNok, rate > 0 else { return "No USD.NOK rate" }
         var text = "≈ $" + Int(amount / rate).formatted()
         let symbol = workspace.selectedChart.symbol
-        if let last = broker.quotes[symbol]?.last, let shares = broker.shares(forNOK: amount, at: last) {
+        if let last = broker.slowQuotes[symbol]?.last, let shares = broker.shares(forNOK: amount, at: last) {
             text += " · \(Fmt.shares(shares)) \(symbol)"
         }
         return text
