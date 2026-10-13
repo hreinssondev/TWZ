@@ -394,7 +394,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard !apiReady, nextOrderId != nil, !account.isEmpty else { return }
         apiReady = true
         state = .connected
-        statusText = "Connected · \(account)"
+        statusText = "Connected"
         lastMessage = nil
 
         send(59, 1, 1)                                                             // reqMarketDataType: real-time only
