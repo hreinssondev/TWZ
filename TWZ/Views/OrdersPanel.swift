@@ -219,6 +219,8 @@ struct OrdersPanel: View {
         ForEach(positions) { p in
             let last = broker.quote(p.symbol)?.last
             let pnl = last.map { ($0 - p.avgCost) * p.quantity }
+            // Market value in NOK (at cost until there's a quote), under the P/L.
+            let valueNOK = broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * $0 }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     symbolButton(p.symbol, color: sideColor(p.quantity > 0))
@@ -227,6 +229,10 @@ struct OrdersPanel: View {
                 }
                 HStack(spacing: 4) {
                     Text("\(Text(Fmt.shares(p.quantity)).foregroundStyle(sideColor(p.quantity > 0))) - \(Fmt.price(p.avgCost))")
+                    if let valueNOK {
+                        Spacer(minLength: 2)
+                        Text(Fmt.amount(valueNOK)).foregroundStyle(.secondary)
+                    }
                 }
                 .font(.system(size: 10).monospacedDigit())
             }
