@@ -2,7 +2,8 @@
 //  SettingsView.swift
 //  TWZ
 //
-//  Settings sheet: Connection (IB Gateway host/port/client, applied on reconnect)
+//  Settings sheet: Connection (IB Gateway host/port/client, applied on reconnect),
+//  Trading (what clicking a hotkey button does, and the keyboard shortcuts)
 //  and Appearance (candle and chart line colors, applied immediately).
 //
 
@@ -14,12 +15,14 @@ struct SettingsView: View {
 
     enum Tab: String, CaseIterable, Identifiable {
         case connection = "Connection"
+        case trading = "Trading"
         case appearance = "Appearance"
         var id: String { rawValue }
 
         var icon: String {
             switch self {
             case .connection: "network"
+            case .trading: "keyboard"
             case .appearance: "paintpalette"
             }
         }
@@ -51,6 +54,7 @@ struct SettingsView: View {
 
             switch tab {
             case .connection: ConnectionSettings()
+            case .trading: TradingSettings()
             case .appearance: AppearanceSettings()
             }
         }
@@ -143,6 +147,44 @@ private struct ConnectionSettings: View {
         broker.clientId = clientId
         broker.disconnect()
         broker.connect()
+    }
+}
+
+// MARK: - Trading
+
+private struct TradingSettings: View {
+    @AppStorage(HotkeyClickMode.storageKey) private var clickMode: HotkeyClickMode = .select
+
+    private let shortcuts: [(String, String)] = [
+        ("⌘↩", "Send the selected hotkey"),
+        ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included"),
+        ("⌘S", "Close 100% of the chart's position at market"),
+        ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
+        ("Own shortcut", "Send that hotkey (set in the hotkey editor)"),
+    ]
+
+    var body: some View {
+        Form {
+            Section("Hotkey buttons") {
+                Picker("Clicking a button", selection: $clickMode) {
+                    ForEach(HotkeyClickMode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.radioGroup)
+                Text(clickMode == .send
+                     ? "Fires as the mouse goes down. The clicked button is also selected, so ⌘↩ sends it again."
+                     : "Click picks the hotkey; ⌘↩ sends it for the selected chart's symbol.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Keyboard shortcuts (selected chart's symbol)") {
+                ForEach(shortcuts, id: \.0) { keys, action in
+                    LabeledContent(keys) {
+                        Text(action).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

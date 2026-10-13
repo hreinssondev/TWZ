@@ -3,7 +3,8 @@
 //  TWZ
 //
 //  Two-row grid (6 × 2 by default) of configurable order buttons acting on the selected chart's symbol.
-//  Clicking a button selects it; ⌘↩ sends the selected one (see TradingShortcuts).
+//  Clicking a button selects it, and ⌘↩ sends the selected one (see TradingShortcuts); or, set in
+//  Settings ▸ Trading, clicking sends the order on mouse-down (and selects it too).
 //  Click the "Hotkeys" title to customize them all, or right-click a button to edit just that one.
 //  Beside them, the NOK amount that ⌥-clicking a chart buys.
 //
@@ -16,6 +17,7 @@ struct HotkeyPanel: View {
     @Environment(Workspace.self) private var workspace
     @State private var editing: Int?
     @State private var showingCustomizer = false
+    @AppStorage(HotkeyClickMode.storageKey) private var clickMode: HotkeyClickMode = .select
 
     static let buttonHeight: CGFloat = 44
     /// Buttons shrink down to this when the panel is dragged shorter than they need at full height.
@@ -67,8 +69,10 @@ struct HotkeyPanel: View {
                             HotkeyButton(hotkey: hotkey, height: height,
                                          selected: hotkey.id == workspace.selectedHotkeyID, firesOnPress: true) {
                                 workspace.selectedHotkeyID = hotkey.id
+                                if clickMode == .send { broker.run(hotkey, symbol: workspace.selectedChart.symbol) }
                             }
-                            .help("Click to select · ⌘↩ sends it" + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
+                            .help((clickMode == .send ? "Click sends · ⌘↩ sends it again" : "Click to select · ⌘↩ sends it")
+                                  + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
                                   + " · ⌘S closes 100% at market")
                             .contextMenu {
                                 Button("Edit…") { editing = index }
