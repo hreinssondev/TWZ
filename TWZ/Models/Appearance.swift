@@ -44,7 +44,7 @@ enum AppearanceDefaults {
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
-        Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.lineWidthKey,
+        Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
     ] + LineDashes.keys
 
@@ -111,6 +111,8 @@ enum Indicators {
     static let vwapKey = "showVWAP"
     static let fastSMAKey = "showSMA9"
     static let slowSMAKey = "showSMA21"
+    /// Arrows at the day's fills: green ▲ under buys, red ▼ over sells.
+    static let tradesKey = "showTrades"
     static let lineWidthKey = "indicatorLineWidth"
     static let defaultLineWidth = 1.25
     static let lineWidthRange = 0.5...4.0

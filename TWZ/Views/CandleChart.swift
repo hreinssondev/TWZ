@@ -11,6 +11,8 @@
 //  overnight in indigo.
 //  Indicators: SMA 9 and SMA 21 on every chart, plus VWAP (from 04:00 ET) on intraday charts;
 //  each can be turned off, and their thickness set, in Settings › Appearance.
+//  Trades (off by default): the day's fills in the symbol, a green ▲ under each buy and a red ▼
+//  over each sell, tip at the fill price, on the bar the fill came in.
 //  Holding ⌃ over the price area with a position open shows, left of the price tag, the P/L if the
 //  position closed at that price.
 //
@@ -62,6 +64,7 @@ struct CandleChart: View {
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
+    @AppStorage(Indicators.tradesKey) private var showTrades = false
     @AppStorage(Indicators.lineWidthKey) private var indicatorWidth = Indicators.defaultLineWidth
     @AppStorage(PriceAxis.fontSizeKey) private var axisFontSize = PriceAxis.defaultFontSize
     @AppStorage(PriceAxis.labelSpacingKey) private var labelSpacing = PriceAxis.defaultLabelSpacing
@@ -434,6 +437,7 @@ struct CandleChart: View {
         plotCtx.fill(downBodies, with: .color(down))
 
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
+        if showTrades { drawTrades(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y) }
 
         // Position / order lines; the ones that move aside for the last price (avg cost) go on top of it.
         let last = (lastPrice ?? bars.last?.close).flatMap { $0 > lo && $0 < hi ? $0 : nil }
@@ -508,6 +512,66 @@ struct CandleChart: View {
         }
         if showSlowSMA { stroke(Self.sma(bars, period: 21, start: start, end: end), color: Self.slowSMAColor) }
         if showFastSMA { stroke(Self.sma(bars, period: 9, start: start, end: end), color: Self.fastSMAColor) }
+    }
+
+    // MARK: Trades
+
+    /// One arrow: an order's fills on one bar, at their volume-weighted average price.
+    private struct TradeMarker {
+        var bar: Int
+        var isBuy: Bool
+        var price: Double
+    }
+
+    /// The day's fills in this chart's symbol, on the visible bars.
+    private func drawTrades(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int,
+                            x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
+        let fills = broker.fills.values.filter { $0.symbol == chart.symbol }
+        guard !fills.isEmpty else { return }
+        var groups: [String: (bar: Int, isBuy: Bool, shares: Double, cost: Double)] = [:]
+        for fill in fills {
+            guard let bar = Self.barIndex(of: fill.time, in: bars, barSeconds: chart.timeframe.barSeconds),
+                  bar >= start, bar < end else { continue }
+            let key = "\(fill.orderId)|\(fill.side)|\(bar)"
+            var group = groups[key] ?? (bar, fill.side == "BOT", 0, 0)
+            group.shares += fill.shares
+            group.cost += fill.shares * fill.price
+            groups[key] = group
+        }
+        let markers = groups.values.compactMap { g in
+            g.shares > 0 ? TradeMarker(bar: g.bar, isBuy: g.isBuy, price: g.cost / g.shares) : nil
+        }
+
+        let head: CGFloat = 7, halfWidth: CGFloat = 5, stem: CGFloat = 7, stemHalf: CGFloat = 1.25
+        for m in markers {
+            let tip = CGPoint(x: x(m.bar), y: y(m.price))
+            let dir: CGFloat = m.isBuy ? 1 : -1      // buys point up from below, sells down from above
+            var arrow = Path()
+            arrow.move(to: tip)
+            arrow.addLine(to: CGPoint(x: tip.x + halfWidth, y: tip.y + dir * head))
+            arrow.addLine(to: CGPoint(x: tip.x + stemHalf, y: tip.y + dir * head))
+            arrow.addLine(to: CGPoint(x: tip.x + stemHalf, y: tip.y + dir * (head + stem)))
+            arrow.addLine(to: CGPoint(x: tip.x - stemHalf, y: tip.y + dir * (head + stem)))
+            arrow.addLine(to: CGPoint(x: tip.x - stemHalf, y: tip.y + dir * head))
+            arrow.addLine(to: CGPoint(x: tip.x - halfWidth, y: tip.y + dir * head))
+            arrow.closeSubpath()
+            ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+            ctx.fill(arrow, with: .color(m.isBuy ? .green : .red))
+        }
+    }
+
+    /// The bar a time falls in: the last bar starting at or before it; nil before the first bar, or
+    /// after the last intraday bar ends (the fill's bar hasn't come in yet).
+    static func barIndex(of time: Date, in bars: [Bar], barSeconds: Double?) -> Int? {
+        var lo = 0, hi = bars.count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if bars[mid].time <= time { lo = mid + 1 } else { hi = mid }
+        }
+        let i = lo - 1
+        guard i >= 0 else { return nil }
+        if let barSeconds, time.timeIntervalSince(bars[i].time) >= barSeconds, i == bars.count - 1 { return nil }
+        return i
     }
 
     /// Simple moving average of closes for bars start..<end; nil until `period` bars exist.

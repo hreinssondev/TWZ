@@ -86,9 +86,11 @@ private struct IndicatorToggles: View {
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
+    @AppStorage(Indicators.tradesKey) private var showTrades = false
 
     var body: some View {
         HStack(spacing: 1) {
+            chip("Trades", isOn: $showTrades)
             chip("VWAP", isOn: $showVWAP)
             chip("SMA9", isOn: $showFastSMA)
             chip("SMA21", isOn: $showSlowSMA)

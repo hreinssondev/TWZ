@@ -207,6 +207,7 @@ private struct AppearanceSettings: View {
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
+    @AppStorage(Indicators.tradesKey) private var showTrades = false
     @AppStorage(Indicators.lineWidthKey) private var indicatorWidth = Indicators.defaultLineWidth
     @AppStorage(PriceAxis.fontSizeKey) private var axisFontSize = PriceAxis.defaultFontSize
     @AppStorage(PriceAxis.labelSpacingKey) private var labelSpacing = PriceAxis.defaultLabelSpacing
@@ -273,6 +274,7 @@ private struct AppearanceSettings: View {
                 Toggle("VWAP (intraday charts)", isOn: $showVWAP)
                 Toggle("SMA 9", isOn: $showFastSMA)
                 Toggle("SMA 21", isOn: $showSlowSMA)
+                Toggle("Trades (▲ buys, ▼ sells)", isOn: $showTrades)
                 LabeledContent("Line thickness") {
                     HStack {
                         Slider(value: $indicatorWidth, in: Indicators.lineWidthRange, step: 0.25)
