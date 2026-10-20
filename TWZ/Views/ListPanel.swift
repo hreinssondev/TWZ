@@ -3,9 +3,9 @@
 //  TWZ
 //
 //  Live IB scanner list (gainers, losers, after-hours gainers, most active by
-//  dollar volume), with each symbol's % change over the last 5 minutes. Clicking a row loads it
-//  into the selected chart. Prices refresh every 2 seconds rather than every tick, which keeps
-//  the UI free for the charts.
+//  dollar volume), with each symbol's % change over the last 5 minutes and a green dot after the
+//  symbols traded today. Clicking a row loads it into the selected chart. Prices refresh every
+//  2 seconds rather than every tick, which keeps the UI free for the charts.
 //
 
 import SwiftUI
@@ -40,6 +40,8 @@ struct ListPanel: View {
     }
 
     private var symbols: [String] { broker.scans[panelId]?.symbols ?? [] }
+    /// Symbols with a fill today.
+    private var tradedSymbols: Set<String> { Set(broker.fills.values.map(\.symbol)) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -70,9 +72,10 @@ struct ListPanel: View {
             Divider()
 
             ScrollView {
+                let traded = tradedSymbols
                 LazyVStack(spacing: 0) {
                     ForEach(symbols, id: \.self) { symbol in
-                        row(symbol)
+                        row(symbol, traded: traded.contains(symbol))
                     }
                 }
             }
@@ -160,15 +163,21 @@ struct ListPanel: View {
         return change >= 0 ? .green : .red
     }
 
-    private func row(_ symbol: String) -> some View {
+    private func row(_ symbol: String, traded: Bool) -> some View {
         let values = rowValues[symbol]
         let change = values?.change
         let isCharted = workspace.targetSymbol == symbol
         let unavailable = broker.unavailableQuotes[symbol]
         return HStack(spacing: 4) {
-            Text(symbol).fontWeight(.semibold)
-                .foregroundStyle(unavailable == nil ? Color.primary : Color.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 3) {
+                Text(symbol).fontWeight(.semibold)
+                    .foregroundStyle(unavailable == nil ? Color.primary : Color.secondary)
+                if traded {
+                    Circle().fill(Color.green).frame(width: 5, height: 5)
+                        .help("Traded today")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             Text(Fmt.price(values?.last)).frame(width: 58, alignment: .trailing)
             Text(Fmt.percent(change))
                 .foregroundStyle(Self.changeColor(change))
