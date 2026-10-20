@@ -561,21 +561,6 @@ nonisolated enum Fmt {
         return (v >= 0 ? "+" : "") + v.formatted(.number.precision(.fractionLength(2))) + "%"
     }
 
-    static func volume(_ v: Double?) -> String {
-        guard let v else { return "—" }
-        switch v {
-        case 1_000_000_000...: return (v / 1_000_000_000).formatted(.number.precision(.fractionLength(2))) + "B"
-        case 1_000_000...: return (v / 1_000_000).formatted(.number.precision(.fractionLength(2))) + "M"
-        case 1_000...: return (v / 1_000).formatted(.number.precision(.fractionLength(1))) + "K"
-        default: return v.formatted(.number.precision(.fractionLength(0)))
-        }
-    }
-
-    static func dollars(_ v: Double?) -> String {
-        guard let v else { return "—" }
-        return "$" + volume(v)
-    }
-
     static func shares(_ v: Double) -> String {
         v.formatted(.number.precision(.fractionLength(0...2)))
     }

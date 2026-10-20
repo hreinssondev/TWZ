@@ -84,6 +84,13 @@ final class Broker {
     @ObservationIgnored private var charts: [ChartModel] = []
     /// Bumped on every chart load, so bars still on their way from the previous load are dropped.
     @ObservationIgnored private var chartGeneration: [Int: Int] = [:]
+    /// Last prices sampled by `recentChange(_:)`, oldest first, per symbol.
+    @ObservationIgnored private var priceSamples: [String: [(time: Date, price: Double)]] = [:]
+
+    static let recentChangeWindow: TimeInterval = 5 * 60
+    private static let priceSampleInterval: TimeInterval = 4
+    /// A symbol not sampled for this long (dropped off the lists, or the Mac slept) starts over.
+    private static let priceSampleGap: TimeInterval = 30
 
     init() {
         host = defaults.string(forKey: "ib.host") ?? "127.0.0.1"
@@ -207,6 +214,32 @@ final class Broker {
         let box = QuoteBox(quote: quotes[symbol])
         quoteBoxes[symbol] = box
         return box.quote
+    }
+
+    /// % change in the last price over the past `recentChangeWindow` (5 minutes). Samples the price
+    /// as it goes, so callers poll it every few seconds; until a symbol has a full window of samples
+    /// the change is measured from its first one and `isPartial` is true.
+    func recentChange(_ symbol: String) -> (percent: Double, isPartial: Bool)? {
+        guard state == .connected, let last = quotes[symbol]?.last, last > 0 else {
+            priceSamples[symbol] = nil
+            return nil
+        }
+        let now = Date()
+        var samples = priceSamples[symbol] ?? []
+        if let latest = samples.last, now.timeIntervalSince(latest.time) > Self.priceSampleGap {
+            samples = []
+        }
+        if samples.last.map({ now.timeIntervalSince($0.time) >= Self.priceSampleInterval }) ?? true {
+            samples.append((now, last))
+        }
+        // Keep the newest sample at or before the window's start, to measure from.
+        let cutoff = now.addingTimeInterval(-Self.recentChangeWindow)
+        if let i = samples.lastIndex(where: { $0.time <= cutoff }), i > 0 {
+            samples.removeFirst(i)
+        }
+        priceSamples[symbol] = samples
+        guard let base = samples.first, base.time < now else { return nil }
+        return ((last - base.price) / base.price * 100, base.time > cutoff)
     }
 
     /// The distinct sources of these orders, e.g. "Mid" or "Mid/Last"; nil if none are known

@@ -3,8 +3,9 @@
 //  TWZ
 //
 //  Live IB scanner list (gainers, losers, after-hours gainers, most active by
-//  dollar volume). Clicking a row loads it into the selected chart. Prices refresh every
-//  2 seconds rather than every tick, which keeps the UI free for the charts.
+//  dollar volume), with each symbol's % change over the last 5 minutes. Clicking a row loads it
+//  into the selected chart. Prices refresh every 2 seconds rather than every tick, which keeps
+//  the UI free for the charts.
 //
 
 import SwiftUI
@@ -24,7 +25,9 @@ struct ListPanel: View {
     private struct RowValues: Equatable {
         var last: Double?
         var change: Double?
-        var volume: String
+        /// % change over the last 5 minutes; `recentIsPartial` while less history than that is held.
+        var recent: Double?
+        var recentIsPartial = false
     }
 
     init(panelId: String, defaultScanner: ScannerKind) {
@@ -102,12 +105,12 @@ struct ListPanel: View {
         var values: [String: RowValues] = [:]
         for symbol in symbols {
             let q = broker.quote(symbol)
+            let recent = broker.recentChange(symbol)
             values[symbol] = RowValues(
                 last: q?.last,
                 change: changePercent(symbol, q),
-                volume: scanner == .dollarVolume
-                    ? Fmt.dollars(q?.volume.flatMap { v in q?.last.map { v * $0 } })
-                    : Fmt.volume(q?.volume))
+                recent: recent?.percent,
+                recentIsPartial: recent?.isPartial ?? false)
         }
         if values != rowValues { rowValues = values }
     }
@@ -117,7 +120,8 @@ struct ListPanel: View {
             Text("Symbol").frame(maxWidth: .infinity, alignment: .leading)
             Text("Last").frame(width: 58, alignment: .trailing)
             Text(scanner == .afterHours ? "AH %" : "%Chg").frame(width: 52, alignment: .trailing)
-            Text(scanner == .dollarVolume ? "$Vol" : "Vol").frame(width: 50, alignment: .trailing)
+            Text("5m %").frame(width: 50, alignment: .trailing)
+                .help("Change over the last 5 minutes (dimmed until 5 minutes of prices have been seen)")
         }
         .font(.system(size: 10, weight: .medium))
         .foregroundStyle(.secondary)
@@ -151,6 +155,11 @@ struct ListPanel: View {
         return q?.changePercent
     }
 
+    private static func changeColor(_ change: Double?) -> Color {
+        guard let change else { return .secondary }
+        return change >= 0 ? .green : .red
+    }
+
     private func row(_ symbol: String) -> some View {
         let values = rowValues[symbol]
         let change = values?.change
@@ -162,9 +171,12 @@ struct ListPanel: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(Fmt.price(values?.last)).frame(width: 58, alignment: .trailing)
             Text(Fmt.percent(change))
-                .foregroundStyle(change == nil ? Color.secondary : (change! >= 0 ? Color.green : Color.red))
+                .foregroundStyle(Self.changeColor(change))
                 .frame(width: 52, alignment: .trailing)
-            Text(values?.volume ?? Fmt.volume(nil)).foregroundStyle(.secondary).frame(width: 50, alignment: .trailing)
+            Text(Fmt.percent(values?.recent))
+                .foregroundStyle(Self.changeColor(values?.recent))
+                .opacity(values?.recentIsPartial == true ? 0.5 : 1)
+                .frame(width: 50, alignment: .trailing)
         }
         .font(.system(size: 11).monospacedDigit())
         .lineLimit(1)
