@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  UI state that survives relaunches: chart symbols/timeframes,
-//  scanner filters and hotkey configuration.
+//  scanner filters, hotkey configuration and what-if buys.
 //
 
 import Foundation
@@ -33,6 +33,21 @@ final class ChartModel: Identifiable {
     }
 }
 
+/// A pretend $3,000 buy at the last price, placed by ⌃-clicking a chart with no position open.
+/// Nothing is sent to IB; holding ⌘ over the chart shows what it would have made or lost.
+nonisolated struct WhatIf: Codable {
+    static let dollars = 3000.0
+    /// Stands in for an order id on the what-if line, so double-clicking the line removes it.
+    static let lineId = -1
+
+    var price: Double
+
+    var shares: Double { Self.dollars / price }
+
+    /// P/L if sold at `exit`.
+    func pnl(at exit: Double) -> Double { (exit - price) * shares }
+}
+
 @Observable
 final class Workspace {
     let charts: [ChartModel]
@@ -50,6 +65,8 @@ final class Workspace {
     var selectedHotkey: Hotkey? { hotkeys.first { $0.id == selectedHotkeyID } }
     /// Scanner filters per list panel and scanner, keyed "panelId|scanner".
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
+    /// What-if buys by symbol.
+    var whatIfs: [String: WhatIf] { didSet { save() } }
 
     var selectedChart: ChartModel { charts[selectedChartIndex] }
     /// The symbol orders go to: the selected chart's, or "" with no chart selected (nothing is sent).
@@ -85,6 +102,13 @@ final class Workspace {
         } else {
             scanFilters = [:]
         }
+
+        if let data = defaults.data(forKey: "whatIfs"),
+           let saved = try? JSONDecoder().decode([String: WhatIf].self, from: data) {
+            whatIfs = saved
+        } else {
+            whatIfs = [:]
+        }
     }
 
     func scanFilter(panel: String, _ kind: ScannerKind) -> ScannerFilter {
@@ -103,5 +127,6 @@ final class Workspace {
     private func save() {
         if let data = try? JSONEncoder().encode(hotkeys) { defaults.set(data, forKey: "hotkeys") }
         if let data = try? JSONEncoder().encode(scanFilters) { defaults.set(data, forKey: "scanFilters") }
+        if let data = try? JSONEncoder().encode(whatIfs) { defaults.set(data, forKey: "whatIfs") }
     }
 }

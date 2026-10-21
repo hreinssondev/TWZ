@@ -61,9 +61,16 @@ struct ChartPane: View {
                 },
                 onControlClick: { price in
                     workspace.selectedChartIndex = chart.id
-                    broker.placeProtective(symbol: chart.symbol, at: price)
+                    if hasPosition {
+                        broker.placeProtective(symbol: chart.symbol, at: price)
+                    } else {
+                        // No position: a what-if buy at the last price (the clicked one until a quote comes in).
+                        let last = broker.quote(chart.symbol)?.last ?? price
+                        if last > 0 { workspace.whatIfs[chart.symbol] = WhatIf(price: last) }
+                    }
                 },
                 controlClickColor: { price in
+                    guard hasPosition else { return Self.whatIfColor }
                     guard let kind = broker.protectiveKind(symbol: chart.symbol, at: price),
                           !broker.protectiveFillsNow(symbol: chart.symbol, kind: kind, at: price) else { return nil }
                     return protectiveColor(kind)
@@ -72,7 +79,14 @@ struct ChartPane: View {
                     guard let p = broker.positions[chart.symbol], p.quantity != 0 else { return nil }
                     return (price - p.avgCost) * p.quantity
                 },
-                onCancelOrder: { id in broker.cancelOrder(id, why: "chart: double-clicked the order line") },
+                whatIfPnL: { price in workspace.whatIfs[chart.symbol]?.pnl(at: price) },
+                onCancelOrder: { id in
+                    if id == WhatIf.lineId {
+                        workspace.whatIfs[chart.symbol] = nil
+                    } else {
+                        broker.cancelOrder(id, why: "chart: double-clicked the order line")
+                    }
+                },
                 onClick: { dismissedTrip = closedTrip?.id ?? dismissedTrip }
             )
         }
@@ -166,6 +180,10 @@ struct ChartPane: View {
         return trip
     }
 
+    private static let whatIfColor = Color.pink
+
+    private var hasPosition: Bool { broker.positions[chart.symbol].map { $0.quantity != 0 } ?? false }
+
     private func protectiveColor(_ kind: Broker.Protective.Kind) -> Color {
         kind == .stopLoss
             ? LineColors.resolve(stopLossHex, default: LineColors.defaultStopLoss)
@@ -189,6 +207,10 @@ struct ChartPane: View {
             // Avg cost: number only on the axis (just left of it when the last price box would cover it).
             lines.append(PriceLine(price: p.avgCost, color: LineColors.resolve(avgCostHex, default: LineColors.defaultAvgCost),
                                    label: "", dashed: avgCostDashed, movesAsideForLastPrice: true))
+        }
+        if let whatIf = workspace.whatIfs[chart.symbol] {
+            // ⌃-clicked with no position: "W" at the pretend buy's price; double-click removes it.
+            lines.append(PriceLine(price: whatIf.price, color: Self.whatIfColor, label: "W", orderId: WhatIf.lineId))
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = o.action == "BUY" ? "B" : "S"
