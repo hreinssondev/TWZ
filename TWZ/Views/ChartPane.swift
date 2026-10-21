@@ -184,8 +184,8 @@ struct ChartPane: View {
         return trip
     }
 
-    /// Bright orange, a shade hotter than the default order line orange.
-    private static let whatIfColor = Color(red: 1.0, green: 0.45, blue: 0.0)
+    /// Hot pink: the system pink reads as red next to the stop loss line.
+    private static let whatIfColor = Color(red: 1.0, green: 0.25, blue: 0.8)
 
     private var hasPosition: Bool { broker.positions[chart.symbol].map { $0.quantity != 0 } ?? false }
 
