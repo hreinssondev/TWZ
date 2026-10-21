@@ -32,6 +32,8 @@ struct PriceLine {
     /// Drawn above the last price line, and its price box moves into the chart, just left of the axis,
     /// where the last price box would cover it.
     var movesAsideForLastPrice = false
+    /// Shown in a box of the line's color in the chart, just left of its price on the axis.
+    var note: String?
 }
 
 struct CandleChart: View {
@@ -466,9 +468,15 @@ struct CandleChart: View {
         }
         visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
 
-        // Holding ⌘ over the chart: the what-if buy's P/L at the last price.
+        // Holding ⌘ over the chart: the what-if buy's P/L at the last price, in place of the lines' notes
+        // (the what-if's sits on the last price right after it's placed).
         if hover != nil, commandHeld, let last, let pnl = whatIfPnL?(last) {
             drawPnLTag(in: &ctx, pnl: pnl, y: y(last), plot: plot)
+        } else {
+            for line in visibleLines {
+                guard let note = line.note else { continue }
+                drawTag(in: &ctx, text: note, y: y(line.price), plot: plot, color: line.color, inside: true)
+            }
         }
 
         // Crosshair (horizontal only).

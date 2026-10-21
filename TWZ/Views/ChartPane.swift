@@ -214,8 +214,11 @@ struct ChartPane: View {
                                    label: "", dashed: avgCostDashed, movesAsideForLastPrice: true))
         }
         if let whatIf = workspace.whatIfs[chart.symbol] {
-            // ⌃-clicked with no position: "W" at the pretend buy's price; double-click removes it.
-            lines.append(PriceLine(price: whatIf.price, color: Self.whatIfColor, label: "W", orderId: WhatIf.lineId))
+            // ⌃-clicked with no position: "W" at the pretend buy's price, and beside it what it's worth in
+            // NOK (80% of what IB's margin allows); double-click removes it.
+            let valueNOK = broker.usdNok.map { whatIf.shares * whatIf.price * $0 }
+            lines.append(PriceLine(price: whatIf.price, color: Self.whatIfColor, label: "W", orderId: WhatIf.lineId,
+                                   note: valueNOK.map { "\(OrderAmount.format($0)) NOK" }))
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = o.action == "BUY" ? "B" : "S"
