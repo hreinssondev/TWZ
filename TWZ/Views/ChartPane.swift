@@ -37,24 +37,9 @@ struct ChartPane: View {
     @Environment(Workspace.self) private var workspace
     let chart: ChartModel
 
-    @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
-    @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
-    @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
-    @AppStorage(LineColors.altClickKey) private var altClickHex = ""
-    @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
-    @AppStorage(LineColors.takeProfitKey) private var takeProfitHex = ""
-    @AppStorage(LineColors.ordersKey) private var ordersHex = ""
-    @AppStorage(LineDashes.avgCostKey) private var avgCostDashed = LineDashes.defaultAvgCost
-    @AppStorage(LineDashes.altClickKey) private var altClickDashed = LineDashes.defaultAltClick
-    @AppStorage(LineDashes.stopLossKey) private var stopLossDashed = LineDashes.defaultStopLoss
-    @AppStorage(LineDashes.takeProfitKey) private var takeProfitDashed = LineDashes.defaultTakeProfit
-    @AppStorage(LineDashes.ordersKey) private var ordersDashed = LineDashes.defaultOrders
-    @AppStorage(LineDashes.lastTradeKey) private var lastTradeDashed = LineDashes.defaultLastTrade
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @State private var symbolText = ""
-    /// The closed round trip whose exit lines were cleared by a click or a new order.
-    @State private var dismissedTrip: String?
     @FocusState private var symbolFocused: Bool
 
     private var isSelected: Bool { workspace.isChartSelected && workspace.selectedChartIndex == chart.id }
@@ -63,45 +48,7 @@ struct ChartPane: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            CandleChart(
-                chart: chart, lines: priceLines,
-                // Switched off in the top bar: no handler, so ⌥ neither tints the price tag nor places orders.
-                onAltClick: altClickOrders ? { price in
-                    workspace.selectedChartIndex = chart.id
-                    broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
-                } : nil,
-                onControlClick: { price in
-                    workspace.selectedChartIndex = chart.id
-                    if hasPosition {
-                        broker.placeProtective(symbol: chart.symbol, at: price)
-                    } else {
-                        // No position: a what-if buy at the last price, sized from IB's margin preview.
-                        let symbol = chart.symbol
-                        broker.sizeWhatIf(symbol: symbol, fraction: WhatIf.buyingPowerFraction) { size in
-                            workspace.whatIfs[symbol] = WhatIf(price: size.price, shares: size.shares)
-                        }
-                    }
-                },
-                controlClickColor: { price in
-                    guard hasPosition else { return Self.whatIfColor }
-                    guard let kind = broker.protectiveKind(symbol: chart.symbol, at: price),
-                          !broker.protectiveFillsNow(symbol: chart.symbol, kind: kind, at: price) else { return nil }
-                    return protectiveColor(kind)
-                },
-                controlHoverPnL: { price in
-                    guard let p = broker.positions[chart.symbol], p.quantity != 0 else { return nil }
-                    return (price - p.avgCost) * p.quantity
-                },
-                whatIfPnL: { price in workspace.whatIfs[chart.symbol]?.pnl(at: price) },
-                onCancelOrder: { id in
-                    if id == WhatIf.lineId {
-                        workspace.whatIfs[chart.symbol] = nil
-                    } else {
-                        broker.cancelOrder(id, why: "chart: double-clicked the order line")
-                    }
-                },
-                onClick: { dismissedTrip = closedTrip?.id ?? dismissedTrip }
-            )
+            TradingChart(chart: chart, allowsAltClick: true) { workspace.selectedChartIndex = chart.id }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -116,12 +63,6 @@ struct ChartPane: View {
         }
         .onChange(of: chart.symbol) { _, new in
             if !symbolFocused { symbolText = new }
-        }
-        // A new order in the symbol clears the last trade's exit lines.
-        .onChange(of: symbolOrders) { old, new in
-            if old.symbol == new.symbol, !new.ids.isSubset(of: old.ids) {
-                dismissedTrip = closedTrip?.id ?? dismissedTrip
-            }
         }
         // Leaving the field without pressing Return drops the edit.
         .onChange(of: symbolFocused) { _, focused in
@@ -173,6 +114,84 @@ struct ChartPane: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
+    }
+}
+
+/// A candle chart that trades: ⌃-click places a stop loss / take profit (or, with no position, a
+/// what-if buy), ⌥-click buys where allowed, and the position, orders and what-if are drawn as lines
+/// (double-click one to cancel it). Shared by the main charts and the Charts window.
+struct TradingChart: View {
+    @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
+    let chart: ChartModel
+    /// ⌥-click orders; also switched off in the top bar.
+    let allowsAltClick: Bool
+    /// Called before an order or what-if from a click, e.g. to select the chart.
+    var onTrade: () -> Void = {}
+
+    @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
+    @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
+    @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
+    @AppStorage(LineColors.altClickKey) private var altClickHex = ""
+    @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
+    @AppStorage(LineColors.takeProfitKey) private var takeProfitHex = ""
+    @AppStorage(LineColors.ordersKey) private var ordersHex = ""
+    @AppStorage(LineDashes.avgCostKey) private var avgCostDashed = LineDashes.defaultAvgCost
+    @AppStorage(LineDashes.altClickKey) private var altClickDashed = LineDashes.defaultAltClick
+    @AppStorage(LineDashes.stopLossKey) private var stopLossDashed = LineDashes.defaultStopLoss
+    @AppStorage(LineDashes.takeProfitKey) private var takeProfitDashed = LineDashes.defaultTakeProfit
+    @AppStorage(LineDashes.ordersKey) private var ordersDashed = LineDashes.defaultOrders
+    @AppStorage(LineDashes.lastTradeKey) private var lastTradeDashed = LineDashes.defaultLastTrade
+    /// The closed round trip whose exit lines were cleared by a click or a new order.
+    @State private var dismissedTrip: String?
+
+    var body: some View {
+        CandleChart(
+            chart: chart, lines: priceLines,
+            // Switched off in the top bar: no handler, so ⌥ neither tints the price tag nor places orders.
+            onAltClick: allowsAltClick && altClickOrders ? { price in
+                onTrade()
+                broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
+            } : nil,
+            onControlClick: { price in
+                guard !chart.symbol.isEmpty else { return }
+                onTrade()
+                if hasPosition {
+                    broker.placeProtective(symbol: chart.symbol, at: price)
+                } else {
+                    // No position: a what-if buy at the last price, sized from IB's margin preview.
+                    let symbol = chart.symbol
+                    broker.sizeWhatIf(symbol: symbol, fraction: WhatIf.buyingPowerFraction) { size in
+                        workspace.whatIfs[symbol] = WhatIf(price: size.price, shares: size.shares)
+                    }
+                }
+            },
+            controlClickColor: { price in
+                guard hasPosition else { return Self.whatIfColor }
+                guard let kind = broker.protectiveKind(symbol: chart.symbol, at: price),
+                      !broker.protectiveFillsNow(symbol: chart.symbol, kind: kind, at: price) else { return nil }
+                return protectiveColor(kind)
+            },
+            controlHoverPnL: { price in
+                guard let p = broker.positions[chart.symbol], p.quantity != 0 else { return nil }
+                return (price - p.avgCost) * p.quantity
+            },
+            whatIfPnL: { price in workspace.whatIfs[chart.symbol]?.pnl(at: price) },
+            onCancelOrder: { id in
+                if id == WhatIf.lineId {
+                    workspace.whatIfs[chart.symbol] = nil
+                } else {
+                    broker.cancelOrder(id, why: "chart: double-clicked the order line")
+                }
+            },
+            onClick: { dismissedTrip = closedTrip?.id ?? dismissedTrip }
+        )
+        // A new order in the symbol clears the last trade's exit lines.
+        .onChange(of: symbolOrders) { old, new in
+            if old.symbol == new.symbol, !new.ids.isSubset(of: old.ids) {
+                dismissedTrip = closedTrip?.id ?? dismissedTrip
+            }
+        }
     }
 
     private struct SymbolOrders: Equatable {

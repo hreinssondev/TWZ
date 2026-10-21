@@ -176,8 +176,9 @@ struct SecondaryChartsView: View {
     }
 }
 
-/// A simplified chart pane for the secondary window: clicking loads the symbol
-/// into the main window's selected chart instead of selecting this pane.
+/// A chart pane for the secondary window: clicking loads the symbol into the main window's
+/// selected chart instead of selecting this pane. ⌃-click, the what-if, its lines and ⌘ P/L work
+/// as on the main charts; ⌥-click orders are left off.
 private struct SecondaryChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
@@ -190,17 +191,7 @@ private struct SecondaryChartPane: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            CandleChart(
-                chart: chart,
-                lines: [],
-                onAltClick: nil,
-                onControlClick: nil,
-                controlClickColor: { _ in nil },
-                controlHoverPnL: { _ in nil },
-                whatIfPnL: { _ in nil },
-                onCancelOrder: { _ in },
-                onClick: { }
-            )
+            TradingChart(chart: chart, allowsAltClick: false)
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
