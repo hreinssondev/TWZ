@@ -182,7 +182,7 @@ struct ChartPane: View {
         return trip
     }
 
-    private static let whatIfColor = Color.orange
+    private static let whatIfColor = Color.pink
 
     private var hasPosition: Bool { broker.positions[chart.symbol].map { $0.quantity != 0 } ?? false }
 
