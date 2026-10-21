@@ -57,24 +57,29 @@ final class GlobalHotkey {
 }
 
 /// Keeps the Charts window shortcut (Settings ▸ Trading) registered. Pressed with the Charts window
-/// not open, it opens it; open but not in front (or the app in the background), it brings it to the
-/// front; in front, it closes it, which turns its charts off like P.
+/// in front, it hides it; otherwise it shows it in front, opening it if it isn't open. Hiding doesn't
+/// close the window, so its charts stay live and come back instantly.
 struct ChartsWindowShortcut: ViewModifier {
     @Environment(Workspace.self) private var workspace
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismissWindow) private var dismissWindow
+    /// The Charts window while the shortcut has it hidden (ordered out, not closed).
+    private static weak var hidden: NSWindow?
 
     func body(content: Content) -> some View {
         content.onChange(of: workspace.chartsWindowShortcut, initial: true) { _, shortcut in
-            GlobalHotkey.shared.register(shortcut) { [openWindow, dismissWindow] in
-                let id = SecondaryCharts.windowID
-                let key = NSApp.keyWindow
-                if NSApp.isActive, key?.identifier?.rawValue.hasPrefix(id) == true || key?.title == SecondaryCharts.windowTitle {
-                    dismissWindow(id: id)
-                } else {
-                    NSApp.activate()
-                    openWindow(id: id)
+            GlobalHotkey.shared.register(shortcut) { [openWindow] in
+                if NSApp.isActive, let key = NSApp.keyWindow, SecondaryCharts.isWindow(key) {
+                    key.orderOut(nil)
+                    Self.hidden = key
+                    return
                 }
+                NSApp.activate()
+                if let window = Self.hidden {
+                    window.makeKeyAndOrderFront(nil)
+                } else {
+                    openWindow(id: SecondaryCharts.windowID)
+                }
+                Self.hidden = nil
             }
         }
     }

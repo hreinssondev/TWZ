@@ -196,7 +196,7 @@ private struct TradingSettings: View {
                 if let failure = GlobalHotkey.shared.failure {
                     Text(failure).font(.caption).foregroundStyle(.red)
                 }
-                Text("Works from any app: opens the Charts window or brings it to the front. Pressed again with it in front, closes it, turning its charts off like P.")
+                Text("Works from any app: shows the Charts window in front (opening it if needed); pressed again, hides it. Hidden, its charts stay live, so it comes back instantly. Closing the window turns them off like P.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

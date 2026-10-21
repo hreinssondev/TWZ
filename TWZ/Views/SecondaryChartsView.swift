@@ -6,6 +6,7 @@
 //  chart while it stays in the top 18; only charts whose symbol dropped out load a new one.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
+//  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
 //
 
 import SwiftUI
@@ -17,6 +18,11 @@ enum SecondaryCharts {
     static let scannerOwner = "secondary-charts"
     static let windowID = "secondary-charts"
     static let windowTitle = "Charts"
+
+    static func isWindow(_ window: NSWindow?) -> Bool {
+        guard let window else { return false }
+        return window.identifier?.rawValue.hasPrefix(windowID) == true || window.title == windowTitle
+    }
 }
 
 struct SecondaryChartsView: View {
@@ -48,7 +54,10 @@ struct SecondaryChartsView: View {
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .onAppear { if !isPaused { start() } }
-        .onDisappear { stop() }
+        // On close only: hiding the window (ordering it out) keeps the charts live.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
+            if SecondaryCharts.isWindow(note.object as? NSWindow) { stop() }
+        }
         // Fills the charts as soon as the scanner answers, e.g. right after P is turned off.
         .onChange(of: broker.scans[SecondaryCharts.scannerOwner]?.symbols) {
             if !isPaused { syncWithGainers() }
