@@ -159,6 +159,7 @@ private struct ConnectionSettings: View {
 // MARK: - Trading
 
 private struct TradingSettings: View {
+    @Environment(Workspace.self) private var workspace
     @AppStorage(HotkeyClickMode.storageKey) private var clickMode: HotkeyClickMode = .select
 
     private let shortcuts: [(String, String)] = [
@@ -188,6 +189,16 @@ private struct TradingSettings: View {
                         Text(action).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
                     }
                 }
+            }
+            Section("Charts window") {
+                @Bindable var workspace = workspace
+                ShortcutRecorder(title: "Show / hide shortcut", shortcut: $workspace.chartsWindowShortcut, owner: .chartsWindow)
+                if let failure = GlobalHotkey.shared.failure {
+                    Text(failure).font(.caption).foregroundStyle(.red)
+                }
+                Text("Works from any app: opens the Charts window or brings it to the front. Pressed again with it in front, closes it, turning its charts off like P.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

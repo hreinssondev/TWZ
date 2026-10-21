@@ -434,7 +434,7 @@ private struct HotkeyFields: View {
                 ForEach(Hotkey.Action.allCases) { Text($0.rawValue).tag($0) }
             }
             LabeledContent("Color") { colorSwatches }
-            ShortcutRecorder(hotkey: $hotkey)
+            ShortcutRecorder(shortcut: $hotkey.shortcut, owner: .hotkey(hotkey.id))
             if hotkey.action.needsSize {
                 Picker("Size in", selection: $hotkey.sizing) {
                     ForEach(Hotkey.Sizing.allCases) { Text($0.rawValue).tag($0) }

@@ -21,6 +21,7 @@ struct TWZApp: App {
             ContentView()
                 .modifier(TradingShortcuts())
                 .modifier(ClickToUnfocus())
+                .modifier(ChartsWindowShortcut())
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)
@@ -36,7 +37,7 @@ struct TWZApp: App {
         .windowBackgroundDragBehavior(.enabled)
         .defaultSize(width: 1600, height: 1000)
 
-        Window("Charts", id: "secondary-charts") {
+        Window(SecondaryCharts.windowTitle, id: SecondaryCharts.windowID) {
             SecondaryChartsView()
                 .environment(broker)
                 .environment(workspace)

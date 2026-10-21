@@ -76,6 +76,8 @@ final class Workspace {
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
     /// What-if buys by symbol.
     var whatIfs: [String: WhatIf] { didSet { save() } }
+    /// System-wide shortcut that shows and hides the Charts window (see `ChartsWindowShortcut`).
+    var chartsWindowShortcut: KeyShortcut? { didSet { save() } }
 
     var selectedChart: ChartModel { charts[selectedChartIndex] }
     /// The symbol orders go to: the selected chart's, or "" with no chart selected (nothing is sent).
@@ -126,6 +128,9 @@ final class Workspace {
         } else {
             whatIfs = [:]
         }
+
+        chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
+            .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
     }
 
     func scanFilter(panel: String, _ kind: ScannerKind) -> ScannerFilter {
@@ -150,5 +155,6 @@ final class Workspace {
         if let data = try? JSONEncoder().encode(hotkeys) { defaults.set(data, forKey: "hotkeys") }
         if let data = try? JSONEncoder().encode(scanFilters) { defaults.set(data, forKey: "scanFilters") }
         if let data = try? JSONEncoder().encode(whatIfs) { defaults.set(data, forKey: "whatIfs") }
+        defaults.set(chartsWindowShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "chartsWindowShortcut")
     }
 }

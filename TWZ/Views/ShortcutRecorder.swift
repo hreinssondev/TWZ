@@ -2,8 +2,9 @@
 //  ShortcutRecorder.swift
 //  TWZ
 //
-//  Records a hotkey's keyboard shortcut: click, then press the keys. Esc cancels, Delete clears.
-//  Shortcuts the app or macOS already uses, or another hotkey has, are refused with the reason.
+//  Records a hotkey's or the Charts window's keyboard shortcut: click, then press the keys. Esc
+//  cancels, Delete clears. Shortcuts the app or macOS already uses, or another hotkey or the Charts
+//  window has, are refused with the reason.
 //
 
 import AppKit
@@ -11,24 +12,32 @@ import SwiftUI
 
 struct ShortcutRecorder: View {
     @Environment(Workspace.self) private var workspace
-    @Binding var hotkey: Hotkey
+    var title = "Keyboard shortcut"
+    @Binding var shortcut: KeyShortcut?
+    let owner: Owner
     @State private var monitor: Any?
     @State private var problem: String?
 
     /// True while any recorder is waiting for keys; TradingShortcuts then lets every key through.
     static var isRecording = false
 
+    /// What the shortcut is for, so its own current shortcut isn't counted as taken.
+    enum Owner: Equatable {
+        case hotkey(UUID)
+        case chartsWindow
+    }
+
     var body: some View {
-        LabeledContent("Keyboard shortcut") {
+        LabeledContent(title) {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 6) {
-                    Button(monitor != nil ? "Press keys…" : (hotkey.shortcut?.display ?? "Record")) {
+                    Button(monitor != nil ? "Press keys…" : (shortcut?.display ?? "Record")) {
                         monitor == nil ? start() : stop()
                     }
                     .help(monitor != nil ? "Esc cancels · Delete clears" : "Click, then press the shortcut")
-                    if hotkey.shortcut != nil, monitor == nil {
+                    if shortcut != nil, monitor == nil {
                         Button {
-                            hotkey.shortcut = nil
+                            shortcut = nil
                         } label: {
                             Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                         }
@@ -63,20 +72,29 @@ struct ShortcutRecorder: View {
         let plain = event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty
         if plain, event.keyCode == 53 { return stop() }                           // Esc
         if plain, event.keyCode == 51 || event.keyCode == 117 {                  // Delete
-            hotkey.shortcut = nil
+            shortcut = nil
             return stop()
         }
-        let shortcut = KeyShortcut(event)
-        if let reason = shortcut.reservedFor {
+        let new = KeyShortcut(event)
+        if let reason = new.reservedFor {
             problem = "\(reason). Try another."
             return
         }
-        if let other = workspace.hotkeys.first(where: { $0.id != hotkey.id && $0.shortcut == shortcut }) {
-            problem = "\(shortcut.display) is already \"\(other.label)\". Try another."
+        // A global shortcut without ⌘, ⌥ or ⌃ would swallow that key in every app.
+        if owner == .chartsWindow, !new.command, !new.option, !new.control, !new.isFunctionKey {
+            problem = "Add ⌘, ⌥ or ⌃ (or use an F-key): it works in every app."
+            return
+        }
+        if let other = workspace.hotkeys.first(where: { owner != .hotkey($0.id) && $0.shortcut == new }) {
+            problem = "\(new.display) is already \"\(other.label)\". Try another."
+            return
+        }
+        if owner != .chartsWindow, workspace.chartsWindowShortcut == new {
+            problem = "\(new.display) shows and hides the Charts window. Try another."
             return
         }
         problem = nil
-        hotkey.shortcut = shortcut
+        shortcut = new
         stop()
     }
 }

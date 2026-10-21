@@ -15,6 +15,8 @@ enum SecondaryCharts {
     static let timeframeKey = "secondaryChartsTimeframe"
     static let pausedKey = "secondaryChartsPaused"
     static let scannerOwner = "secondary-charts"
+    static let windowID = "secondary-charts"
+    static let windowTitle = "Charts"
 }
 
 struct SecondaryChartsView: View {
