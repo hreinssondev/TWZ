@@ -19,7 +19,7 @@ final class ChartModel: Identifiable {
     var error: String?
 
     // Viewport: how many bars fit on screen and how far we've scrolled back from the latest bar.
-    var visibleBars: Double = 120
+    var visibleBars: Double
     var scrollBack: Double = 0
     /// Vertical drag, as a fraction of the auto-fitted price range (positive = moved down).
     var priceShift: Double = 0
@@ -33,7 +33,11 @@ final class ChartModel: Identifiable {
         self.symbol = symbol
         self.timeframe = timeframe
         self.isCompact = isCompact
+        visibleBars = defaultVisibleBars
     }
+
+    /// Bars on screen at the default zoom; compact charts start zoomed out twice as far.
+    var defaultVisibleBars: Double { isCompact ? 240 : 120 }
 }
 
 /// A pretend buy at the last price, placed by ⌃-clicking a chart with no position open: 80% of the

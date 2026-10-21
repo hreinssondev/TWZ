@@ -87,7 +87,6 @@ struct CandleChart: View {
     private var tagHeight: CGFloat { axisFontSize + 6 }
     private let timeAxisHeight: CGFloat = 16
     private let rightPaddingBars = 3.0
-    private let defaultVisibleBars = 120.0
 
     var body: some View {
         GeometryReader { geo in
@@ -176,7 +175,7 @@ struct CandleChart: View {
     private func rightPadding(_ rest: RestOfDay?) -> Double {
         guard let rest else { return rightPaddingBars }
         return min(max(rightPaddingBars, Double(rest.slots)),
-                   max(rightPaddingBars, chart.visibleBars - max(Double(rest.todayBars), defaultVisibleBars)))
+                   max(rightPaddingBars, chart.visibleBars - max(Double(rest.todayBars), chart.defaultVisibleBars)))
     }
 
     /// Clamped write: never past the oldest bars, and at most half a screen into the future.
@@ -210,7 +209,7 @@ struct CandleChart: View {
     /// Latest bars at the right edge, default zoom, price range fitted to the bars again.
     private func resetView() {
         chart.scrollBack = 0
-        chart.visibleBars = defaultVisibleBars
+        chart.visibleBars = chart.defaultVisibleBars
         chart.priceShift = 0
         chart.priceScale = 1
     }
