@@ -114,11 +114,15 @@ private struct ConnectionSettings: View {
                     .controlSize(.small)
                 }
             }
-            if port == 4001 || port == 7496 {
-                Text("⚠︎ Live trading: hotkeys will send real orders.")
-                    .foregroundStyle(.red)
-            }
+        }
+        .formStyle(.grouped)
+        // Outside the form so it never scrolls out of the fixed-height sheet.
+        .safeAreaInset(edge: .bottom) {
             HStack {
+                if port == 4001 || port == 7496 {
+                    Text("⚠︎ Live trading: hotkeys will send real orders.")
+                        .foregroundStyle(.red)
+                }
                 Spacer()
                 Button("Save & Reconnect") {
                     let goingLive = (port == 4001 || port == 7496) && !broker.isLivePort
@@ -126,8 +130,10 @@ private struct ConnectionSettings: View {
                 }
                 .disabled(!hasChanges)
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(.bar)
         }
-        .formStyle(.grouped)
         .onAppear {
             host = broker.host
             port = broker.port
