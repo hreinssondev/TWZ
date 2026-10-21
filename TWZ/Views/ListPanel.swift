@@ -60,7 +60,7 @@ struct ListPanel: View {
                 .buttonStyle(.borderless)
                 .help("Scanner filters")
                 .popover(isPresented: $showFilter, arrowEdge: .bottom) {
-                    ScanFilterEditor(filter: workspace.scanFilter(panel: panelId, scanner)) { filter in
+                    ScanFilterEditor(filter: workspace.scanFilter(panel: panelId, scanner), defaults: scanner.defaultFilter) { filter in
                         workspace.setScanFilter(filter, panel: panelId, scanner)
                         showFilter = false
                     }
@@ -210,6 +210,7 @@ struct ListPanel: View {
 /// Price/volume filter for a scanner; applied on "Apply" so typing doesn't resubscribe.
 private struct ScanFilterEditor: View {
     @State var filter: ScannerFilter
+    let defaults: ScannerFilter
     let onApply: (ScannerFilter) -> Void
 
     var body: some View {
@@ -218,7 +219,7 @@ private struct ScanFilterEditor: View {
             TextField("Max price", value: $filter.maxPrice, format: .number, prompt: Text("Any"))
             TextField("Min volume", value: $filter.minVolume, format: .number, prompt: Text("Any"))
             HStack {
-                Button("Reset") { filter = ScannerFilter() }
+                Button("Reset") { filter = defaults }
                 Spacer()
                 Button("Apply") { onApply(filter) }
                     .keyboardShortcut(.defaultAction)

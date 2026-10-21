@@ -112,7 +112,7 @@ final class Workspace {
     }
 
     func scanFilter(panel: String, _ kind: ScannerKind) -> ScannerFilter {
-        scanFilters["\(panel)|\(kind.rawValue)"] ?? ScannerFilter()
+        scanFilters["\(panel)|\(kind.rawValue)"] ?? kind.defaultFilter
     }
 
     func setScanFilter(_ filter: ScannerFilter, panel: String, _ kind: ScannerKind) {

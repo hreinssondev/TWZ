@@ -448,6 +448,11 @@ nonisolated enum ScannerKind: String, CaseIterable, Identifiable {
         case .dollarVolume: "MOST_ACTIVE_USD"
         }
     }
+
+    /// Filter used until the user sets one; gainers reach down to $0.10 to catch low-priced runners.
+    var defaultFilter: ScannerFilter {
+        self == .gainers ? ScannerFilter(minPrice: 0.1) : ScannerFilter()
+    }
 }
 
 nonisolated struct ScannerFilter: Codable, Equatable {
