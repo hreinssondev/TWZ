@@ -29,6 +29,7 @@ struct ChartPane: View {
     let chart: ChartModel
 
     @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
+    @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
@@ -55,10 +56,11 @@ struct ChartPane: View {
             Divider().opacity(0.5)
             CandleChart(
                 chart: chart, lines: priceLines,
-                onAltClick: { price in
+                // Switched off in the top bar: no handler, so ⌥ neither tints the price tag nor places orders.
+                onAltClick: altClickOrders ? { price in
                     workspace.selectedChartIndex = chart.id
                     broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
-                },
+                } : nil,
                 onControlClick: { price in
                     workspace.selectedChartIndex = chart.id
                     if hasPosition {

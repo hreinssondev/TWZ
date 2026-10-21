@@ -81,15 +81,18 @@ struct AccountBar: View {
 }
 
 /// Turns the charts' indicator lines on and off (the same settings as Settings › Appearance),
-/// styled like the charts' timeframe switch: the lit chips are the lines being drawn.
+/// styled like the charts' timeframe switch: the lit chips are the lines being drawn. "Alt-Click" first
+/// switches ⌥-click chart orders.
 private struct IndicatorToggles: View {
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
     @AppStorage(Indicators.tradesKey) private var showTrades = false
+    @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
 
     var body: some View {
         HStack(spacing: 1) {
+            chip("Alt-Click", isOn: $altClickOrders, help: "Turn ⌥-click chart orders on or off")
             chip("Trades", isOn: $showTrades)
             chip("VWAP", isOn: $showVWAP)
             chip("SMA9", isOn: $showFastSMA)
@@ -97,7 +100,7 @@ private struct IndicatorToggles: View {
         }
     }
 
-    private func chip(_ title: String, isOn: Binding<Bool>) -> some View {
+    private func chip(_ title: String, isOn: Binding<Bool>, help: String? = nil) -> some View {
         Button {
             isOn.wrappedValue.toggle()
         } label: {
@@ -110,7 +113,7 @@ private struct IndicatorToggles: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Show or hide \(title) on the charts")
+        .help(help ?? "Show or hide \(title) on the charts")
     }
 }
 

@@ -118,6 +118,12 @@ enum Indicators {
     static let lineWidthRange = 0.5...4.0
 }
 
+/// Whether ⌥-clicking a chart places orders, switched in the top bar. Not an Appearance setting, so
+/// "Reset to Defaults" leaves it.
+enum AltClickOrders {
+    static let enabledKey = "altClickOrdersEnabled"
+}
+
 /// The price axis: label size, how closely labels are packed, and the last price box's opacity.
 enum PriceAxis {
     static let fontSizeKey = "axisPriceFontSize"
