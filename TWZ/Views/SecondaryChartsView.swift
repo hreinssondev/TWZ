@@ -19,44 +19,120 @@ struct SecondaryChartsView: View {
     private static let refreshInterval: Duration = .seconds(2)
 
     @State private var lastGainers: [String] = []
+    @AppStorage("secondaryChartsTimeframe") private var masterTimeframe: Timeframe = .m1
+    @AppStorage("secondaryHeaderHeight") private var headerHeight: Double = 28
+    @AppStorage("secondaryChartsPaused") private var isPaused: Bool = false
+    @State private var isDraggingHeader = false
 
     var body: some View {
-        GeometryReader { geo in
-            let gap = Self.gap
-            let totalGap = gap * CGFloat(Self.columns - 1)
-            let chartWidth = (geo.size.width - gap * 2 - totalGap) / CGFloat(Self.columns)
-            let totalVerticalGap = gap * CGFloat(Self.rows - 1)
-            let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(Self.rows)
+        VStack(spacing: 0) {
+            header
+            Divider()
+            GeometryReader { geo in
+                let gap = Self.gap
+                let totalGap = gap * CGFloat(Self.columns - 1)
+                let chartWidth = (geo.size.width - gap * 2 - totalGap) / CGFloat(Self.columns)
+                let totalVerticalGap = gap * CGFloat(Self.rows - 1)
+                let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(Self.rows)
 
-            VStack(spacing: gap) {
-                ForEach(0..<Self.rows, id: \.self) { row in
-                    HStack(spacing: gap) {
-                        ForEach(0..<Self.columns, id: \.self) { col in
-                            let index = row * Self.columns + col
-                            if index < workspace.secondaryCharts.count {
-                                SecondaryChartPane(chart: workspace.secondaryCharts[index])
-                                    .frame(width: chartWidth, height: chartHeight)
+                VStack(spacing: gap) {
+                    ForEach(0..<Self.rows, id: \.self) { row in
+                        HStack(spacing: gap) {
+                            ForEach(0..<Self.columns, id: \.self) { col in
+                                let index = row * Self.columns + col
+                                if index < workspace.secondaryCharts.count {
+                                    SecondaryChartPane(chart: workspace.secondaryCharts[index])
+                                        .frame(width: chartWidth, height: chartHeight)
+                                }
                             }
                         }
                     }
                 }
+                .padding(gap)
             }
-            .padding(gap)
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .onAppear {
-            syncWithGainers()
+            if !isPaused {
+                broker.setScanner(ScanSpec(kind: .gainers, filter: ScannerFilter(minPrice: 0.1)), owner: "secondary-charts")
+                syncWithGainers()
+                applyMasterTimeframe(masterTimeframe)
+            }
         }
         .task {
             while !Task.isCancelled {
-                syncWithGainers()
+                if !isPaused {
+                    syncWithGainers()
+                }
                 try? await Task.sleep(for: Self.refreshInterval)
+            }
+        }
+        .onChange(of: masterTimeframe) { _, new in
+            applyMasterTimeframe(new)
+        }
+        .onChange(of: isPaused) { _, paused in
+            if paused {
+                // Unsubscribe from scanner to stop data flow
+                broker.setScanner(nil, owner: "secondary-charts")
+            } else {
+                // Resubscribe and sync
+                broker.setScanner(ScanSpec(kind: .gainers, filter: ScannerFilter(minPrice: 0.1)), owner: "secondary-charts")
+                syncWithGainers()
             }
         }
     }
 
+    private var header: some View {
+        HStack {
+            Text("All Charts").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+            Spacer()
+            TimeframePicker(selection: Binding(
+                get: { masterTimeframe },
+                set: { masterTimeframe = $0 }
+            ))
+            Button {
+                isPaused.toggle()
+            } label: {
+                Text("P")
+                    .font(.system(size: 10, weight: .regular).monospacedDigit())
+                    .foregroundStyle(isPaused ? Color.primary : Color.secondary.opacity(0.7))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(isPaused ? 0.12 : 0)))
+            }
+            .buttonStyle(.plain)
+            .help(isPaused ? "Resume secondary window data updates" : "Pause secondary window data updates")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(height: headerHeight)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.2))
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture()
+                .onChanged { value in
+                    isDraggingHeader = true
+                    let newHeight = headerHeight + value.translation.height
+                    headerHeight = max(24, min(newHeight, 100))
+                }
+                .onEnded { _ in
+                    isDraggingHeader = false
+                }
+        )
+    }
+
+    private func applyMasterTimeframe(_ timeframe: Timeframe) {
+        for chart in workspace.secondaryCharts {
+            if chart.timeframe != timeframe {
+                chart.timeframe = timeframe
+                broker.loadChart(chart)
+            }
+        }
+        workspace.saveSecondaryCharts()
+    }
+
     private func syncWithGainers() {
-        let gainers = broker.scans["list-left"]?.symbols ?? []
+        let gainers = broker.scans["secondary-charts"]?.symbols ?? []
         guard gainers != lastGainers else { return }
         lastGainers = gainers
 
@@ -118,7 +194,6 @@ private struct SecondaryChartPane: View {
     @Environment(Workspace.self) private var workspace
     let chart: ChartModel
 
-    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
 
@@ -156,13 +231,6 @@ private struct SecondaryChartPane: View {
         }
     }
 
-    private var timeframe: Binding<Timeframe> {
-        Binding(
-            get: { chart.timeframe },
-            set: { chart.timeframe = $0; broker.loadChart(chart); workspace.saveChart(chart) }
-        )
-    }
-
     private var header: some View {
         HStack(spacing: 8) {
             TextField("Symbol", text: $symbolText)
@@ -175,21 +243,7 @@ private struct SecondaryChartPane: View {
                     symbolText = chart.symbol
                     symbolFocused = false
                 }
-
-            Spacer(minLength: 4)
-
-            switch pickerStyle {
-            case .segmented:
-                Picker("", selection: timeframe) {
-                    ForEach(Timeframe.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.mini)
-                .frame(width: 170)
-            case .minimal:
-                TimeframePicker(selection: timeframe)
-            }
+            Spacer()
         }
         .padding(.horizontal, 8)
         .frame(height: 26)

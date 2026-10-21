@@ -91,11 +91,13 @@ final class Workspace {
         let secondarySymbols = defaults.stringArray(forKey: "secondaryChartSymbols") ?? []
         let secondaryFrames = (defaults.stringArray(forKey: "secondaryChartTimeframes") ?? [])
             .compactMap(Timeframe.init(rawValue:))
+        let masterTimeframeRaw = defaults.string(forKey: "secondaryChartsTimeframe")
+        let masterTimeframe = masterTimeframeRaw.flatMap(Timeframe.init(rawValue:)) ?? .m1
         secondaryCharts = (0..<18).map { i in
             ChartModel(
                 id: 100 + i,
                 symbol: i < secondarySymbols.count ? secondarySymbols[i] : "",
-                timeframe: i < secondaryFrames.count ? secondaryFrames[i] : .m1
+                timeframe: i < secondaryFrames.count ? secondaryFrames[i] : masterTimeframe
             )
         }
 
@@ -138,15 +140,13 @@ final class Workspace {
 
     func saveSecondaryCharts() {
         defaults.set(secondaryCharts.map(\.symbol), forKey: "secondaryChartSymbols")
-        defaults.set(secondaryCharts.map(\.timeframe.rawValue), forKey: "secondaryChartTimeframes")
     }
 
     func saveChart(_ chart: ChartModel) {
         if chart.id < 100 {
             saveCharts()
-        } else {
-            saveSecondaryCharts()
         }
+        // Secondary charts don't save individual timeframes - controlled by master
     }
 
     private func save() {
