@@ -156,7 +156,8 @@ enum LineColors {
     static let showLastPriceLineKey = "showLastPriceLine"
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
-    static let defaultAltClick = Color.purple
+    /// Hot pink: the system pink reads as red next to the stop loss line.
+    static let defaultAltClick = Color(red: 1.0, green: 0.25, blue: 0.8)
     static let defaultHover = Color.gray
     static let defaultStopLoss = Color.red
     static let defaultTakeProfit = Color.green
