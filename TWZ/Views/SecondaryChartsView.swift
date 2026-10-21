@@ -2,7 +2,7 @@
 //  SecondaryChartsView.swift
 //  TWZ
 //
-//  A 6×3 grid of 18 charts that follow the top gainers (their own scanner). A symbol keeps its
+//  A 6×3 grid of 18 charts that follow the top gainers (their own scanner, 25 rows). A symbol keeps its
 //  chart while it stays in the top 18; only charts whose symbol dropped out load a new one.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
@@ -24,7 +24,6 @@ struct SecondaryChartsView: View {
     private static let columns = 6
     private static let rows = 3
     private static let gap: CGFloat = 4
-    private static let refreshInterval: Duration = .seconds(2)
 
     @State private var lastGainers: [String] = []
     @AppStorage(SecondaryCharts.timeframeKey) private var masterTimeframe: Timeframe = .m1
@@ -48,11 +47,9 @@ struct SecondaryChartsView: View {
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .onAppear { if !isPaused { start() } }
         .onDisappear { stop() }
-        .task {
-            while !Task.isCancelled {
-                if !isPaused { syncWithGainers() }
-                try? await Task.sleep(for: Self.refreshInterval)
-            }
+        // Fills the charts as soon as the scanner answers, e.g. right after P is turned off.
+        .onChange(of: broker.scans[SecondaryCharts.scannerOwner]?.symbols) {
+            if !isPaused { syncWithGainers() }
         }
         .onChange(of: masterTimeframe) { _, new in
             applyMasterTimeframe(new)
