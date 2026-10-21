@@ -190,6 +190,17 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    /// The shorter history compact charts (the secondary window) load.
+    var compactDuration: String {
+        switch self {
+        case .m1: "1 D"
+        case .m5: "2 D"
+        case .m15: "5 D"
+        case .h1: "10 D"
+        case .d1: "6 M"
+        }
+    }
+
     var isIntraday: Bool { self != .d1 }
 
     /// Bar length in seconds; nil for daily bars, which follow the ET trading day.

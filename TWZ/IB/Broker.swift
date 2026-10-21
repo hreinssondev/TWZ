@@ -124,7 +124,7 @@ final class Broker {
 
     func registerCharts(_ charts: [ChartModel]) {
         self.charts = charts
-        let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe) }
+        let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe, compact: $0.isCompact) }
         engine.perform { $0.registerCharts(specs) }
     }
 
@@ -142,7 +142,7 @@ final class Broker {
         chart.priceShift = 0
         chart.priceScale = 1
         chart.isLoading = state == .connected && !chart.symbol.isEmpty
-        let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe)
+        let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, compact: chart.isCompact)
         engine.perform { $0.loadChart(spec, generation: generation) }
     }
 

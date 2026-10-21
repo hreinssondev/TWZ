@@ -25,11 +25,14 @@ final class ChartModel: Identifiable {
     var priceShift: Double = 0
     /// ⌘-swipe vertical zoom: the auto-fitted price range times this (above 1 = zoomed out).
     var priceScale: Double = 1
+    /// A secondary-window chart: short history, no tick-by-tick streams, not saved.
+    let isCompact: Bool
 
-    init(id: Int, symbol: String, timeframe: Timeframe) {
+    init(id: Int, symbol: String, timeframe: Timeframe, isCompact: Bool = false) {
         self.id = id
         self.symbol = symbol
         self.timeframe = timeframe
+        self.isCompact = isCompact
     }
 }
 
@@ -88,17 +91,12 @@ final class Workspace {
             )
         }
 
-        let secondarySymbols = defaults.stringArray(forKey: "secondaryChartSymbols") ?? []
-        let secondaryFrames = (defaults.stringArray(forKey: "secondaryChartTimeframes") ?? [])
-            .compactMap(Timeframe.init(rawValue:))
-        let masterTimeframeRaw = defaults.string(forKey: "secondaryChartsTimeframe")
-        let masterTimeframe = masterTimeframeRaw.flatMap(Timeframe.init(rawValue:)) ?? .m1
-        secondaryCharts = (0..<18).map { i in
-            ChartModel(
-                id: 100 + i,
-                symbol: i < secondarySymbols.count ? secondarySymbols[i] : "",
-                timeframe: i < secondaryFrames.count ? secondaryFrames[i] : masterTimeframe
-            )
+        // Secondary charts start empty: the window fills them from the gainers scanner while it's
+        // open and not paused, so nothing loads for them at launch.
+        let secondaryTimeframe = defaults.string(forKey: SecondaryCharts.timeframeKey)
+            .flatMap(Timeframe.init(rawValue:)) ?? .m1
+        secondaryCharts = (0..<SecondaryCharts.count).map { i in
+            ChartModel(id: 100 + i, symbol: "", timeframe: secondaryTimeframe, isCompact: true)
         }
 
         if let data = defaults.data(forKey: "hotkeys"),
@@ -138,15 +136,9 @@ final class Workspace {
         defaults.set(charts.map(\.timeframe.rawValue), forKey: "chartTimeframes")
     }
 
-    func saveSecondaryCharts() {
-        defaults.set(secondaryCharts.map(\.symbol), forKey: "secondaryChartSymbols")
-    }
-
+    /// Saves the main charts; secondary charts aren't saved (see `secondaryCharts`).
     func saveChart(_ chart: ChartModel) {
-        if chart.id < 100 {
-            saveCharts()
-        }
-        // Secondary charts don't save individual timeframes - controlled by master
+        if !chart.isCompact { saveCharts() }
     }
 
     private func save() {

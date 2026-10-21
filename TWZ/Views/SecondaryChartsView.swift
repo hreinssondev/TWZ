@@ -2,12 +2,20 @@
 //  SecondaryChartsView.swift
 //  TWZ
 //
-//  A 6×3 grid of 18 charts that follow the top gainers list.
-//  Charts update every 1-2 seconds to reduce load. Clicking a chart
-//  loads it into the main window's selected chart.
+//  A 6×3 grid of 18 charts that follow the top gainers (their own scanner). A symbol keeps its
+//  chart while it stays in the top 18; only charts whose symbol dropped out load a new one.
+//  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
+//  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //
 
 import SwiftUI
+
+enum SecondaryCharts {
+    static let count = 18
+    static let timeframeKey = "secondaryChartsTimeframe"
+    static let pausedKey = "secondaryChartsPaused"
+    static let scannerOwner = "secondary-charts"
+}
 
 struct SecondaryChartsView: View {
     @Environment(Broker.self) private var broker
@@ -19,51 +27,30 @@ struct SecondaryChartsView: View {
     private static let refreshInterval: Duration = .seconds(2)
 
     @State private var lastGainers: [String] = []
-    @AppStorage("secondaryChartsTimeframe") private var masterTimeframe: Timeframe = .m1
+    @AppStorage(SecondaryCharts.timeframeKey) private var masterTimeframe: Timeframe = .m1
     @AppStorage("secondaryHeaderHeight") private var headerHeight: Double = 28
-    @AppStorage("secondaryChartsPaused") private var isPaused: Bool = false
-    @State private var isDraggingHeader = false
+    @AppStorage(SecondaryCharts.pausedKey) private var isPaused: Bool = false
+    @State private var dragStartHeight: Double?
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            GeometryReader { geo in
-                let gap = Self.gap
-                let totalGap = gap * CGFloat(Self.columns - 1)
-                let chartWidth = (geo.size.width - gap * 2 - totalGap) / CGFloat(Self.columns)
-                let totalVerticalGap = gap * CGFloat(Self.rows - 1)
-                let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(Self.rows)
-
-                VStack(spacing: gap) {
-                    ForEach(0..<Self.rows, id: \.self) { row in
-                        HStack(spacing: gap) {
-                            ForEach(0..<Self.columns, id: \.self) { col in
-                                let index = row * Self.columns + col
-                                if index < workspace.secondaryCharts.count {
-                                    SecondaryChartPane(chart: workspace.secondaryCharts[index])
-                                        .frame(width: chartWidth, height: chartHeight)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(gap)
+            if isPaused {
+                Text("Paused")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                grid
             }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
-        .onAppear {
-            if !isPaused {
-                broker.setScanner(ScanSpec(kind: .gainers, filter: ScannerFilter(minPrice: 0.1)), owner: "secondary-charts")
-                syncWithGainers()
-                applyMasterTimeframe(masterTimeframe)
-            }
-        }
+        .onAppear { if !isPaused { start() } }
+        .onDisappear { stop() }
         .task {
             while !Task.isCancelled {
-                if !isPaused {
-                    syncWithGainers()
-                }
+                if !isPaused { syncWithGainers() }
                 try? await Task.sleep(for: Self.refreshInterval)
             }
         }
@@ -71,14 +58,32 @@ struct SecondaryChartsView: View {
             applyMasterTimeframe(new)
         }
         .onChange(of: isPaused) { _, paused in
-            if paused {
-                // Unsubscribe from scanner to stop data flow
-                broker.setScanner(nil, owner: "secondary-charts")
-            } else {
-                // Resubscribe and sync
-                broker.setScanner(ScanSpec(kind: .gainers, filter: ScannerFilter(minPrice: 0.1)), owner: "secondary-charts")
-                syncWithGainers()
+            if paused { stop() } else { start() }
+        }
+    }
+
+    private var grid: some View {
+        GeometryReader { geo in
+            let gap = Self.gap
+            let totalGap = gap * CGFloat(Self.columns - 1)
+            let chartWidth = (geo.size.width - gap * 2 - totalGap) / CGFloat(Self.columns)
+            let totalVerticalGap = gap * CGFloat(Self.rows - 1)
+            let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(Self.rows)
+
+            VStack(spacing: gap) {
+                ForEach(0..<Self.rows, id: \.self) { row in
+                    HStack(spacing: gap) {
+                        ForEach(0..<Self.columns, id: \.self) { col in
+                            let index = row * Self.columns + col
+                            if index < workspace.secondaryCharts.count {
+                                SecondaryChartPane(chart: workspace.secondaryCharts[index])
+                                    .frame(width: chartWidth, height: chartHeight)
+                            }
+                        }
+                    }
+                }
             }
+            .padding(gap)
         }
     }
 
@@ -101,7 +106,7 @@ struct SecondaryChartsView: View {
                     .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(isPaused ? 0.12 : 0)))
             }
             .buttonStyle(.plain)
-            .help(isPaused ? "Resume secondary window data updates" : "Pause secondary window data updates")
+            .help(isPaused ? "Turn the charts back on" : "Turn the charts off: no scanner, history or quotes until P is off again")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -111,77 +116,53 @@ struct SecondaryChartsView: View {
         .gesture(
             DragGesture()
                 .onChanged { value in
-                    isDraggingHeader = true
-                    let newHeight = headerHeight + value.translation.height
-                    headerHeight = max(24, min(newHeight, 100))
+                    let start = dragStartHeight ?? headerHeight
+                    dragStartHeight = start
+                    headerHeight = max(24, min(start + value.translation.height, 100))
                 }
-                .onEnded { _ in
-                    isDraggingHeader = false
-                }
+                .onEnded { _ in dragStartHeight = nil }
         )
     }
 
     private func applyMasterTimeframe(_ timeframe: Timeframe) {
-        for chart in workspace.secondaryCharts {
-            if chart.timeframe != timeframe {
-                chart.timeframe = timeframe
-                broker.loadChart(chart)
-            }
+        for chart in workspace.secondaryCharts where chart.timeframe != timeframe {
+            chart.timeframe = timeframe
+            if !chart.symbol.isEmpty { broker.loadChart(chart) }
         }
-        workspace.saveSecondaryCharts()
     }
 
+    private func start() {
+        lastGainers = []
+        broker.setScanner(ScanSpec(kind: .gainers, filter: ScannerFilter(minPrice: 0.1)), owner: SecondaryCharts.scannerOwner)
+        syncWithGainers()
+    }
+
+    /// Stops the scanner and empties every chart, cancelling their data.
+    private func stop() {
+        broker.setScanner(nil, owner: SecondaryCharts.scannerOwner)
+        lastGainers = []
+        for chart in workspace.secondaryCharts { workspace.clear(chart, broker: broker) }
+    }
+
+    /// Fills the charts with the top 18 gainers. A symbol still in the top 18 stays where it is,
+    /// so a reshuffle in the ranking reloads nothing; new symbols take the charts that dropped out.
     private func syncWithGainers() {
-        let gainers = broker.scans["secondary-charts"]?.symbols ?? []
-        guard gainers != lastGainers else { return }
+        let gainers = broker.scans[SecondaryCharts.scannerOwner]?.symbols ?? []
+        guard !gainers.isEmpty, gainers != lastGainers else { return }
         lastGainers = gainers
 
-        let top18 = Array(gainers.prefix(18))
-
-        // Only load if we have data to show
-        guard !top18.isEmpty else { return }
-
-        // Batch loading: first row immediately, then staggered
-        Task {
-            // Batch 1: charts 0-5 (top row) - load immediately
-            for index in 0..<min(6, top18.count) {
-                let symbol = top18[index]
-                let chart = workspace.secondaryCharts[index]
-                if chart.symbol != symbol && !symbol.isEmpty {
-                    workspace.load(symbol, into: chart, broker: broker)
-                }
-            }
-
-            // Small delay before batch 2
-            try? await Task.sleep(nanoseconds: 20_000_000) // 0.02s
-
-            // Batch 2: charts 6-11
-            for index in 6..<min(12, top18.count) {
-                let symbol = top18[index]
-                let chart = workspace.secondaryCharts[index]
-                if chart.symbol != symbol && !symbol.isEmpty {
-                    workspace.load(symbol, into: chart, broker: broker)
-                }
-            }
-
-            // Small delay before batch 3
-            try? await Task.sleep(nanoseconds: 20_000_000) // 0.02s
-
-            // Batch 3: charts 12-17
-            for index in 12..<min(18, top18.count) {
-                let symbol = top18[index]
-                let chart = workspace.secondaryCharts[index]
-                if chart.symbol != symbol && !symbol.isEmpty {
-                    workspace.load(symbol, into: chart, broker: broker)
-                }
-            }
-
-            // Clear any extra charts if gainers list is shorter
-            for index in top18.count..<workspace.secondaryCharts.count {
-                let chart = workspace.secondaryCharts[index]
-                if !chart.symbol.isEmpty {
-                    workspace.load("", into: chart, broker: broker)
-                }
+        var top: [String] = []
+        for symbol in gainers where !symbol.isEmpty && !top.contains(symbol) {
+            top.append(symbol)
+            if top.count == workspace.secondaryCharts.count { break }
+        }
+        let shown = Set(workspace.secondaryCharts.map(\.symbol))
+        var incoming = top.filter { !shown.contains($0) }[...]
+        for chart in workspace.secondaryCharts where !top.contains(chart.symbol) {
+            if let symbol = incoming.popFirst() {
+                workspace.load(symbol, into: chart, broker: broker)
+            } else {
+                workspace.clear(chart, broker: broker)
             }
         }
     }
@@ -217,12 +198,9 @@ private struct SecondaryChartPane: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
         .simultaneousGesture(TapGesture().onEnded {
-            workspace.loadIntoSelectedChart(chart.symbol, broker: broker)
+            if !chart.symbol.isEmpty { workspace.loadIntoSelectedChart(chart.symbol, broker: broker) }
         })
-        .onAppear {
-            symbolText = chart.symbol
-            broker.setQuoteSymbols([chart.symbol], owner: "secondary-chart-\(chart.id)")
-        }
+        .onAppear { symbolText = chart.symbol }
         .onChange(of: chart.symbol) { _, new in
             if !symbolFocused { symbolText = new }
         }

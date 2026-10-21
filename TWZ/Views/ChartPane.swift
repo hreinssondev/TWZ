@@ -21,6 +21,15 @@ extension Workspace {
         broker.loadChart(chart)
         saveChart(chart)
     }
+
+    /// Empties a chart and drops its data: history, live bars and quotes.
+    func clear(_ chart: ChartModel, broker: Broker) {
+        guard !chart.symbol.isEmpty else { return }
+        chart.symbol = ""
+        broker.setQuoteSymbols([], owner: "chart-\(chart.id)")
+        broker.loadChart(chart)
+        saveChart(chart)
+    }
 }
 
 struct ChartPane: View {

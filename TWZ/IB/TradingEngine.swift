@@ -597,7 +597,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let venue = phase == .overnight ? "OVERNIGHT" : "SMART"
         var symbols: [String] = []
         let ordered = charts.values.sorted { ($0.id == selectedChartId ? -1 : $0.id) < ($1.id == selectedChartId ? -1 : $1.id) }
-        for c in ordered where !c.symbol.isEmpty && !symbols.contains(c.symbol) { symbols.append(c.symbol) }
+        for c in ordered where !c.symbol.isEmpty && !c.compact && !symbols.contains(c.symbol) { symbols.append(c.symbol) }
 
         var wanted: [TickStream] = []
         if let first = symbols.first {
@@ -743,14 +743,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     func registerCharts(_ specs: [ChartSpec]) {
         for spec in specs where charts[spec.id] == nil {
-            charts[spec.id] = ChartState(id: spec.id, symbol: spec.symbol, timeframe: spec.timeframe)
+            charts[spec.id] = ChartState(spec)
         }
     }
 
     /// Loads a chart's bars after its symbol or timeframe changed. `generation` tags its snapshots,
     /// so the UI can drop any still on their way from what it showed before.
     func loadChart(_ spec: ChartSpec, generation: Int) {
-        let c = charts[spec.id] ?? ChartState(id: spec.id, symbol: spec.symbol, timeframe: spec.timeframe)
+        let c = charts[spec.id] ?? ChartState(spec)
         charts[spec.id] = c
         let symbolChanged = c.symbol != spec.symbol
         c.symbol = spec.symbol
@@ -781,15 +781,18 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         reqByChart[id] = reqId
         let tf = c.timeframe
         // reqHistoricalData: endDateTime "" + keepUpToDate streams live bar updates.
+        // Compact charts (the secondary window) take a short history and skip the OVERNIGHT
+        // venue outside the overnight session: a fraction of the data to load for 18 charts.
+        let duration = c.compact ? tf.compactDuration : tf.duration
         sendFields([20, reqId] + contract(c.symbol) + [
-            false, "", tf.barSize, tf.duration, tf.isIntraday ? 0 : 1, "TRADES", 2, true, "",
+            false, "", tf.barSize, duration, tf.isIntraday ? 0 : 1, "TRADES", 2, true, "",
         ])
-        guard tf.isIntraday else { return }
+        guard tf.isIntraday, !c.compact || phase == .overnight else { return }
         let overnightReq = makeReqId()
         overnightChartByReq[overnightReq] = id
         overnightReqByChart[id] = overnightReq
         sendFields([20, overnightReq] + contract(c.symbol, exchange: "OVERNIGHT") + [
-            false, "", tf.barSize, tf.duration, 0, "TRADES", 2, true, "",
+            false, "", tf.barSize, duration, 0, "TRADES", 2, true, "",
         ])
     }
 
@@ -1947,6 +1950,8 @@ nonisolated private final class ChartState {
     let id: Int
     var symbol: String
     var timeframe: Timeframe
+    /// A secondary-window chart: short history, no tick-by-tick streams (see `requestChart`).
+    let compact: Bool
     var generation = 0
     var bars: [Bar] = []
     var isLoading = false
@@ -1956,10 +1961,11 @@ nonisolated private final class ChartState {
     /// Bars from this time on go in the next snapshot.
     var changedFrom: Date?
 
-    init(id: Int, symbol: String, timeframe: Timeframe) {
-        self.id = id
-        self.symbol = symbol
-        self.timeframe = timeframe
+    init(_ spec: ChartSpec) {
+        id = spec.id
+        symbol = spec.symbol
+        timeframe = spec.timeframe
+        compact = spec.compact
     }
 }
 
@@ -1968,6 +1974,7 @@ nonisolated struct ChartSpec: Sendable {
     var id: Int
     var symbol: String
     var timeframe: Timeframe
+    var compact = false
 }
 
 /// What changed in the engine since the last snapshot; nil fields didn't change.
