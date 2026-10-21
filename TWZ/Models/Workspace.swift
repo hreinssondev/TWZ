@@ -51,6 +51,7 @@ nonisolated struct WhatIf: Codable {
 @Observable
 final class Workspace {
     let charts: [ChartModel]
+    let secondaryCharts: [ChartModel]
     /// The selected chart, or the last one selected while none is (see `isChartSelected`).
     var selectedChartIndex = 0 { didSet { isChartSelected = true } }
     /// False after clicking empty space in the Orders or Positions column: no chart is selected, so
@@ -84,6 +85,17 @@ final class Workspace {
                 id: i,
                 symbol: i < symbols.count ? symbols[i] : "",
                 timeframe: i < frames.count ? frames[i] : defaultFrames[i]
+            )
+        }
+
+        let secondarySymbols = defaults.stringArray(forKey: "secondaryChartSymbols") ?? []
+        let secondaryFrames = (defaults.stringArray(forKey: "secondaryChartTimeframes") ?? [])
+            .compactMap(Timeframe.init(rawValue:))
+        secondaryCharts = (0..<18).map { i in
+            ChartModel(
+                id: 100 + i,
+                symbol: i < secondarySymbols.count ? secondarySymbols[i] : "",
+                timeframe: i < secondaryFrames.count ? secondaryFrames[i] : .m1
             )
         }
 
@@ -122,6 +134,19 @@ final class Workspace {
     func saveCharts() {
         defaults.set(charts.map(\.symbol), forKey: "chartSymbols")
         defaults.set(charts.map(\.timeframe.rawValue), forKey: "chartTimeframes")
+    }
+
+    func saveSecondaryCharts() {
+        defaults.set(secondaryCharts.map(\.symbol), forKey: "secondaryChartSymbols")
+        defaults.set(secondaryCharts.map(\.timeframe.rawValue), forKey: "secondaryChartTimeframes")
+    }
+
+    func saveChart(_ chart: ChartModel) {
+        if chart.id < 100 {
+            saveCharts()
+        } else {
+            saveSecondaryCharts()
+        }
     }
 
     private func save() {

@@ -25,7 +25,7 @@ struct TWZApp: App {
                 .environment(workspace)
                 .preferredColorScheme(.dark)
                 .onAppear {
-                    broker.registerCharts(workspace.charts)
+                    broker.registerCharts(workspace.charts + workspace.secondaryCharts)
                     broker.connect()
                 }
                 .onChange(of: workspace.selectedChartIndex, initial: true) { _, index in
@@ -35,5 +35,15 @@ struct TWZApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowBackgroundDragBehavior(.enabled)
         .defaultSize(width: 1600, height: 1000)
+
+        Window("Charts", id: "secondary-charts") {
+            SecondaryChartsView()
+                .environment(broker)
+                .environment(workspace)
+                .preferredColorScheme(.dark)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowBackgroundDragBehavior(.enabled)
+        .defaultSize(width: 1400, height: 900)
     }
 }

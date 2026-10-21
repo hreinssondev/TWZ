@@ -19,7 +19,7 @@ extension Workspace {
         chart.symbol = s
         broker.setQuoteSymbols([s], owner: "chart-\(chart.id)")
         broker.loadChart(chart)
-        saveCharts()
+        saveChart(chart)
     }
 }
 
@@ -123,7 +123,7 @@ struct ChartPane: View {
     private var timeframe: Binding<Timeframe> {
         Binding(
             get: { chart.timeframe },
-            set: { chart.timeframe = $0; broker.loadChart(chart); workspace.saveCharts() }
+            set: { chart.timeframe = $0; broker.loadChart(chart); workspace.saveChart(chart) }
         )
     }
 
@@ -257,7 +257,7 @@ struct ChartPane: View {
 }
 
 /// Quiet monochrome timeframe switch: plain labels, the selected one brighter on a faint chip.
-private struct TimeframePicker: View {
+struct TimeframePicker: View {
     @Binding var selection: Timeframe
 
     var body: some View {
