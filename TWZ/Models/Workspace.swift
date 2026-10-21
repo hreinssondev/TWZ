@@ -33,16 +33,16 @@ final class ChartModel: Identifiable {
     }
 }
 
-/// A pretend $3,000 buy at the last price, placed by ⌃-clicking a chart with no position open.
-/// Nothing is sent to IB; holding ⌘ over the chart shows what it would have made or lost.
+/// A pretend buy at the last price, placed by ⌃-clicking a chart with no position open: 80% of the
+/// largest long IB's margin allows in the symbol at that moment. Only a margin preview goes to IB,
+/// never an order; holding ⌘ over the chart shows what it would have made or lost.
 nonisolated struct WhatIf: Codable {
-    static let dollars = 3000.0
+    static let buyingPowerFraction = 0.8
     /// Stands in for an order id on the what-if line, so double-clicking the line removes it.
     static let lineId = -1
 
     var price: Double
-
-    var shares: Double { Self.dollars / price }
+    var shares: Double
 
     /// P/L if sold at `exit`.
     func pnl(at exit: Double) -> Double { (exit - price) * shares }

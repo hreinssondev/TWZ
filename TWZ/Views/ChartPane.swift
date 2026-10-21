@@ -66,9 +66,11 @@ struct ChartPane: View {
                     if hasPosition {
                         broker.placeProtective(symbol: chart.symbol, at: price)
                     } else {
-                        // No position: a what-if buy at the last price (the clicked one until a quote comes in).
-                        let last = broker.quote(chart.symbol)?.last ?? price
-                        if last > 0 { workspace.whatIfs[chart.symbol] = WhatIf(price: last) }
+                        // No position: a what-if buy at the last price, sized from IB's margin preview.
+                        let symbol = chart.symbol
+                        broker.sizeWhatIf(symbol: symbol, fraction: WhatIf.buyingPowerFraction) { size in
+                            workspace.whatIfs[symbol] = WhatIf(price: size.price, shares: size.shares)
+                        }
                     }
                 },
                 controlClickColor: { price in

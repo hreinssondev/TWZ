@@ -111,6 +111,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var cancelsSent: Set<Int> = []
     /// Stop losses to place again once the take profit blocking them is cancelled, by its order id.
     private var stopsAwaitingCancel: [Int: (symbol: String, price: Double)] = [:]
+    /// Margin previews (what-if orders) waiting for IB's answer, by order id.
+    private var marginPreviews: [Int: (Result<MarginPreview, PreviewFailure>) -> Void] = [:]
+    /// Every what-if order id sent, so IB's messages about them never show up as orders.
+    private var whatIfOrderIds: Set<Int> = []
     /// IB has sent every position / open order since connecting (positionEnd, openOrderEnd).
     private var positionsLoaded = false
     private var openOrdersLoaded = false
@@ -335,6 +339,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         tickRefused.removeAll()
         tickLimit = nil
         stopsAwaitingCancel.removeAll()
+        marginPreviews.removeAll()
         positionsLoaded = false
         openOrdersLoaded = false
         cancelsSent.removeAll()
@@ -795,9 +800,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// it's a stop-limit (STP LMT) that triggers when the last trade reaches the stop.
     /// Orders sharing an `ocaGroup` cancel each other: when one fills, the rest shrink by as much.
     /// Passing `modifying` an existing order id changes that order instead of placing a new one.
+    /// A `whatIf` order is never placed: IB answers with the margin it would take (see `previewMargin`).
     private func placeOrder(symbol: String, action: String, quantity: Double, limit: Double?, stop: Double? = nil,
                             tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART",
-                            ocaGroup: String = "", modifying: Int? = nil, why: String) -> Int? {
+                            ocaGroup: String = "", modifying: Int? = nil, whatIf: Bool = false, why: String) -> Int? {
         guard apiReady, let next = nextOrderId else {
             lastMessage = "Not connected"
             return nil
@@ -829,7 +835,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         f += ["", "", "", ""]                                             // scaleTable, activeStart/Stop, hedgeType
         f += [false, "", "", false]                                       // optOutSmart, clearing, notHeld
         f += [false, ""]                                                  // deltaNeutralContract, algoStrategy
-        f += ["", false, "", false, false, false]                         // algoId, whatIf, misc, solicited, randomize
+        f += ["", whatIf, "", false, false, false]                        // algoId, whatIf, misc, solicited, randomize
         f += [0]                                                          // conditions
         f += ["", Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, Self.unsetDouble, 0, ""]
         f += ["", "", Self.unsetDouble, "", "", "", "", false, false, false, Int.unset]
@@ -839,6 +845,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if serverVersion >= 166 { f += [""] }                             // advancedErrorOverride
         if serverVersion >= 169 { f += [""] }                             // manualOrderTime
         sendFields(f)
+        if whatIf {
+            log("WHATIF #\(orderId) \(action) \(Fmt.shares(quantity)) \(symbol) \(orderType)"
+                + (limit.map { " lmt \(Fmt.price($0))" } ?? "") + " — \(why)")
+            return orderId
+        }
         logLatency("Order #\(orderId)")
         log("SEND #\(orderId)\(modifying != nil ? " (modify)" : "") \(action) \(Fmt.shares(quantity)) \(symbol) \(orderType)"
             + (stop.map { " stp \(Fmt.price($0))" } ?? "") + (limit.map { " lmt \(Fmt.price($0))" } ?? "")
@@ -1084,6 +1095,140 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                               summary: summary, source: "⌥-click", why: "⌥-click \(summary)") else { return }
         chartOrderIds.insert(id)
         defaults.set(Array(chartOrderIds.sorted().suffix(500)), forKey: "chartOrderIds")
+    }
+
+    // MARK: - What-if sizing
+
+    /// A ⌃-click what-if buy: `fraction` of the largest long IB's margin allows in the symbol right
+    /// now, at the last price.
+    struct WhatIfSize: Sendable {
+        var price: Double
+        var shares: Double
+        /// The largest long IB's margin allows.
+        var maxShares: Double
+    }
+
+    /// What IB's margin preview of a buy says.
+    struct MarginPreview {
+        /// Equity with loan value over the initial margin before the order: the available funds.
+        var available: Double
+        /// Initial margin each share adds, plus the equity it costs (commission).
+        var perShare: Double
+
+        var maxShares: Double { perShare > 0 ? max(0, available / perShare).rounded(.down) : 0 }
+    }
+
+    struct PreviewFailure: Error {
+        var reason: String
+    }
+
+    /// Sizes a ⌃-click what-if buy from IB's margin previews (what-if orders, never placed). One for a
+    /// small order gives the available funds and margin per share; margin per share can rise with
+    /// the position's size, so a second near the largest size allowed refines it. Takes a second or
+    /// two; `completion` runs on the engine queue, and not at all if IB can't size it (`lastMessage` says why).
+    func sizeWhatIf(symbol rawSymbol: String, fraction: Double, completion: @escaping @Sendable (WhatIfSize) -> Void) {
+        let symbol = rawSymbol.uppercased()
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        guard !symbol.isEmpty else {
+            lastMessage = "Load a symbol into the chart first"
+            return
+        }
+        guard let last = quotes[symbol]?.last, last > 0 else {
+            lastMessage = "No live price for \(symbol) yet, so the what-if can't be sized"
+            return
+        }
+        let price = Self.roundToTick(last)
+        lastMessage = "\(symbol) what-if: asking IB for the margin…"
+        previewMargin(symbol, shares: max(1, (1000 / price).rounded(.down)), price: price) { [self] first in
+            let small: MarginPreview
+            switch first {
+            case .success(let preview): small = preview
+            case .failure(let failure):
+                lastMessage = "\(symbol) what-if: \(failure.reason)"
+                return
+            }
+            guard small.maxShares >= 1 else {
+                lastMessage = "\(symbol) what-if: no buying power left for a long"
+                return
+            }
+            previewMargin(symbol, shares: max(1, (small.maxShares * 0.95).rounded(.down)), price: price) { [self] second in
+                // Without the second answer, the small order's margin per share is the best there is.
+                let preview = (try? second.get()) ?? small
+                let shares = (preview.maxShares * fraction).rounded(.down)
+                guard shares >= 1 else {
+                    lastMessage = "\(symbol) what-if: no buying power left for a long"
+                    return
+                }
+                lastMessage = "\(symbol) what-if: BUY \(Fmt.shares(shares)) @ \(Fmt.price(price)), "
+                    + "\(Int((fraction * 100).rounded()))% of the \(Fmt.shares(preview.maxShares)) IB's margin allows"
+                completion(WhatIfSize(price: price, shares: shares, maxShares: preview.maxShares))
+            }
+        }
+    }
+
+    /// Asks IB what buying `shares` at `price` would do to the account's margin, without placing the order.
+    private func previewMargin(_ symbol: String, shares: Double, price: Double,
+                               _ reply: @escaping (Result<MarginPreview, PreviewFailure>) -> Void) {
+        guard let id = placeOrder(symbol: symbol, action: "BUY", quantity: shares, limit: price,
+                                  whatIf: true, why: "margin preview for a ⌃-click what-if") else { return }
+        whatIfOrderIds.insert(id)
+        marginPreviews[id] = reply
+        let current = session
+        queue.asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let self, self.session == current, let reply = self.marginPreviews.removeValue(forKey: id) else { return }
+            reply(.failure(PreviewFailure(reason: "IB didn't answer the margin preview")))
+        }
+    }
+
+    /// The margin figures in IB's openOrder answer to a what-if order, read field by field the way
+    /// IB's OrderDecoder does, from the outsideRth flag just past permId on to the order state.
+    private func marginPreview(_ f: [String]) -> Result<MarginPreview, PreviewFailure> {
+        var i = 26
+        func next() -> String { defer { i += 1 }; return f.str(i) }
+        func skip(_ n: Int) { i += max(0, n) }
+        skip(5)                                     // outsideRth, hidden, discretionaryAmt, goodAfterTime, sharesAllocation
+        skip(serverVersion < 177 ? 4 : 3)           // faGroup, faMethod, faPercentage (, faProfile)
+        skip(5)                                     // modelCode, goodTillDate, rule80A, percentOffset, settlingFirm
+        skip(4)                                     // shortSaleSlot, designatedLocation, exemptCode, auctionStrategy
+        skip(5)                                     // startingPrice, stockRefPrice, delta, stockRangeLower, stockRangeUpper
+        skip(6)                                     // displaySize, blockOrder, sweepToFill, allOrNone, minQty, ocaType
+        skip(5)                                     // eTradeOnly, firmQuoteOnly, nbboPriceCap, parentId, triggerMethod
+        skip(2)                                     // volatility, volatilityType
+        let deltaNeutralType = next()
+        skip(1)                                     // deltaNeutralAuxPrice
+        if !deltaNeutralType.isEmpty { skip(8) }    // conId, settlingFirm, clearing ×2, openClose, shortSale ×3
+        skip(6)                                     // continuousUpdate, referencePriceType, trail ×2, basisPoints ×2
+        skip(1)                                     // comboLegsDescrip
+        skip((Int(next()) ?? 0) * 8)                // combo legs
+        skip(Int(next()) ?? 0)                      // order combo leg prices
+        skip((Int(next()) ?? 0) * 2)                // smart combo routing params
+        skip(2)                                     // scaleInitLevelSize, scaleSubsLevelSize
+        if let increment = Double(next()), increment > 0, increment < Self.unsetDouble { skip(7) }
+        if !next().isEmpty { skip(1) }              // hedgeType, hedgeParam
+        skip(4)                                     // optOutSmartRouting, clearingAccount, clearingIntent, notHeld
+        if next() == "1" { skip(3) }                // delta-neutral contract
+        if !next().isEmpty { skip((Int(next()) ?? 0) * 2) }   // algoStrategy, its params
+        skip(1)                                     // solicited
+        let whatIf = next()
+        skip(1)                                     // status
+        func value() -> Double? { Double(next()).flatMap { $0 < Self.unsetDouble / 2 ? $0 : nil } }
+        let initBefore = value(), _ = value(), equityBefore = value()
+        let initChange = value(), _ = value(), equityChange = value()
+        guard whatIf == "1" || whatIf == "true", let initBefore, let equityBefore, let initChange, let equityChange else {
+            log("WHATIF #\(f.str(1)) unreadable answer: \(f.joined(separator: "|"))")
+            return .failure(PreviewFailure(reason: "couldn't read IB's margin preview"))
+        }
+        let shares = f.double(14)
+        guard shares > 0, initChange - equityChange > 0 else {
+            return .failure(PreviewFailure(reason: "IB's margin preview shows no margin for a buy"))
+        }
+        log("WHATIF #\(f.str(1)) init margin \(Fmt.amount(initBefore)) + \(Fmt.amount(initChange)), "
+            + "equity with loan \(Fmt.amount(equityBefore)) \(Fmt.amount(equityChange, signed: true))")
+        return .success(MarginPreview(available: equityBefore - initBefore,
+                                      perShare: (initChange - equityChange) / shares))
     }
 
     // MARK: - Stop loss / take profit
@@ -1439,6 +1584,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     private func orderStatus(_ f: [String]) {
         // orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice
+        if whatIfOrderIds.contains(f.int(1)) { return }
         let id = Self.orderKey(orderId: f.int(1), permId: f.int(6))
         guard var o = orders[id] else {
             log("STATUS #\(id) for an order not seen yet: \(f.str(2)), filled \(f.str(3)), client \(f.str(9))")
@@ -1463,6 +1609,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     private func openOrder(_ f: [String]) {
         guard f.count > 25 else { return }
+        if whatIfOrderIds.contains(f.int(1)) {
+            marginPreviews.removeValue(forKey: f.int(1))?(marginPreview(f))
+            return
+        }
         let id = Self.orderKey(orderId: f.int(1), permId: f.int(25))
         let lmt = f.double(16)
         let aux = f.double(17)
@@ -1570,6 +1720,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         if let symbol = quoteSymbolByReq[reqId] {
             lastMessage = "\(symbol): \(text)"
+            return
+        }
+        if whatIfOrderIds.contains(reqId) {
+            log("WHATIF #\(reqId) [\(code)] \(text)")
+            marginPreviews.removeValue(forKey: reqId)?(.failure(PreviewFailure(reason: text)))
             return
         }
         if var o = orders[reqId] {

@@ -179,6 +179,18 @@ final class Broker {
         order { $0.placeProtective(symbol: symbol, at: clickedPrice) }
     }
 
+    /// ⌃-click on a chart with no position: sizes a what-if buy at the last price from IB's margin
+    /// preview, `fraction` of the largest long allowed. `completion` gets it a second or two later,
+    /// or never if IB can't size it (`lastMessage` says why).
+    func sizeWhatIf(symbol: String, fraction: Double,
+                    completion: @escaping @MainActor @Sendable (TradingEngine.WhatIfSize) -> Void) {
+        engine.perform { engine in
+            engine.sizeWhatIf(symbol: symbol, fraction: fraction) { size in
+                Task { @MainActor in completion(size) }
+            }
+        }
+    }
+
     /// Order commands are timed from here until they reach the socket.
     private func order(_ work: @escaping @Sendable (TradingEngine) -> Void) {
         engine.perform(start: DispatchTime.now().uptimeNanoseconds, work)
