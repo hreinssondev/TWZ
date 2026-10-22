@@ -2,8 +2,9 @@
 //  SecondaryChartsView.swift
 //  TWZ
 //
-//  A 6×3 grid of 18 charts that follow the top gainers (their own scanner, 25 rows). A symbol keeps its
-//  chart while it stays in the top 18; only charts whose symbol dropped out load a new one.
+//  A 6×3 grid of 18 charts that follow the top gainers (their own scanner, 25 rows), laid out in rank order.
+//  A symbol keeps its chart while it stays in the top 18 (a reshuffle only moves the charts); only
+//  charts whose symbol dropped out load a new one.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
@@ -78,26 +79,34 @@ struct SecondaryChartsView: View {
             let totalVerticalGap = gap * CGFloat(Self.rows - 1)
             let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(Self.rows)
 
-            VStack(spacing: gap) {
-                ForEach(0..<Self.rows, id: \.self) { row in
-                    HStack(spacing: gap) {
-                        ForEach(0..<Self.columns, id: \.self) { col in
-                            let index = row * Self.columns + col
-                            if index < workspace.secondaryCharts.count {
-                                SecondaryChartPane(chart: workspace.secondaryCharts[index])
-                                    .frame(width: chartWidth, height: chartHeight)
-                            }
-                        }
-                    }
+            // One ForEach keyed by chart, so a chart's view (and its state) moves with it when the ranking reshuffles.
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(chartWidth), spacing: gap), count: Self.columns), spacing: gap) {
+                ForEach(rankedCharts, id: \.id) { chart in
+                    SecondaryChartPane(chart: chart)
+                        .frame(width: chartWidth, height: chartHeight)
                 }
             }
             .padding(gap)
         }
     }
 
+    /// The charts in gainer rank order, empty ones last. Only their place in the grid follows the
+    /// ranking: a chart keeps its symbol and data, so a reshuffle reloads nothing.
+    private var rankedCharts: [ChartModel] {
+        let rank = Dictionary(lastGainers.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        return workspace.secondaryCharts.enumerated().sorted { a, b in
+            let ra = rank[a.element.symbol] ?? .max, rb = rank[b.element.symbol] ?? .max
+            return ra != rb ? ra < rb : a.offset < b.offset
+        }.map(\.element)
+    }
+
     private var header: some View {
         HStack {
             Text("All Charts").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+            // A failed scanner isn't retried, so the charts would sit on its last list without this.
+            if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
+                Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
+            }
             Spacer()
             TimeframePicker(selection: Binding(
                 get: { masterTimeframe },
@@ -152,8 +161,8 @@ struct SecondaryChartsView: View {
         for chart in workspace.secondaryCharts { workspace.clear(chart, broker: broker) }
     }
 
-    /// Fills the charts with the top 18 gainers. A symbol still in the top 18 stays where it is,
-    /// so a reshuffle in the ranking reloads nothing; new symbols take the charts that dropped out.
+    /// Fills the charts with the top 18 gainers. A symbol still in the top 18 keeps its chart, so a
+    /// reshuffle in the ranking reloads nothing (`rankedCharts` moves them); new symbols take the charts that dropped out.
     private func syncWithGainers() {
         let gainers = broker.scans[SecondaryCharts.scannerOwner]?.symbols ?? []
         guard !gainers.isEmpty, gainers != lastGainers else { return }
