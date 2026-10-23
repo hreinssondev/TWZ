@@ -15,8 +15,9 @@
 //  over each sell, tip at the fill price, on the bar the fill came in.
 //  Holding ⌃ over the price area with a position open shows, left of the price tag, the P/L if the
 //  position closed at that price.
-//  ⌃-clicking with no position open places a what-if buy instead (see `WhatIf`); holding ⌘ over the
-//  chart shows its P/L at the last price and at the hovered one.
+//  ⌃-clicking with no position open places a what-if buy at that price instead (see `WhatIf`), and
+//  ⌃-clicking its line removes it; hovering the chart shows its P/L at the last price and at the
+//  hovered one.
 //
 
 import SwiftUI
@@ -44,11 +45,13 @@ struct CandleChart: View {
     var onAltClick: ((Double) -> Void)?
     /// ⌃-click in the price area: called with the price under the cursor.
     var onControlClick: ((Double) -> Void)?
+    /// ⌃-click on an order line: called with its order id first; returning true skips `onControlClick`.
+    var onControlClickLine: ((Int) -> Bool)?
     /// Price tag color while ⌃ is held: what a ⌃-click there would place (nil: nothing).
     var controlClickColor: ((Double) -> Color?)?
     /// While ⌃ is held: the open position's P/L if it closed at that price (nil: no position).
     var controlHoverPnL: ((Double) -> Double?)?
-    /// While ⌘ is held: the what-if buy's P/L if sold at that price (nil: no what-if).
+    /// While hovering: the what-if buy's P/L if sold at that price (nil: no what-if).
     var whatIfPnL: ((Double) -> Double?)?
     /// Double-click on an order line: called with its order id.
     var onCancelOrder: ((Int) -> Void)?
@@ -79,7 +82,6 @@ struct CandleChart: View {
     @State private var dragStart: (scroll: Double, shift: Double)?
     @State private var optionHeld = false
     @State private var controlHeld = false
-    @State private var commandHeld = false
 
     /// Widens with the axis text so larger prices still fit.
     private var axisWidth: CGFloat { max(58, (axisFontSize * 5.8).rounded()) }
@@ -100,7 +102,6 @@ struct CandleChart: View {
                     hover = p
                     optionHeld = NSEvent.modifierFlags.contains(.option)
                     controlHeld = NSEvent.modifierFlags.contains(.control)
-                    commandHeld = NSEvent.modifierFlags.contains(.command)
                 } else {
                     hover = nil
                 }
@@ -124,6 +125,10 @@ struct CandleChart: View {
                 },
                 onClick: { onClick?() },
                 onModifiedClick: { location, flags in
+                    if flags == .control, let onControlClickLine,
+                       let id = orderLine(near: location, size: geo.size), onControlClickLine(id) {
+                        return true
+                    }
                     guard let handler = flags == .control ? onControlClick : onAltClick,
                           let price = price(at: location, size: geo.size) else { return false }
                     handler(price)
@@ -132,7 +137,6 @@ struct CandleChart: View {
                 onModifierKeys: { flags in
                     optionHeld = flags.contains(.option)
                     controlHeld = flags.contains(.control)
-                    commandHeld = flags.contains(.command)
                 },
                 onRightClick: resetView
             ))
@@ -467,9 +471,8 @@ struct CandleChart: View {
         }
         visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
 
-        // Holding ⌘ over the chart: the what-if buy's P/L at the last price, in place of the lines' notes
-        // (the what-if's sits on the last price right after it's placed).
-        if hover != nil, commandHeld, let last, let pnl = whatIfPnL?(last) {
+        // Hovering the chart: the what-if buy's P/L at the last price, in place of the lines' notes.
+        if hover != nil, let last, let pnl = whatIfPnL?(last) {
             drawPnLTag(in: &ctx, pnl: pnl, y: y(last), plot: plot)
         } else {
             for line in visibleLines {
@@ -497,7 +500,7 @@ struct CandleChart: View {
                 drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor)
                 if controlHeld, let pnl = controlHoverPnL?(hoverPrice) {
                     drawPnLTag(in: &ctx, pnl: pnl, y: hover.y, plot: plot)
-                } else if commandHeld, let pnl = whatIfPnL?(hoverPrice) {
+                } else if let pnl = whatIfPnL?(hoverPrice) {
                     drawPnLTag(in: &ctx, pnl: pnl, y: hover.y, plot: plot)
                 }
             }

@@ -44,9 +44,10 @@ final class ChartModel: Identifiable {
     static let compactDefaultVisibleBars: Double = 240
 }
 
-/// A pretend buy at the last price, placed by ⌃-clicking a chart with no position open: 80% of the
+/// A pretend buy at the clicked price, placed by ⌃-clicking a chart with no position open: 80% of the
 /// largest long IB's margin allows in the symbol at that moment. Only a margin preview goes to IB,
-/// never an order; holding ⌘ over the chart shows what it would have made or lost.
+/// never an order; hovering the chart shows what it would have made or lost. ⌃-clicking its line
+/// removes it.
 nonisolated struct WhatIf: Codable {
     static let buyingPowerFraction = 0.8
     /// Stands in for an order id on the what-if line, so double-clicking the line removes it.

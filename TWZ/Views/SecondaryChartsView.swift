@@ -403,7 +403,7 @@ private struct SplitStore {
 }
 
 /// A chart pane for the secondary window: clicking loads the symbol into the main window's
-/// selected chart instead of selecting this pane. ⌃-click, the what-if, its lines and ⌘ P/L work
+/// selected chart instead of selecting this pane. ⌃-click, the what-if, its lines and hover P/L work
 /// as on the main charts; ⌥-click orders are left off.
 private struct SecondaryChartPane: View {
     @Environment(Broker.self) private var broker

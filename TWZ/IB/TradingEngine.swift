@@ -1103,7 +1103,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     // MARK: - What-if sizing
 
     /// A ⌃-click what-if buy: `fraction` of the largest long IB's margin allows in the symbol right
-    /// now, at the last price.
+    /// now, at the clicked price.
     struct WhatIfSize: Sendable {
         var price: Double
         var shares: Double
@@ -1129,7 +1129,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// small order gives the available funds and margin per share; margin per share can rise with
     /// the position's size, so a second near the largest size allowed refines it. Takes a second or
     /// two; `completion` runs on the engine queue, and not at all if IB can't size it (`lastMessage` says why).
-    func sizeWhatIf(symbol rawSymbol: String, fraction: Double, completion: @escaping @Sendable (WhatIfSize) -> Void) {
+    func sizeWhatIf(symbol rawSymbol: String, at clickedPrice: Double, fraction: Double,
+                    completion: @escaping @Sendable (WhatIfSize) -> Void) {
         let symbol = rawSymbol.uppercased()
         guard apiReady else {
             lastMessage = "Not connected to IB Gateway"
@@ -1139,11 +1140,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "Load a symbol into the chart first"
             return
         }
-        guard let last = quotes[symbol]?.last, last > 0 else {
-            lastMessage = "No live price for \(symbol) yet, so the what-if can't be sized"
+        guard clickedPrice > 0 else {
+            lastMessage = "\(symbol) what-if: no price there"
             return
         }
-        let price = Self.roundToTick(last)
+        let price = Self.roundToTick(clickedPrice)
         lastMessage = "\(symbol) what-if: asking IB for the margin…"
         previewMargin(symbol, shares: max(1, (1000 / price).rounded(.down)), price: price) { [self] first in
             let small: MarginPreview

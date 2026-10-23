@@ -159,12 +159,18 @@ struct TradingChart: View {
                 if hasPosition {
                     broker.placeProtective(symbol: chart.symbol, at: price)
                 } else {
-                    // No position: a what-if buy at the last price, sized from IB's margin preview.
+                    // No position: a what-if buy at the clicked price, sized from IB's margin preview.
                     let symbol = chart.symbol
-                    broker.sizeWhatIf(symbol: symbol, fraction: WhatIf.buyingPowerFraction) { size in
+                    broker.sizeWhatIf(symbol: symbol, at: price, fraction: WhatIf.buyingPowerFraction) { size in
                         workspace.whatIfs[symbol] = WhatIf(price: size.price, shares: size.shares)
                     }
                 }
+            },
+            onControlClickLine: { id in
+                // ⌃-clicking the what-if line removes it; other lines leave the click to place as usual.
+                guard id == WhatIf.lineId else { return false }
+                workspace.whatIfs[chart.symbol] = nil
+                return true
             },
             controlClickColor: { price in
                 guard hasPosition else { return Self.whatIfColor }
@@ -243,7 +249,7 @@ struct TradingChart: View {
         }
         if let whatIf = workspace.whatIfs[chart.symbol] {
             // ⌃-clicked with no position: "W" at the pretend buy's price, and beside it what it's worth in
-            // NOK (80% of what IB's margin allows); double-click removes it.
+            // NOK (80% of what IB's margin allows); ⌃-click or double-click removes it.
             let valueNOK = broker.usdNok.map { whatIf.shares * whatIf.price * $0 }
             lines.append(PriceLine(price: whatIf.price, color: Self.whatIfColor, label: "W", orderId: WhatIf.lineId,
                                    note: valueNOK.map { "\(OrderAmount.format($0)) NOK" }))
