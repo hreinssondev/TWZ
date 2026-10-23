@@ -2,8 +2,9 @@
 //  SecondaryChartsView.swift
 //  TWZ
 //
-//  A 6×3 grid of 18 charts that follow the top gainers (their own scanner, 25 rows), laid out in rank order.
-//  A symbol keeps its chart while it stays in the top 18 (a reshuffle only moves the charts); only
+//  A grid of charts that follow the top gainers (their own scanner, 25 rows), laid out in rank order:
+//  6×3 for the top 18, or 5×2 for the top 10 (the "All Charts" / "Top 10" title toggles them).
+//  A symbol keeps its chart while it stays in the top N (a reshuffle only moves the charts); only
 //  charts whose symbol dropped out load a new one.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
@@ -16,6 +17,7 @@ enum SecondaryCharts {
     static let count = 18
     static let timeframeKey = "secondaryChartsTimeframe"
     static let pausedKey = "secondaryChartsPaused"
+    static let layoutKey = "secondaryChartsLayout"
     static let scannerOwner = "secondary-charts"
     static let windowID = "secondary-charts"
     static let windowTitle = "Charts"
@@ -24,20 +26,28 @@ enum SecondaryCharts {
         guard let window else { return false }
         return window.identifier?.rawValue.hasPrefix(windowID) == true || window.title == windowTitle
     }
+
+    enum Layout: String {
+        case all, top10
+
+        var columns: Int { self == .all ? 6 : 5 }
+        var rows: Int { self == .all ? 3 : 2 }
+        var count: Int { columns * rows }
+        var title: String { self == .all ? "All Charts" : "Top 10" }
+    }
 }
 
 struct SecondaryChartsView: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
 
-    private static let columns = 6
-    private static let rows = 3
     private static let gap: CGFloat = 4
 
     @State private var lastGainers: [String] = []
     @AppStorage(SecondaryCharts.timeframeKey) private var masterTimeframe: Timeframe = .m1
     @AppStorage("secondaryHeaderHeight") private var headerHeight: Double = 28
     @AppStorage(SecondaryCharts.pausedKey) private var isPaused: Bool = false
+    @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
     @State private var dragStartHeight: Double?
 
     var body: some View {
@@ -69,19 +79,23 @@ struct SecondaryChartsView: View {
         .onChange(of: isPaused) { _, paused in
             if paused { stop() } else { start() }
         }
+        // Charts still in the new top N stay put; the rest are emptied (10) or filled (18).
+        .onChange(of: layout) {
+            if !isPaused { lastGainers = []; syncWithGainers() }
+        }
     }
 
     private var grid: some View {
         GeometryReader { geo in
             let gap = Self.gap
-            let totalGap = gap * CGFloat(Self.columns - 1)
-            let chartWidth = (geo.size.width - gap * 2 - totalGap) / CGFloat(Self.columns)
-            let totalVerticalGap = gap * CGFloat(Self.rows - 1)
-            let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(Self.rows)
+            let totalGap = gap * CGFloat(layout.columns - 1)
+            let chartWidth = (geo.size.width - gap * 2 - totalGap) / CGFloat(layout.columns)
+            let totalVerticalGap = gap * CGFloat(layout.rows - 1)
+            let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(layout.rows)
 
             // One ForEach keyed by chart, so a chart's view (and its state) moves with it when the ranking reshuffles.
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(chartWidth), spacing: gap), count: Self.columns), spacing: gap) {
-                ForEach(rankedCharts, id: \.id) { chart in
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(chartWidth), spacing: gap), count: layout.columns), spacing: gap) {
+                ForEach(rankedCharts.prefix(layout.count), id: \.id) { chart in
                     SecondaryChartPane(chart: chart)
                         .frame(width: chartWidth, height: chartHeight)
                 }
@@ -102,7 +116,13 @@ struct SecondaryChartsView: View {
 
     private var header: some View {
         HStack {
-            Text("All Charts").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+            Button {
+                layout = layout == .all ? .top10 : .all
+            } label: {
+                Text(layout.title).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(layout == .all ? "Show the top 10 gainers, 5×2" : "Show the top 18 gainers, 6×3")
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
@@ -161,7 +181,8 @@ struct SecondaryChartsView: View {
         for chart in workspace.secondaryCharts { workspace.clear(chart, broker: broker) }
     }
 
-    /// Fills the charts with the top 18 gainers. A symbol still in the top 18 keeps its chart, so a
+    /// Fills the charts with the top N gainers (the layout's count); the other charts are emptied.
+    /// A symbol still in the top N keeps its chart, so a
     /// reshuffle in the ranking reloads nothing (`rankedCharts` moves them); new symbols take the charts that dropped out.
     private func syncWithGainers() {
         let gainers = broker.scans[SecondaryCharts.scannerOwner]?.symbols ?? []
@@ -171,7 +192,7 @@ struct SecondaryChartsView: View {
         var top: [String] = []
         for symbol in gainers where !symbol.isEmpty && !top.contains(symbol) {
             top.append(symbol)
-            if top.count == workspace.secondaryCharts.count { break }
+            if top.count == min(layout.count, workspace.secondaryCharts.count) { break }
         }
         let shown = Set(workspace.secondaryCharts.map(\.symbol))
         var incoming = top.filter { !shown.contains($0) }[...]
