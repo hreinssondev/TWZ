@@ -62,7 +62,7 @@ struct ChartGrid: View {
 }
 
 /// A small grip at the crossing of two gaps that drags a width and a height together.
-private struct CrossResizeHandle: View {
+struct CrossResizeHandle: View {
     let current: CGSize
     let onChange: (CGSize) -> Void
     let onReset: () -> Void

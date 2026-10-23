@@ -56,6 +56,8 @@ struct SecondaryChartsView: View {
     @State private var pendingColumns: Int?
     @State private var pendingRows: Int?
     @State private var settleTask: Task<Void, Never>?
+    @State private var columnSplits = SplitStore(key: "secondaryChartsColumnSplits")
+    @State private var rowSplits = SplitStore(key: "secondaryChartsRowSplits")
 
     private var columns: Int { layout == .all ? 6 : customColumns }
     private var rows: Int { layout == .all ? 3 : customRows }
@@ -91,7 +93,7 @@ struct SecondaryChartsView: View {
         .onChange(of: isPaused) { _, paused in
             if paused { stop() } else { start() }
         }
-        // Charts still in the new top N stay put; the rest are emptied (10) or filled (18).
+        // Charts still in the new top N stay put; the rest are emptied (smaller grid) or filled (larger).
         .onChange(of: count) {
             if !isPaused { lastGainers = []; syncWithGainers() }
         }
@@ -100,20 +102,95 @@ struct SecondaryChartsView: View {
     private var grid: some View {
         GeometryReader { geo in
             let gap = Self.gap
-            let totalGap = gap * CGFloat(columns - 1)
-            let chartWidth = (geo.size.width - gap * 2 - totalGap) / CGFloat(columns)
-            let totalVerticalGap = gap * CGFloat(rows - 1)
-            let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(rows)
+            let available = CGSize(width: geo.size.width - gap * 2 - gap * CGFloat(columns - 1),
+                                   height: geo.size.height - gap * 2 - gap * CGFloat(rows - 1))
+            let widths = columnFractions.map { CGFloat($0) * available.width }
+            let heights = rowFractions.map { CGFloat($0) * available.height }
+            let xs = Self.offsets(widths, gap: gap)
+            let ys = Self.offsets(heights, gap: gap)
 
-            // One ForEach keyed by chart, so a chart's view (and its state) moves with it when the ranking reshuffles.
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(chartWidth), spacing: gap), count: columns), spacing: gap) {
-                ForEach(rankedCharts.prefix(count), id: \.id) { chart in
+            ZStack(alignment: .topLeading) {
+                // One ForEach keyed by chart, so a chart's view (and its state) moves with it when the ranking reshuffles.
+                ForEach(Array(rankedCharts.prefix(count).enumerated()), id: \.element.id) { index, chart in
+                    let column = index % columns, row = index / columns
                     SecondaryChartPane(chart: chart)
-                        .frame(width: chartWidth, height: chartHeight)
+                        .frame(width: widths[column], height: heights[row])
+                        .offset(x: xs[column], y: ys[row])
+                }
+                // A grip at every crossing of four charts: it moves that column line and row line together.
+                ForEach(0..<max(0, rows - 1), id: \.self) { row in
+                    ForEach(0..<max(0, columns - 1), id: \.self) { column in
+                        let x = xs[column] + widths[column], y = ys[row] + heights[row]
+                        CrossResizeHandle(
+                            current: CGSize(width: x, height: y),
+                            onChange: { point in
+                                moveColumnLine(column, to: point.width - gap, available: available.width)
+                                moveRowLine(row, to: point.height - gap, available: available.height)
+                            },
+                            onReset: resetSplits
+                        )
+                        .position(x: x + gap / 2, y: y + gap / 2)
+                    }
                 }
             }
-            .padding(gap)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
+    }
+
+    /// Each chart's left (or top) edge: the outer gap, the sizes before it and a gap between each.
+    private static func offsets(_ sizes: [CGFloat], gap: CGFloat) -> [CGFloat] {
+        var edge = gap
+        return sizes.map { size in
+            defer { edge += size + gap }
+            return edge
+        }
+    }
+
+    // MARK: Splits
+
+    private static let minChartWidth: CGFloat = 80
+    private static let minChartHeight: CGFloat = 60
+
+    /// Each column's share of the width, saved per column count; equal until a grip is dragged.
+    private var columnFractions: [Double] { Self.fractions(columnSplits[columns], count: columns) }
+    private var rowFractions: [Double] { Self.fractions(rowSplits[rows], count: rows) }
+
+    private static func fractions(_ saved: [Double]?, count: Int) -> [Double] {
+        if let saved, saved.count == count { return saved }
+        return Array(repeating: 1 / Double(count), count: count)
+    }
+
+    /// Moves the line after `column` so its left edge sits `edge` points in, taking the width from
+    /// the column on its other side only.
+    private func moveColumnLine(_ column: Int, to edge: CGFloat, available: CGFloat) {
+        guard let new = Self.moveLine(columnFractions, index: column, to: edge, available: available, min: Self.minChartWidth) else { return }
+        columnSplits[columns] = new
+    }
+
+    private func moveRowLine(_ row: Int, to edge: CGFloat, available: CGFloat) {
+        guard let new = Self.moveLine(rowFractions, index: row, to: edge, available: available, min: Self.minChartHeight) else { return }
+        rowSplits[rows] = new
+    }
+
+    /// `edge` is in points from the first chart's edge, gaps included; the line between `index` and
+    /// `index + 1` moves there, clamped so neither chart gets smaller than `min`.
+    private static func moveLine(_ fractions: [Double], index: Int, to edge: CGFloat, available: CGFloat, min: CGFloat) -> [Double]? {
+        guard available > 0, index + 1 < fractions.count else { return nil }
+        let gap = Self.gap
+        let before = fractions[..<index].reduce(0, +)
+        let pair = fractions[index] + fractions[index + 1]
+        let minShare = Double(min / available)
+        guard pair >= minShare * 2 else { return nil }
+        let share = Double((edge - gap * CGFloat(index)) / available) - before
+        var new = fractions
+        new[index] = Swift.min(pair - minShare, Swift.max(minShare, share))
+        new[index + 1] = pair - new[index]
+        return new
+    }
+
+    private func resetSplits() {
+        columnSplits[columns] = nil
+        rowSplits[rows] = nil
     }
 
     /// The charts in gainer rank order, empty ones last. Only their place in the grid follows the
@@ -261,6 +338,26 @@ struct SecondaryChartsView: View {
             } else {
                 workspace.clear(chart, broker: broker)
             }
+        }
+    }
+}
+
+/// Column or row shares keyed by how many columns or rows there are, kept in the user defaults.
+private struct SplitStore {
+    let key: String
+    private var values: [Int: [Double]]
+
+    init(key: String) {
+        self.key = key
+        let saved = UserDefaults.standard.dictionary(forKey: key) as? [String: [Double]] ?? [:]
+        values = Dictionary(uniqueKeysWithValues: saved.compactMap { k, v in Int(k).map { ($0, v) } })
+    }
+
+    subscript(count: Int) -> [Double]? {
+        get { values[count] }
+        set {
+            values[count] = newValue
+            UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: values.map { (String($0), $1) }), forKey: key)
         }
     }
 }
