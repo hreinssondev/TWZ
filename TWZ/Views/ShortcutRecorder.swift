@@ -80,11 +80,6 @@ struct ShortcutRecorder: View {
             problem = "\(reason). Try another."
             return
         }
-        // A global shortcut without ⌘, ⌥ or ⌃ would swallow that key in every app.
-        if owner == .chartsWindow, !new.command, !new.option, !new.control, !new.isFunctionKey {
-            problem = "Add ⌘, ⌥ or ⌃ (or use an F-key): it works in every app."
-            return
-        }
         if let other = workspace.hotkeys.first(where: { owner != .hotkey($0.id) && $0.shortcut == new }) {
             problem = "\(new.display) is already \"\(other.label)\". Try another."
             return

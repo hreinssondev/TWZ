@@ -266,6 +266,12 @@ nonisolated struct KeyShortcut: Codable, Hashable {
     /// F1–F20: never typed into a text field, so they fire while one is being edited too.
     var isFunctionKey = false
 
+    /// No ⌘, ⌥ or ⌃, and not an F-key: a key that types something.
+    var isPlain: Bool { !command && !option && !control && !isFunctionKey }
+
+    /// What the key types (lowercase unless ⇧ is part of it).
+    var typed: String { shift ? key.uppercased() : key.lowercased() }
+
     /// "⌃⌥⇧⌘K", in the order macOS menus use.
     var display: String {
         (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "") + key

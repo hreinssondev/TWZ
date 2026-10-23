@@ -196,9 +196,14 @@ private struct TradingSettings: View {
                 if let failure = GlobalHotkey.shared.failure {
                     Text(failure).font(.caption).foregroundStyle(.red)
                 }
-                Text("Works from any app: shows the Charts window in front (opening it if needed); pressed again, hides it. Hidden, its charts stay live, so it comes back instantly. Closing the window turns them off like P.")
+                Text("Works from any app: shows the Charts window in front (opening it if needed); pressed again, hides the app and goes back to the one before. Hidden, its charts stay live, so it comes back instantly. Closing the window turns them off like P.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if workspace.chartsWindowShortcut?.isPlain == true {
+                    Text("A single key works in every app, so other apps can't type it while it's set.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
         }
         .formStyle(.grouped)

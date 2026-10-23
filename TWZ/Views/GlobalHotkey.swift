@@ -57,29 +57,34 @@ final class GlobalHotkey {
 }
 
 /// Keeps the Charts window shortcut (Settings ▸ Trading) registered. Pressed with the Charts window
-/// in front, it hides it; otherwise it shows it in front, opening it if it isn't open. Hiding doesn't
-/// close the window, so its charts stay live and come back instantly.
+/// in front, it hides the whole app, so the app used before comes back; otherwise it brings the app
+/// and the Charts window to the front, opening the window if it isn't open. Hiding doesn't close the
+/// window, so its charts stay live and come back instantly.
 struct ChartsWindowShortcut: ViewModifier {
     @Environment(Workspace.self) private var workspace
     @Environment(\.openWindow) private var openWindow
-    /// The Charts window while the shortcut has it hidden (ordered out, not closed).
-    private static weak var hidden: NSWindow?
 
     func body(content: Content) -> some View {
         content.onChange(of: workspace.chartsWindowShortcut, initial: true) { _, shortcut in
             GlobalHotkey.shared.register(shortcut) { [openWindow] in
-                if NSApp.isActive, let key = NSApp.keyWindow, SecondaryCharts.isWindow(key) {
-                    key.orderOut(nil)
-                    Self.hidden = key
+                // A key without ⌘, ⌥ or ⌃ is still typed while one of the app's text fields is being edited.
+                if let shortcut, shortcut.isPlain, NSApp.isActive,
+                   let editor = NSApp.keyWindow?.firstResponder as? NSTextView, editor.isEditable {
+                    editor.insertText(shortcut.typed, replacementRange: editor.selectedRange())
                     return
                 }
+                if NSApp.isActive, let key = NSApp.keyWindow, SecondaryCharts.isWindow(key) {
+                    NSApp.hide(nil)
+                    return
+                }
+                if NSApp.isHidden { NSApp.unhide(nil) }
                 NSApp.activate()
-                if let window = Self.hidden {
+                if let window = NSApp.windows.first(where: { SecondaryCharts.isWindow($0) && ($0.isVisible || $0.isMiniaturized) }) {
+                    if window.isMiniaturized { window.deminiaturize(nil) }
                     window.makeKeyAndOrderFront(nil)
                 } else {
                     openWindow(id: SecondaryCharts.windowID)
                 }
-                Self.hidden = nil
             }
         }
     }
