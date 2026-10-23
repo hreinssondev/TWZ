@@ -7,6 +7,7 @@ import SwiftUI
 
 struct AccountBar: View {
     @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
     @State private var showSettings = false
     @AppStorage(MainGrid.columnsKey) private var gridColumns = 2
     @AppStorage(MainGrid.rowsKey) private var gridRows = 2
@@ -35,6 +36,20 @@ struct AccountBar: View {
             GridSliders(columns: $gridColumns, rows: $gridRows, zoom: $gridZoom,
                         columnRange: 2...MainGrid.maxColumns, rowRange: 2...MainGrid.maxRows)
                 .background(NoWindowDrag())
+
+            Button {
+                workspace.resetToGainers()
+            } label: {
+                Text("Reset")
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundStyle(Color.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(0.08)))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Every chart, the selected one too, shows the top gainers in order again; charts set by hand let go of their stock")
 
             Spacer()
 

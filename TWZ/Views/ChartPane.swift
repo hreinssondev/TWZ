@@ -8,8 +8,22 @@ import SwiftUI
 extension Workspace {
     /// Loads a symbol into the selected chart (the last selected one while none is) and selects it.
     func loadIntoSelectedChart(_ symbol: String, broker: Broker) {
-        load(symbol, into: selectedChart, broker: broker)
+        loadByHand(symbol, into: selectedChart, broker: broker)
         isChartSelected = true
+    }
+
+    /// Loads a symbol picked by hand: the main-window chart keeps it instead of following the
+    /// gainers, until Reset.
+    func loadByHand(_ symbol: String, into chart: ChartModel, broker: Broker) {
+        guard !symbol.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        load(symbol, into: chart, broker: broker)
+        manualChartIDs.insert(chart.id)
+    }
+
+    /// Every main-window chart follows the gainers again, the selected one too.
+    func resetToGainers() {
+        manualChartIDs = []
+        gainerResets += 1
     }
 
     /// Loads a symbol into a chart and (re)subscribes its data.
@@ -85,7 +99,7 @@ struct ChartPane: View {
                 .frame(width: 70)
                 .focused($symbolFocused)
                 .onSubmit {
-                    workspace.load(symbolText, into: chart, broker: broker)
+                    workspace.loadByHand(symbolText, into: chart, broker: broker)
                     symbolText = chart.symbol
                     symbolFocused = false
                 }

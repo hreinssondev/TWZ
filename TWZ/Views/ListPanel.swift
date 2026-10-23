@@ -200,7 +200,7 @@ struct ListPanel: View {
         .contextMenu {
             ForEach(workspace.charts) { chart in
                 Button("Load into Chart \(chart.id + 1)") {
-                    workspace.load(symbol, into: chart, broker: broker)
+                    workspace.loadByHand(symbol, into: chart, broker: broker)
                 }
             }
         }

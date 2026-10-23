@@ -88,9 +88,19 @@ final class Workspace {
     var fastChartIDs: Set<Int> { didSet { save() } }
     /// System-wide shortcut that shows and hides the Charts window (see `ChartsWindowShortcut`).
     var chartsWindowShortcut: KeyShortcut? { didSet { save() } }
+    /// Main-window charts given a symbol by hand (a list, a symbol field): they keep it instead of
+    /// following the gainers, until Reset (see `ChartGrid`). Saved for the four charts only, as the
+    /// gainer charts start empty.
+    var manualChartIDs: Set<Int> { didSet { save() } }
+    /// Counts the account bar's Resets: every main-window chart, the selected one too, follows the
+    /// gainers again.
+    var gainerResets = 0
 
-    var selectedChart: ChartModel {
-        charts.first { $0.id == selectedChartID } ?? mainGainerCharts.first { $0.id == selectedChartID } ?? charts[0]
+    var selectedChart: ChartModel { chart(id: selectedChartID) ?? charts[0] }
+
+    /// One of the four charts or a main-window gainer chart.
+    func chart(id: Int) -> ChartModel? {
+        id < MainGrid.firstGainerID ? charts.first { $0.id == id } : mainGainerCharts.first { $0.id == id }
     }
     /// The symbol orders go to: the selected chart's, or "" with no chart selected (nothing is sent).
     var targetSymbol: String { isChartSelected ? selectedChart.symbol : "" }
@@ -118,7 +128,7 @@ final class Workspace {
             ChartModel(id: 100 + i, symbol: "", timeframe: secondaryTimeframe, isCompact: true)
         }
         mainGainerCharts = (0..<MainGrid.gainerCount).map { i in
-            ChartModel(id: 200 + i, symbol: "", timeframe: secondaryTimeframe, isCompact: true)
+            ChartModel(id: MainGrid.firstGainerID + i, symbol: "", timeframe: secondaryTimeframe, isCompact: true)
         }
 
         if let data = defaults.data(forKey: "hotkeys"),
@@ -145,6 +155,7 @@ final class Workspace {
         }
 
         fastChartIDs = Set(defaults.array(forKey: "fastChartIDs") as? [Int] ?? Array(0..<4))
+        manualChartIDs = Set(defaults.array(forKey: "manualChartIDs") as? [Int] ?? [])
 
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
@@ -173,6 +184,7 @@ final class Workspace {
         if let data = try? JSONEncoder().encode(scanFilters) { defaults.set(data, forKey: "scanFilters") }
         if let data = try? JSONEncoder().encode(whatIfs) { defaults.set(data, forKey: "whatIfs") }
         defaults.set(fastChartIDs.sorted(), forKey: "fastChartIDs")
+        defaults.set(manualChartIDs.filter { $0 < MainGrid.firstGainerID }.sorted(), forKey: "manualChartIDs")
         defaults.set(chartsWindowShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "chartsWindowShortcut")
     }
 }

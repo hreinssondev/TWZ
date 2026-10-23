@@ -295,7 +295,11 @@ struct SecondaryChartPane: View {
                 .frame(width: 70)
                 .focused($symbolFocused)
                 .onSubmit {
-                    workspace.load(symbolText, into: chart, broker: broker)
+                    if selectable {
+                        workspace.loadByHand(symbolText, into: chart, broker: broker)
+                    } else {
+                        workspace.load(symbolText, into: chart, broker: broker)
+                    }
                     symbolText = chart.symbol
                     symbolFocused = false
                 }
