@@ -8,6 +8,9 @@ import SwiftUI
 struct AccountBar: View {
     @Environment(Broker.self) private var broker
     @State private var showSettings = false
+    @AppStorage(MainGrid.columnsKey) private var gridColumns = 2
+    @AppStorage(MainGrid.rowsKey) private var gridRows = 2
+    @AppStorage(MainGrid.zoomKey) private var gridZoom: Double = ChartModel.compactDefaultVisibleBars
     /// Distance from the window's top edge to the center of the close/minimize/zoom buttons.
     @State private var controlsCenterY: CGFloat = 14
 
@@ -28,8 +31,10 @@ struct AccountBar: View {
             stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true), color: color(broker.unrealizedPnL))
             stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
 
-            // The Charts window's grid and zoom, adjustable here too.
-            SecondaryChartsSliders()
+            // The chart grid's size and its gainer charts' zoom (see `ChartGrid`).
+            GridSliders(columns: $gridColumns, rows: $gridRows, zoom: $gridZoom,
+                        columnRange: 2...MainGrid.maxColumns, rowRange: 2...MainGrid.maxRows,
+                        zoomHelp: "Bars on screen at the gainer charts' default zoom; double-clicking one goes back to it")
                 .background(NoWindowDrag())
 
             Spacer()
@@ -121,14 +126,32 @@ private struct IndicatorToggles: View {
     }
 }
 
-/// Takes its area out of the window's drag region. The account bar sits in the title bar, where a
-/// drag would otherwise move the window instead of reaching the sliders on top.
+/// Keeps the window from moving while the pointer is over its area. The account bar sits in the
+/// title bar, where dragging a slider would otherwise move the window.
 private struct NoWindowDrag: NSViewRepresentable {
-    func makeNSView(context: Context) -> Blocker { Blocker() }
-    func updateNSView(_ view: Blocker, context: Context) {}
+    func makeNSView(context: Context) -> Tracker { Tracker() }
+    func updateNSView(_ view: Tracker, context: Context) {}
 
-    final class Blocker: NSView {
+    final class Tracker: NSView {
         override var mouseDownCanMoveWindow: Bool { false }
+
+        // Clicks go to the sliders on top; this view only tracks the pointer.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                           owner: self))
+        }
+
+        override func mouseEntered(with event: NSEvent) { window?.isMovable = false }
+        override func mouseExited(with event: NSEvent) { window?.isMovable = true }
+
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            window?.isMovable = true
+            super.viewWillMove(toWindow: newWindow)
+        }
     }
 }
 

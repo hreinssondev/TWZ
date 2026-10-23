@@ -2,62 +2,114 @@
 //  ChartGrid.swift
 //  TWZ
 //
-//  The 2×2 chart grid. The point where the four charts meet is a drag handle:
-//  dragging it moves the column split and the row split together, resizing all
-//  four charts at once. Double-click resets to equal quarters.
+//  The main window's chart grid, 2×2 up to 8×4, sized by the Cols / Rows sliders in the account bar.
+//  The four charts keep the top-left 2×2; every other cell is a gainer chart that works as in the
+//  Charts window: it follows the top gainers (its own scanner, running only while there are such
+//  cells), in rank order, and clicking it loads its symbol into the selected chart. The Zoom slider
+//  sets the gainer charts' default zoom; they take the Charts window's timeframe.
+//  A grip at every crossing of four charts moves that column and row line together (see `SplitGrid`).
 //
 
 import SwiftUI
 
+enum MainGrid {
+    static let maxColumns = 8
+    static let maxRows = 4
+    static let columnsKey = "mainGridColumns"
+    static let rowsKey = "mainGridRows"
+    static let zoomKey = "mainGridZoom"
+    static let scannerOwner = "main-gainers"
+    /// Gainer charts for the largest grid: every cell but the four charts'.
+    static let gainerCount = maxColumns * maxRows - 4
+}
+
 struct ChartGrid: View {
+    @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
-    @AppStorage("chartColumnSplit") private var columnSplit: Double = 0.5   // left column's share
-    @AppStorage("chartRowSplit") private var rowSplit: Double = 0.5         // top row's share
+    @AppStorage(MainGrid.columnsKey) private var storedColumns = 2
+    @AppStorage(MainGrid.rowsKey) private var storedRows = 2
+    @AppStorage(MainGrid.zoomKey) private var zoom: Double = ChartModel.compactDefaultVisibleBars
+    @AppStorage(SecondaryCharts.timeframeKey) private var gainerTimeframe: Timeframe = .m1
+    @State private var lastGainers: [String] = []
+    @State private var columnSplits = Self.splits("mainChartColumnSplits", legacyKey: "chartColumnSplit")
+    @State private var rowSplits = Self.splits("mainChartRowSplits", legacyKey: "chartRowSplit")
 
     let gap: CGFloat
 
-    private static let minChartWidth: CGFloat = 200
-    private static let minChartHeight: CGFloat = 100
+    private var columns: Int { min(max(storedColumns, 2), MainGrid.maxColumns) }
+    private var rows: Int { min(max(storedRows, 2), MainGrid.maxRows) }
+    private var gainerCount: Int { columns * rows - 4 }
 
     var body: some View {
-        GeometryReader { geo in
-            let available = CGSize(width: geo.size.width - gap, height: geo.size.height - gap)
-            let widthRange = Self.range(min: Self.minChartWidth, total: available.width)
-            let heightRange = Self.range(min: Self.minChartHeight, total: available.height)
-            let leftWidth = clamp(available.width * columnSplit, widthRange)
-            let topHeight = clamp(available.height * rowSplit, heightRange)
-
-            VStack(spacing: gap) {
-                HStack(spacing: gap) {
-                    ChartPane(chart: workspace.charts[0]).frame(width: leftWidth)
-                    ChartPane(chart: workspace.charts[1])
-                }
-                .frame(height: topHeight)
-                HStack(spacing: gap) {
-                    ChartPane(chart: workspace.charts[2]).frame(width: leftWidth)
-                    ChartPane(chart: workspace.charts[3])
-                }
+        SplitGrid(columns: columns, rows: rows, items: cells, gap: gap,
+                  columnSplits: $columnSplits, rowSplits: $rowSplits) { chart in
+            if chart.isCompact {
+                SecondaryChartPane(chart: chart)
+            } else {
+                ChartPane(chart: chart)
             }
-            .overlay(alignment: .topLeading) {
-                CrossResizeHandle(
-                    current: CGSize(width: leftWidth, height: topHeight),
-                    onChange: { size in
-                        columnSplit = clamp(size.width, widthRange) / available.width
-                        rowSplit = clamp(size.height, heightRange) / available.height
-                    },
-                    onReset: { columnSplit = 0.5; rowSplit = 0.5 }
-                )
-                .position(x: leftWidth + gap / 2, y: topHeight + gap / 2)
+        }
+        .onAppear {
+            workspace.setZoom(zoom, of: workspace.mainGainerCharts)
+            if gainerCount > 0 { start() }
+        }
+        .onChange(of: gainerCount) { old, new in
+            if new == 0 {
+                stop()
+            } else if old == 0 {
+                start()
+            } else {
+                // Charts still in the new top N stay put; the rest are emptied or filled.
+                lastGainers = []
+                syncWithGainers()
             }
+        }
+        .onChange(of: broker.scans[MainGrid.scannerOwner]?.symbols) {
+            if gainerCount > 0 { syncWithGainers() }
+        }
+        .onChange(of: zoom) { _, new in workspace.setZoom(new, of: workspace.mainGainerCharts) }
+        .onChange(of: gainerTimeframe) { _, new in
+            workspace.setTimeframe(new, of: workspace.mainGainerCharts, broker: broker)
         }
     }
 
-    private static func range(min: CGFloat, total: CGFloat) -> ClosedRange<CGFloat> {
-        min...Swift.max(min, total - min)
+    /// The charts in reading order: the four charts in the top-left 2×2, the gainer charts by rank in
+    /// the other cells.
+    private var cells: [ChartModel] {
+        var gainers = workspace.ranked(workspace.mainGainerCharts, by: lastGainers)[...]
+        return (0..<columns * rows).compactMap { index in
+            let column = index % columns, row = index / columns
+            return column < 2 && row < 2 ? workspace.charts[row * 2 + column] : gainers.popFirst()
+        }
     }
 
-    private func clamp(_ value: CGFloat, _ range: ClosedRange<CGFloat>) -> CGFloat {
-        Swift.min(range.upperBound, Swift.max(range.lowerBound, value))
+    /// The column or row shares, starting from the 2×2 grid's split from before the grid could grow.
+    private static func splits(_ key: String, legacyKey: String) -> SplitStore {
+        var store = SplitStore(key: key)
+        if store[2] == nil, let share = UserDefaults.standard.object(forKey: legacyKey) as? Double {
+            store[2] = [share, 1 - share]
+        }
+        return store
+    }
+
+    private func start() {
+        lastGainers = []
+        broker.setScanner(SecondaryCharts.gainersScan, owner: MainGrid.scannerOwner)
+        syncWithGainers()
+    }
+
+    /// Stops the scanner and empties the gainer charts, cancelling their data.
+    private func stop() {
+        broker.setScanner(nil, owner: MainGrid.scannerOwner)
+        lastGainers = []
+        for chart in workspace.mainGainerCharts { workspace.clear(chart, broker: broker) }
+    }
+
+    private func syncWithGainers() {
+        let gainers = broker.scans[MainGrid.scannerOwner]?.symbols ?? []
+        guard !gainers.isEmpty, gainers != lastGainers else { return }
+        lastGainers = gainers
+        workspace.fill(workspace.mainGainerCharts, withTop: gainerCount, of: gainers, broker: broker)
     }
 }
 

@@ -64,6 +64,9 @@ nonisolated struct WhatIf: Codable {
 final class Workspace {
     let charts: [ChartModel]
     let secondaryCharts: [ChartModel]
+    /// The main window's cells past its four charts (see `ChartGrid`); compact and unsaved like the
+    /// secondary charts.
+    let mainGainerCharts: [ChartModel]
     /// The selected chart, or the last one selected while none is (see `isChartSelected`).
     var selectedChartIndex = 0 { didSet { isChartSelected = true } }
     /// False after clicking empty space in the Orders or Positions column: no chart is selected, so
@@ -108,6 +111,9 @@ final class Workspace {
             .flatMap(Timeframe.init(rawValue:)) ?? .m1
         secondaryCharts = (0..<SecondaryCharts.count).map { i in
             ChartModel(id: 100 + i, symbol: "", timeframe: secondaryTimeframe, isCompact: true)
+        }
+        mainGainerCharts = (0..<MainGrid.gainerCount).map { i in
+            ChartModel(id: 200 + i, symbol: "", timeframe: secondaryTimeframe, isCompact: true)
         }
 
         if let data = defaults.data(forKey: "hotkeys"),

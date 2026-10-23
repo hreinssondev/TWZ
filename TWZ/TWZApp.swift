@@ -26,7 +26,7 @@ struct TWZApp: App {
                 .environment(workspace)
                 .preferredColorScheme(.dark)
                 .onAppear {
-                    broker.registerCharts(workspace.charts + workspace.secondaryCharts)
+                    broker.registerCharts(workspace.charts + workspace.secondaryCharts + workspace.mainGainerCharts)
                     broker.connect()
                 }
                 .onChange(of: workspace.selectedChartIndex, initial: true) { _, index in
