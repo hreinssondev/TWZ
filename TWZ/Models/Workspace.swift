@@ -33,12 +33,15 @@ final class ChartModel: Identifiable {
         self.symbol = symbol
         self.timeframe = timeframe
         self.isCompact = isCompact
-        visibleBars = Self.defaultVisibleBars(compact: isCompact)
+        let zoom = isCompact ? Self.compactDefaultVisibleBars : 120
+        defaultVisibleBars = zoom
+        visibleBars = zoom
     }
 
-    /// Bars on screen at the default zoom; compact charts start zoomed out twice as far.
-    var defaultVisibleBars: Double { Self.defaultVisibleBars(compact: isCompact) }
-    private static func defaultVisibleBars(compact: Bool) -> Double { compact ? 240 : 120 }
+    /// Bars on screen at the default zoom (double-click goes back to it); compact charts start zoomed
+    /// out twice as far, and the Charts window's All Charts view sets its own with a slider.
+    var defaultVisibleBars: Double
+    static let compactDefaultVisibleBars: Double = 240
 }
 
 /// A pretend buy at the last price, placed by ⌃-clicking a chart with no position open: 80% of the

@@ -5,6 +5,7 @@
 //  A grid of charts that follow the top gainers (their own scanner, 25 rows), laid out in rank order:
 //  6×3 for the top 18, or a custom grid set by the Cols / Rows sliders (the "All Charts" / "Top N"
 //  title toggles them). A slider change applies once the sliders have been left alone for a moment.
+//  All Charts has a Zoom slider instead: its charts' default zoom, applied as it moves.
 //  A symbol keeps its chart while it stays in the top N (a reshuffle only moves the charts); only
 //  charts whose symbol dropped out load a new one.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
@@ -23,6 +24,7 @@ enum SecondaryCharts {
     static let layoutKey = "secondaryChartsLayout"
     static let columnsKey = "secondaryChartsColumns"
     static let rowsKey = "secondaryChartsRows"
+    static let allZoomKey = "secondaryChartsAllZoom"
     static let scannerOwner = "secondary-charts"
     static let windowID = "secondary-charts"
     static let windowTitle = "Charts"
@@ -52,6 +54,8 @@ struct SecondaryChartsView: View {
     @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
     @AppStorage(SecondaryCharts.columnsKey) private var customColumns: Int = 5
     @AppStorage(SecondaryCharts.rowsKey) private var customRows: Int = 2
+    /// Bars on screen at the default zoom in All Charts; the custom grid keeps the usual default.
+    @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.compactDefaultVisibleBars
     /// The sliders' values until they settle into `customColumns` / `customRows`.
     @State private var pendingColumns: Int?
     @State private var pendingRows: Int?
@@ -78,7 +82,10 @@ struct SecondaryChartsView: View {
             }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
-        .onAppear { if !isPaused { start() } }
+        .onAppear {
+            applyZoom()
+            if !isPaused { start() }
+        }
         // On close only: hiding the window (ordering it out) keeps the charts live.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
             if SecondaryCharts.isWindow(note.object as? NSWindow) { stop() }
@@ -97,6 +104,8 @@ struct SecondaryChartsView: View {
         .onChange(of: count) {
             if !isPaused { lastGainers = []; syncWithGainers() }
         }
+        .onChange(of: layout) { applyZoom() }
+        .onChange(of: allZoom) { applyZoom() }
     }
 
     private var grid: some View {
@@ -213,7 +222,9 @@ struct SecondaryChartsView: View {
             }
             .buttonStyle(.plain)
             .help(layout == .all ? "Show the custom grid set by the sliders" : "Show the top 18 gainers, 6×3")
-            if layout == .custom {
+            if layout == .all {
+                zoomSlider
+            } else {
                 sizeSlider("Cols", value: pendingColumns ?? customColumns, max: SecondaryCharts.maxColumns) {
                     pendingColumns = $0
                 }
@@ -260,6 +271,31 @@ struct SecondaryChartsView: View {
                         .onEnded { _ in dragStartHeight = nil }
                 )
         )
+    }
+
+    private var zoomSlider: some View {
+        HStack(spacing: 4) {
+            Text("Zoom")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.secondary.opacity(0.7))
+            Slider(value: $allZoom, in: 30...600, step: 10)
+                .controlSize(.mini)
+                .frame(width: 90)
+            Text("\(Int(allZoom))")
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(Color.secondary.opacity(0.7))
+                .frame(width: 20, alignment: .leading)
+        }
+        .help("Bars on screen at the default zoom; double-clicking a chart goes back to it")
+    }
+
+    /// Sets every chart's default zoom for the current view and zooms them to it.
+    private func applyZoom() {
+        let zoom = layout == .all ? allZoom : ChartModel.compactDefaultVisibleBars
+        for chart in workspace.secondaryCharts where chart.defaultVisibleBars != zoom || chart.visibleBars != zoom {
+            chart.defaultVisibleBars = zoom
+            chart.visibleBars = zoom
+        }
     }
 
     private func sizeSlider(_ label: String, value: Int, max: Int, set: @escaping (Int) -> Void) -> some View {
