@@ -7,10 +7,11 @@
 //  stop loss and take profit included. Matched by character, so ⌥< is the < key on Nordic
 //  keyboards (⌥⇧, on US ones).
 //  In the main window (not while a sheet or popover is open), for the selected chart's symbol:
-//  a hotkey's own keyboard shortcut sends that hotkey; ⌘↩ sends the selected hotkey; ⌘A, like ⌥<,
+//  a hotkey's own keyboard shortcut sends that hotkey; ⌘⇧↩ sends the selected hotkey; ⌘↩ turns the
+//  selected chart's tick-by-tick streams on or off (see `Workspace.fastChartIDs`); ⌘A, like ⌥<,
 //  cancels every order in the symbol, stop loss and take profit included; ⌘S closes 100% of the
 //  position at market; ⌘Z, like ⌥Z, cancels the last order placed.
-//  While typing in a text field, ⌘↩ does nothing, ⌘A / ⌘Z stay Select All / Undo, and shortcuts
+//  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘Z stay Select All / Undo, and shortcuts
 //  without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
@@ -41,14 +42,26 @@ struct TradingShortcuts: ViewModifier {
                         broker.run(hotkey, symbol: workspace.targetSymbol)
                         return nil
                     }
+                    let isReturn = event.keyCode == 36 || event.keyCode == 76      // Return or keypad Enter
+                    // ⌘⇧↩: a symbol still being typed isn't the chart's yet.
+                    if modifiers == [.command, .shift], isReturn, inMainWindow, let window = event.window {
+                        if window.firstResponder is NSTextView { return event }
+                        if let hotkey = workspace.selectedHotkey {
+                            broker.run(hotkey, symbol: workspace.targetSymbol)
+                        } else {
+                            NSSound.beep()
+                        }
+                        return nil
+                    }
                     if modifiers == .command, inMainWindow, let window = event.window {
                         let symbol = workspace.targetSymbol
                         let typing = window.firstResponder is NSTextView
-                        // ⌘↩ (Return or keypad Enter): a symbol still being typed isn't the chart's yet.
-                        if event.keyCode == 36 || event.keyCode == 76 {
+                        // ⌘↩: only the four charts stream tick by tick, so a gainer chart just beeps.
+                        if isReturn {
                             if typing { return event }
-                            if let hotkey = workspace.selectedHotkey {
-                                broker.run(hotkey, symbol: symbol)
+                            let chart = workspace.selectedChart
+                            if workspace.isChartSelected, !chart.isCompact {
+                                workspace.fastChartIDs.formSymmetricDifference([chart.id])
                             } else {
                                 NSSound.beep()
                             }
@@ -99,7 +112,9 @@ extension KeyShortcut {
     var reservedFor: String? {
         let k = key.lowercased()
         if command, !option, !control {
-            if keyCode == 36 || keyCode == 76 { return "⌘↩ sends the selected hotkey" }
+            if keyCode == 36 || keyCode == 76 {
+                return shift ? "⌘⇧↩ sends the selected hotkey" : "⌘↩ turns the selected chart's tick-by-tick on or off"
+            }
             if k == "a" { return "⌘A cancels the symbol's orders" }
             if k == "s" { return "⌘S closes 100% at market" }
             if k == "z" { return "⌘Z cancels the last order" }

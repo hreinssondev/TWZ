@@ -5,8 +5,11 @@
 //  The main window's chart grid, 2×2 up to 8×4, sized by the Cols / Rows sliders in the account bar.
 //  The four charts keep the top-left 2×2; every other cell is a gainer chart that works as in the
 //  Charts window: it follows the top gainers (its own scanner, running only while there are such
-//  cells), in rank order, and clicking it loads its symbol into the selected chart. The Zoom slider
-//  sets the gainer charts' default zoom; they take the Charts window's timeframe.
+//  cells), in rank order. Clicking any chart selects it, so hotkeys and order shortcuts go to its
+//  symbol; while a gainer chart is selected, the gainer charts hold their symbols and places (the
+//  scanner's updates wait), so the selected symbol never changes under a hotkey. A grid change or
+//  the scanner stopping leaves no chart selected instead. The Zoom slider sets every chart's
+//  default zoom; the gainer charts take the Charts window's timeframe.
 //  A grip at every crossing of four charts moves that column and row line together (see `SplitGrid`).
 //
 
@@ -44,16 +47,17 @@ struct ChartGrid: View {
         SplitGrid(columns: columns, rows: rows, items: cells, gap: gap,
                   columnSplits: $columnSplits, rowSplits: $rowSplits) { chart in
             if chart.isCompact {
-                SecondaryChartPane(chart: chart)
+                SecondaryChartPane(chart: chart, selectable: true)
             } else {
                 ChartPane(chart: chart)
             }
         }
         .onAppear {
-            workspace.setZoom(zoom, of: workspace.mainGainerCharts)
+            workspace.setZoom(zoom, of: zoomedCharts)
             if gainerCount > 0 { start() }
         }
         .onChange(of: gainerCount) { old, new in
+            deselectGainerChart()
             if new == 0 {
                 stop()
             } else if old == 0 {
@@ -67,11 +71,28 @@ struct ChartGrid: View {
         .onChange(of: broker.scans[MainGrid.scannerOwner]?.symbols) {
             if gainerCount > 0 { syncWithGainers() }
         }
-        .onChange(of: zoom) { _, new in workspace.setZoom(new, of: workspace.mainGainerCharts) }
+        // Selecting one of the four charts again lets the scanner's waiting update through.
+        .onChange(of: isHolding) { _, holding in
+            if !holding, gainerCount > 0 { syncWithGainers() }
+        }
+        .onChange(of: zoom) { _, new in workspace.setZoom(new, of: zoomedCharts) }
         .onChange(of: gainerTimeframe) { _, new in
             workspace.setTimeframe(new, of: workspace.mainGainerCharts, broker: broker)
         }
     }
+
+    /// A gainer chart is selected (or was the last one selected): the gainer charts hold still.
+    private var isHolding: Bool { workspace.selectedChart.isCompact }
+
+    /// Leaves no chart selected if a gainer chart is, as it may lose its cell or symbol.
+    private func deselectGainerChart() {
+        guard isHolding else { return }
+        workspace.selectedChartID = 0
+        workspace.isChartSelected = false
+    }
+
+    /// Every chart in the grid takes the Zoom slider's default zoom.
+    private var zoomedCharts: [ChartModel] { workspace.charts + workspace.mainGainerCharts }
 
     /// The charts in reading order: the four charts in the top-left 2×2, the gainer charts by rank in
     /// the other cells.
@@ -106,6 +127,7 @@ struct ChartGrid: View {
     }
 
     private func syncWithGainers() {
+        guard !isHolding else { return }
         let gainers = broker.scans[MainGrid.scannerOwner]?.symbols ?? []
         guard !gainers.isEmpty, gainers != lastGainers else { return }
         lastGainers = gainers

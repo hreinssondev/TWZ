@@ -241,28 +241,42 @@ struct SecondaryChartsView: View {
     }
 }
 
-/// A gainer chart pane, in the Charts window and the main window's cells past its four charts:
-/// clicking loads the symbol into the main window's selected chart instead of selecting this pane.
+/// A gainer chart pane. In the Charts window, clicking loads the symbol into the main window's
+/// selected chart; in the main window's cells past its four charts (`selectable`), clicking selects
+/// this chart, so hotkeys and order shortcuts go to its symbol.
 /// ⌃-click, the what-if, its lines and hover P/L work as on the main charts; ⌥-click orders are left off.
 struct SecondaryChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     let chart: ChartModel
+    var selectable = false
 
+    @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
+
+    private var isSelected: Bool { selectable && workspace.isChartSelected && workspace.selectedChartID == chart.id }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            TradingChart(chart: chart, allowsAltClick: false)
+            TradingChart(chart: chart, allowsAltClick: false) {
+                if selectable { workspace.selectedChartID = chart.id }
+            }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: isSelected ? outlineWidth : 1)
+        )
         .simultaneousGesture(TapGesture().onEnded {
-            if !chart.symbol.isEmpty { workspace.loadIntoSelectedChart(chart.symbol, broker: broker) }
+            if selectable {
+                workspace.selectedChartID = chart.id
+            } else if !chart.symbol.isEmpty {
+                workspace.loadIntoSelectedChart(chart.symbol, broker: broker)
+            }
         })
         .onAppear { symbolText = chart.symbol }
         .onChange(of: chart.symbol) { _, new in

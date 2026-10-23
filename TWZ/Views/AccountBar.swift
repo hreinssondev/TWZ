@@ -31,10 +31,9 @@ struct AccountBar: View {
             stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true), color: color(broker.unrealizedPnL))
             stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
 
-            // The chart grid's size and its gainer charts' zoom (see `ChartGrid`).
+            // The chart grid's size and its charts' zoom (see `ChartGrid`).
             GridSliders(columns: $gridColumns, rows: $gridRows, zoom: $gridZoom,
-                        columnRange: 2...MainGrid.maxColumns, rowRange: 2...MainGrid.maxRows,
-                        zoomHelp: "Bars on screen at the gainer charts' default zoom; double-clicking one goes back to it")
+                        columnRange: 2...MainGrid.maxColumns, rowRange: 2...MainGrid.maxRows)
                 .background(NoWindowDrag())
 
             Spacer()

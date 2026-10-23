@@ -67,8 +67,9 @@ final class Workspace {
     /// The main window's cells past its four charts (see `ChartGrid`); compact and unsaved like the
     /// secondary charts.
     let mainGainerCharts: [ChartModel]
-    /// The selected chart, or the last one selected while none is (see `isChartSelected`).
-    var selectedChartIndex = 0 { didSet { isChartSelected = true } }
+    /// The selected chart's id: one of the four charts or a main-window gainer chart; the last one
+    /// selected while none is (see `isChartSelected`).
+    var selectedChartID = 0 { didSet { isChartSelected = true } }
     /// False after clicking empty space in the Orders or Positions column: no chart is selected, so
     /// hotkeys and order shortcuts have no symbol to act on until a chart is selected again.
     var isChartSelected = true
@@ -83,10 +84,14 @@ final class Workspace {
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
     /// What-if buys by symbol.
     var whatIfs: [String: WhatIf] { didSet { save() } }
+    /// The main charts that get tick-by-tick streams (⌘↩ toggles the selected one); all four at first.
+    var fastChartIDs: Set<Int> { didSet { save() } }
     /// System-wide shortcut that shows and hides the Charts window (see `ChartsWindowShortcut`).
     var chartsWindowShortcut: KeyShortcut? { didSet { save() } }
 
-    var selectedChart: ChartModel { charts[selectedChartIndex] }
+    var selectedChart: ChartModel {
+        charts.first { $0.id == selectedChartID } ?? mainGainerCharts.first { $0.id == selectedChartID } ?? charts[0]
+    }
     /// The symbol orders go to: the selected chart's, or "" with no chart selected (nothing is sent).
     var targetSymbol: String { isChartSelected ? selectedChart.symbol : "" }
 
@@ -139,6 +144,8 @@ final class Workspace {
             whatIfs = [:]
         }
 
+        fastChartIDs = Set(defaults.array(forKey: "fastChartIDs") as? [Int] ?? Array(0..<4))
+
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
     }
@@ -165,6 +172,7 @@ final class Workspace {
         if let data = try? JSONEncoder().encode(hotkeys) { defaults.set(data, forKey: "hotkeys") }
         if let data = try? JSONEncoder().encode(scanFilters) { defaults.set(data, forKey: "scanFilters") }
         if let data = try? JSONEncoder().encode(whatIfs) { defaults.set(data, forKey: "whatIfs") }
+        defaults.set(fastChartIDs.sorted(), forKey: "fastChartIDs")
         defaults.set(chartsWindowShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "chartsWindowShortcut")
     }
 }

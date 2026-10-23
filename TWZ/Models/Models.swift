@@ -247,7 +247,7 @@ nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
 
 /// What clicking a hotkey button does (Settings ▸ Trading).
 nonisolated enum HotkeyClickMode: String, CaseIterable, Identifiable {
-    case select = "Selects it (⌘↩ sends)"
+    case select = "Selects it (⌘⇧↩ sends)"
     case send = "Sends the order"
     var id: String { rawValue }
 

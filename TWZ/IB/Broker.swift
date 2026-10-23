@@ -47,6 +47,8 @@ final class Broker {
     private(set) var unavailableQuotes: [String: String] = [:]
     /// Latest scanner results per list panel.
     private(set) var scans: [String: ScanResult] = [:]
+    /// Symbols with a tick-by-tick trade stream open (see `setFastCharts`).
+    private(set) var tickTradeSymbols: Set<String> = []
     /// Regular-session closes keyed "SYMBOL|yyyyMMdd", fetched for after-hours scanner rows.
     private(set) var sessionCloses: [String: Double] = [:]
     /// NOK per USD (IDEALPRO mid), used to size alt-click chart buys. Starts at the last saved
@@ -126,6 +128,11 @@ final class Broker {
         self.charts = charts
         let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe, compact: $0.isCompact) }
         engine.perform { $0.registerCharts(specs) }
+    }
+
+    /// Only these charts get tick-by-tick streams; the others keep IB's regular bar updates.
+    func setFastCharts(_ ids: Set<Int>) {
+        engine.perform { $0.setFastCharts(ids) }
     }
 
     /// The selected chart's symbol gets tick-by-tick data first when IB limits the streams.
@@ -291,6 +298,7 @@ final class Broker {
         }
         if let v = s.unavailableQuotes { update(\.unavailableQuotes, v) }
         if let v = s.scans { update(\.scans, v) }
+        if let v = s.tickTradeSymbols { update(\.tickTradeSymbols, v) }
         if let v = s.sessionCloses { update(\.sessionCloses, v) }
         if let v = s.chartOrderIds { update(\.chartOrderIds, v) }
         if let v = s.protectiveOrders { update(\.protectiveOrders, v) }

@@ -27,10 +27,12 @@ struct TWZApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     broker.registerCharts(workspace.charts + workspace.secondaryCharts + workspace.mainGainerCharts)
+                    broker.setFastCharts(workspace.fastChartIDs)
                     broker.connect()
                 }
-                .onChange(of: workspace.selectedChartIndex, initial: true) { _, index in
-                    broker.setSelectedChart(index)
+                .onChange(of: workspace.fastChartIDs) { _, ids in broker.setFastCharts(ids) }
+                .onChange(of: workspace.selectedChartID, initial: true) { _, id in
+                    broker.setSelectedChart(id)
                 }
         }
         .windowStyle(.hiddenTitleBar)

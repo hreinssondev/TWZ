@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  Two-row grid (6 × 2 by default) of configurable order buttons acting on the selected chart's symbol.
-//  Clicking a button selects it, and ⌘↩ sends the selected one (see TradingShortcuts); or, set in
+//  Clicking a button selects it, and ⌘⇧↩ sends the selected one (see TradingShortcuts); or, set in
 //  Settings ▸ Trading, clicking sends the order on mouse-down (and selects it too).
 //  Click the "Hotkeys" title to customize them all, or right-click a button to edit just that one.
 //  Beside them, the NOK amount that ⌥-clicking a chart buys.
@@ -71,7 +71,7 @@ struct HotkeyPanel: View {
                                 workspace.selectedHotkeyID = hotkey.id
                                 if clickMode == .send { broker.run(hotkey, symbol: workspace.targetSymbol) }
                             }
-                            .help((clickMode == .send ? "Click sends · ⌘↩ sends it again" : "Click to select · ⌘↩ sends it")
+                            .help((clickMode == .send ? "Click sends · ⌘⇧↩ sends it again" : "Click to select · ⌘⇧↩ sends it")
                                   + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
                                   + " · ⌘S closes 100% at market")
                             .contextMenu {

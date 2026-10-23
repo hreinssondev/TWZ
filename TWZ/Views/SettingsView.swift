@@ -163,7 +163,8 @@ private struct TradingSettings: View {
     @AppStorage(HotkeyClickMode.storageKey) private var clickMode: HotkeyClickMode = .select
 
     private let shortcuts: [(String, String)] = [
-        ("⌘↩", "Send the selected hotkey"),
+        ("⌘⇧↩", "Send the selected hotkey"),
+        ("⌘↩", "Turn the selected chart's tick-by-tick data on or off (⚡ in its header while on)"),
         ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included"),
         ("⌘S", "Close 100% of the chart's position at market"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
@@ -178,8 +179,8 @@ private struct TradingSettings: View {
                 }
                 .pickerStyle(.radioGroup)
                 Text(clickMode == .send
-                     ? "Fires as the mouse goes down. The clicked button is also selected, so ⌘↩ sends it again."
-                     : "Click picks the hotkey; ⌘↩ sends it for the selected chart's symbol.")
+                     ? "Fires as the mouse goes down. The clicked button is also selected, so ⌘⇧↩ sends it again."
+                     : "Click picks the hotkey; ⌘⇧↩ sends it for the selected chart's symbol.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

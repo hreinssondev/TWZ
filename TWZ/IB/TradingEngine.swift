@@ -90,6 +90,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     private var charts: [Int: ChartState] = [:]
     private var selectedChartId = 0
+    /// The charts picked for tick-by-tick streams (⌘↩); the others keep IB's regular bar updates.
+    private var fastChartIds: Set<Int> = []
     private var chartByReq: [Int: Int] = [:]
     private var reqByChart: [Int: Int] = [:]
     /// Intraday charts also load the overnight session (20:00–03:50 ET) from the OVERNIGHT venue,
@@ -99,8 +101,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var overnightBars: [Int: [Bar]] = [:]
 
     /// Tick-by-tick streams for the chart symbols: every trade (which also builds the live candle)
-    /// and every bid/ask change. The selected chart's come first when IB's limit is reached.
-    private var tickReqByStream: [TickStream: Int] = [:]
+    /// and every bid/ask change, for the fast charts only. The selected chart's come first when IB's
+    /// limit is reached.
+    private var tickReqByStream: [TickStream: Int] = [:] { didSet { changed(.tickStreams) } }
     private var tickStreamByReq: [Int: TickStream] = [:]
     /// Streams IB refused (no permission, venue unsupported); not asked for again this session.
     private var tickRefused: Set<TickStream> = []
@@ -151,6 +154,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         static let chartOrders = Dirty(rawValue: 1 << 8)
         static let protective = Dirty(rawValue: 1 << 9)
         static let orderSources = Dirty(rawValue: 1 << 10)
+        static let tickStreams = Dirty(rawValue: 1 << 11)
     }
 
     /// One display frame at 120 Hz (ProMotion): the UI never gets more snapshots than it can show.
@@ -193,7 +197,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// Everything the UI shows, for its initial state. Call on the engine queue.
     func fullSnapshot() -> EngineSnapshot {
-        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources]
+        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources, .tickStreams]
         return takeSnapshot()
     }
 
@@ -247,6 +251,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if dirty.contains(.chartOrders) { s.chartOrderIds = chartOrderIds }
         if dirty.contains(.protective) { s.protectiveOrders = protectiveOrders }
         if dirty.contains(.orderSources) { s.orderSources = orderSources }
+        if dirty.contains(.tickStreams) {
+            s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind == .last }.map(\.symbol))
+        }
         for id in dirtyCharts {
             guard let c = charts[id] else { continue }
             var patch = EngineSnapshot.ChartPatch(id: id, generation: c.generation, isLoading: c.isLoading, error: c.error)
@@ -589,15 +596,23 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         syncTickByTick()
     }
 
-    /// Subscribes the chart symbols' streams in priority order: the selected chart's trades and
-    /// bid/ask, then the other charts' trades, then their bid/ask. Past IB's limit the rest are left
-    /// off, and those charts keep IB's regular bar updates.
+    func setFastCharts(_ ids: Set<Int>) {
+        guard fastChartIds != ids else { return }
+        fastChartIds = ids
+        syncTickByTick()
+    }
+
+    /// Subscribes the fast charts' streams in priority order: the selected chart's trades and
+    /// bid/ask, then the other fast charts' trades, then their bid/ask. Past IB's limit the rest are
+    /// left off, and those charts keep IB's regular bar updates, as do the charts that aren't fast.
     private func syncTickByTick() {
         guard apiReady else { return }
         let venue = phase == .overnight ? "OVERNIGHT" : "SMART"
         var symbols: [String] = []
         let ordered = charts.values.sorted { ($0.id == selectedChartId ? -1 : $0.id) < ($1.id == selectedChartId ? -1 : $1.id) }
-        for c in ordered where !c.symbol.isEmpty && !c.compact && !symbols.contains(c.symbol) { symbols.append(c.symbol) }
+        for c in ordered where !c.symbol.isEmpty && !c.compact && fastChartIds.contains(c.id) && !symbols.contains(c.symbol) {
+            symbols.append(c.symbol)
+        }
 
         var wanted: [TickStream] = []
         if let first = symbols.first {
@@ -1683,7 +1698,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             if code == Self.tickLimitCode {
                 if tickLimit == nil {
                     lastMessage = "IB's tick-by-tick limit reached: the selected chart streams every tick, "
-                        + "the others partly or with IB's regular bar updates"
+                        + "the other fast charts partly or with IB's regular bar updates"
                 }
                 tickLimit = tickReqByStream.count
                 logTickStreams()
@@ -2016,6 +2031,8 @@ nonisolated struct EngineSnapshot: Sendable {
     var chartOrderIds: Set<Int>?
     var protectiveOrders: [Int: TradingEngine.Protective]?
     var orderSources: [Int: String]?
+    /// Symbols with a tick-by-tick trade stream open.
+    var tickTradeSymbols: Set<String>?
     var charts: [ChartPatch] = []
 }
 
