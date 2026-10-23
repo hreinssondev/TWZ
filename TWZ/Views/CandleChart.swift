@@ -32,8 +32,8 @@ struct PriceLine {
     /// Drawn above the last price line, and its price box moves into the chart, just left of the axis,
     /// where the last price box would cover it.
     var movesAsideForLastPrice = false
-    /// Shown in a box of the line's color in the chart, just left of its price on the axis.
-    var note: String?
+    /// Shown on the axis in place of the label and price.
+    var axisText: String?
 }
 
 struct CandleChart: View {
@@ -456,7 +456,7 @@ struct CandleChart: View {
             let lineY = y(line.price)
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed,
-                     tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))",
+                     tag: line.axisText ?? (line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))"),
                      tagInside: covered)
         }
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
@@ -469,11 +469,6 @@ struct CandleChart: View {
                      tag: Fmt.price(last), tagOpacity: lastPriceOpacity, showsLine: showLastPriceLine)
         }
         visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
-
-        for line in visibleLines {
-            guard let note = line.note else { continue }
-            drawTag(in: &ctx, text: note, y: y(line.price), plot: plot, color: line.color, inside: true)
-        }
 
         // Crosshair (horizontal only).
         if let hover, plot.contains(hover) {
