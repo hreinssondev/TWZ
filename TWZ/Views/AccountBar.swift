@@ -30,6 +30,7 @@ struct AccountBar: View {
 
             // The Charts window's grid and zoom, adjustable here too.
             SecondaryChartsSliders()
+                .background(NoWindowDrag())
 
             Spacer()
 
@@ -117,6 +118,17 @@ private struct IndicatorToggles: View {
         }
         .buttonStyle(.plain)
         .help(help ?? "Show or hide \(title) on the charts")
+    }
+}
+
+/// Takes its area out of the window's drag region. The account bar sits in the title bar, where a
+/// drag would otherwise move the window instead of reaching the sliders on top.
+private struct NoWindowDrag: NSViewRepresentable {
+    func makeNSView(context: Context) -> Blocker { Blocker() }
+    func updateNSView(_ view: Blocker, context: Context) {}
+
+    final class Blocker: NSView {
+        override var mouseDownCanMoveWindow: Bool { false }
     }
 }
 
