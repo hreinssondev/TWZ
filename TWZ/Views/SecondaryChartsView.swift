@@ -3,7 +3,8 @@
 //  TWZ
 //
 //  A grid of charts that follow the top gainers (their own scanner, 25 rows), laid out in rank order:
-//  6×3 for the top 18, or 5×2 for the top 10 (the "All Charts" / "Top 10" title toggles them).
+//  6×3 for the top 18, or a custom grid set by the Cols / Rows sliders (the "All Charts" / "Top N"
+//  title toggles them). A slider change applies once the sliders have been left alone for a moment.
 //  A symbol keeps its chart while it stays in the top N (a reshuffle only moves the charts); only
 //  charts whose symbol dropped out load a new one.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
@@ -14,10 +15,14 @@
 import SwiftUI
 
 enum SecondaryCharts {
-    static let count = 18
+    static let maxColumns = 8
+    static let maxRows = 4
+    static let count = maxColumns * maxRows
     static let timeframeKey = "secondaryChartsTimeframe"
     static let pausedKey = "secondaryChartsPaused"
     static let layoutKey = "secondaryChartsLayout"
+    static let columnsKey = "secondaryChartsColumns"
+    static let rowsKey = "secondaryChartsRows"
     static let scannerOwner = "secondary-charts"
     static let windowID = "secondary-charts"
     static let windowTitle = "Charts"
@@ -28,12 +33,7 @@ enum SecondaryCharts {
     }
 
     enum Layout: String {
-        case all, top10
-
-        var columns: Int { self == .all ? 6 : 5 }
-        var rows: Int { self == .all ? 3 : 2 }
-        var count: Int { columns * rows }
-        var title: String { self == .all ? "All Charts" : "Top 10" }
+        case all, custom
     }
 }
 
@@ -42,12 +42,24 @@ struct SecondaryChartsView: View {
     @Environment(Workspace.self) private var workspace
 
     private static let gap: CGFloat = 4
+    /// How long the sliders must be left alone before the grid takes their size and loads.
+    private static let settleDelay: Duration = .seconds(2)
 
     @State private var lastGainers: [String] = []
     @AppStorage(SecondaryCharts.timeframeKey) private var masterTimeframe: Timeframe = .m1
     @AppStorage("secondaryHeaderHeight") private var headerHeight: Double = 28
     @AppStorage(SecondaryCharts.pausedKey) private var isPaused: Bool = false
     @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
+    @AppStorage(SecondaryCharts.columnsKey) private var customColumns: Int = 5
+    @AppStorage(SecondaryCharts.rowsKey) private var customRows: Int = 2
+    /// The sliders' values until they settle into `customColumns` / `customRows`.
+    @State private var pendingColumns: Int?
+    @State private var pendingRows: Int?
+    @State private var settleTask: Task<Void, Never>?
+
+    private var columns: Int { layout == .all ? 6 : customColumns }
+    private var rows: Int { layout == .all ? 3 : customRows }
+    private var count: Int { columns * rows }
     @State private var dragStartHeight: Double?
 
     var body: some View {
@@ -80,7 +92,7 @@ struct SecondaryChartsView: View {
             if paused { stop() } else { start() }
         }
         // Charts still in the new top N stay put; the rest are emptied (10) or filled (18).
-        .onChange(of: layout) {
+        .onChange(of: count) {
             if !isPaused { lastGainers = []; syncWithGainers() }
         }
     }
@@ -88,14 +100,14 @@ struct SecondaryChartsView: View {
     private var grid: some View {
         GeometryReader { geo in
             let gap = Self.gap
-            let totalGap = gap * CGFloat(layout.columns - 1)
-            let chartWidth = (geo.size.width - gap * 2 - totalGap) / CGFloat(layout.columns)
-            let totalVerticalGap = gap * CGFloat(layout.rows - 1)
-            let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(layout.rows)
+            let totalGap = gap * CGFloat(columns - 1)
+            let chartWidth = (geo.size.width - gap * 2 - totalGap) / CGFloat(columns)
+            let totalVerticalGap = gap * CGFloat(rows - 1)
+            let chartHeight = (geo.size.height - gap * 2 - totalVerticalGap) / CGFloat(rows)
 
             // One ForEach keyed by chart, so a chart's view (and its state) moves with it when the ranking reshuffles.
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(chartWidth), spacing: gap), count: layout.columns), spacing: gap) {
-                ForEach(rankedCharts.prefix(layout.count), id: \.id) { chart in
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(chartWidth), spacing: gap), count: columns), spacing: gap) {
+                ForEach(rankedCharts.prefix(count), id: \.id) { chart in
                     SecondaryChartPane(chart: chart)
                         .frame(width: chartWidth, height: chartHeight)
                 }
@@ -117,12 +129,21 @@ struct SecondaryChartsView: View {
     private var header: some View {
         HStack {
             Button {
-                layout = layout == .all ? .top10 : .all
+                layout = layout == .all ? .custom : .all
             } label: {
-                Text(layout.title).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                Text(layout == .all ? "All Charts" : "Top \(count)")
+                    .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help(layout == .all ? "Show the top 10 gainers, 5×2" : "Show the top 18 gainers, 6×3")
+            .help(layout == .all ? "Show the custom grid set by the sliders" : "Show the top 18 gainers, 6×3")
+            if layout == .custom {
+                sizeSlider("Cols", value: pendingColumns ?? customColumns, max: SecondaryCharts.maxColumns) {
+                    pendingColumns = $0
+                }
+                sizeSlider("Rows", value: pendingRows ?? customRows, max: SecondaryCharts.maxRows) {
+                    pendingRows = $0
+                }
+            }
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
@@ -148,17 +169,55 @@ struct SecondaryChartsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(height: headerHeight)
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.2))
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture()
-                .onChanged { value in
-                    let start = dragStartHeight ?? headerHeight
-                    dragStartHeight = start
-                    headerHeight = max(24, min(start + value.translation.height, 100))
-                }
-                .onEnded { _ in dragStartHeight = nil }
+        // The height drag sits behind the controls so it never takes a slider's drag.
+        .background(
+            Color(nsColor: .textBackgroundColor).opacity(0.2)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            let start = dragStartHeight ?? headerHeight
+                            dragStartHeight = start
+                            headerHeight = max(24, min(start + value.translation.height, 100))
+                        }
+                        .onEnded { _ in dragStartHeight = nil }
+                )
         )
+    }
+
+    private func sizeSlider(_ label: String, value: Int, max: Int, set: @escaping (Int) -> Void) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.secondary.opacity(0.7))
+            Slider(
+                value: Binding(get: { Double(value) }, set: { new in
+                    set(Int(new.rounded()))
+                    scheduleSettle()
+                }),
+                in: 1...Double(max),
+                step: 1
+            )
+            .controlSize(.mini)
+            .frame(width: 60)
+            Text("\(value)")
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(Color.secondary.opacity(0.7))
+                .frame(width: 10, alignment: .leading)
+        }
+    }
+
+    /// Restarts the wait on every slider move; once it runs out, the grid takes the sliders' size.
+    private func scheduleSettle() {
+        settleTask?.cancel()
+        settleTask = Task {
+            try? await Task.sleep(for: Self.settleDelay)
+            guard !Task.isCancelled else { return }
+            if let pendingColumns { customColumns = pendingColumns }
+            if let pendingRows { customRows = pendingRows }
+            pendingColumns = nil
+            pendingRows = nil
+        }
     }
 
     private func applyMasterTimeframe(_ timeframe: Timeframe) {
@@ -181,7 +240,7 @@ struct SecondaryChartsView: View {
         for chart in workspace.secondaryCharts { workspace.clear(chart, broker: broker) }
     }
 
-    /// Fills the charts with the top N gainers (the layout's count); the other charts are emptied.
+    /// Fills the charts with the top N gainers (the grid's count); the other charts are emptied.
     /// A symbol still in the top N keeps its chart, so a
     /// reshuffle in the ranking reloads nothing (`rankedCharts` moves them); new symbols take the charts that dropped out.
     private func syncWithGainers() {
@@ -192,7 +251,7 @@ struct SecondaryChartsView: View {
         var top: [String] = []
         for symbol in gainers where !symbol.isEmpty && !top.contains(symbol) {
             top.append(symbol)
-            if top.count == min(layout.count, workspace.secondaryCharts.count) { break }
+            if top.count == min(count, workspace.secondaryCharts.count) { break }
         }
         let shown = Set(workspace.secondaryCharts.map(\.symbol))
         var incoming = top.filter { !shown.contains($0) }[...]
