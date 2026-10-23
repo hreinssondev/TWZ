@@ -180,7 +180,8 @@ struct GridSliders: View {
             Text("Zoom")
                 .font(.system(size: 10))
                 .foregroundStyle(Color.secondary.opacity(0.7))
-            Slider(value: $zoom, in: 30...600, step: 10)
+            // Runs zoomed out → in, i.e. from the most bars to the fewest.
+            Slider(value: Binding(get: { -zoom }, set: { zoom = -$0 }), in: -600...(-30), step: 10)
                 .controlSize(.mini)
                 .frame(width: 90)
             Text("\(Int(zoom))")
