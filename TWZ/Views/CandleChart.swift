@@ -16,8 +16,7 @@
 //  Holding ⌃ over the price area with a position open shows, left of the price tag, the P/L if the
 //  position closed at that price.
 //  ⌃-clicking with no position open places a what-if buy at that price instead (see `WhatIf`), and
-//  ⌃-clicking its line removes it; hovering the chart shows its P/L at the last price and at the
-//  hovered one.
+//  ⌃-clicking its line removes it; hovering the price area shows its P/L at the hovered price.
 //
 
 import SwiftUI
@@ -471,14 +470,9 @@ struct CandleChart: View {
         }
         visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
 
-        // Hovering the chart: the what-if buy's P/L at the last price, in place of the lines' notes.
-        if hover != nil, let last, let pnl = whatIfPnL?(last) {
-            drawPnLTag(in: &ctx, pnl: pnl, y: y(last), plot: plot)
-        } else {
-            for line in visibleLines {
-                guard let note = line.note else { continue }
-                drawTag(in: &ctx, text: note, y: y(line.price), plot: plot, color: line.color, inside: true)
-            }
+        for line in visibleLines {
+            guard let note = line.note else { continue }
+            drawTag(in: &ctx, text: note, y: y(line.price), plot: plot, color: line.color, inside: true)
         }
 
         // Crosshair (horizontal only).
