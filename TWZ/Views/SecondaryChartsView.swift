@@ -5,7 +5,7 @@
 //  A grid of charts that follow the top gainers (their own scanner, 25 rows), laid out in rank order:
 //  6×3 for the top 18, or a custom grid set by the Cols / Rows sliders (the "All Charts" / "Top N"
 //  title toggles them). A slider change applies once the sliders have been left alone for a moment.
-//  All Charts has a Zoom slider instead: its charts' default zoom, applied as it moves.
+//  Each view also has its own Zoom slider: its charts' default zoom, applied as it moves.
 //  A symbol keeps its chart while it stays in the top N (a reshuffle only moves the charts); only
 //  charts whose symbol dropped out load a new one.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
@@ -25,6 +25,7 @@ enum SecondaryCharts {
     static let columnsKey = "secondaryChartsColumns"
     static let rowsKey = "secondaryChartsRows"
     static let allZoomKey = "secondaryChartsAllZoom"
+    static let customZoomKey = "secondaryChartsCustomZoom"
     static let scannerOwner = "secondary-charts"
     static let windowID = "secondary-charts"
     static let windowTitle = "Charts"
@@ -54,8 +55,9 @@ struct SecondaryChartsView: View {
     @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
     @AppStorage(SecondaryCharts.columnsKey) private var customColumns: Int = 5
     @AppStorage(SecondaryCharts.rowsKey) private var customRows: Int = 2
-    /// Bars on screen at the default zoom in All Charts; the custom grid keeps the usual default.
+    /// Bars on screen at the default zoom, one for All Charts and one for the custom grid.
     @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.compactDefaultVisibleBars
+    @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.compactDefaultVisibleBars
     /// The sliders' values until they settle into `customColumns` / `customRows`.
     @State private var pendingColumns: Int?
     @State private var pendingRows: Int?
@@ -106,6 +108,7 @@ struct SecondaryChartsView: View {
         }
         .onChange(of: layout) { applyZoom() }
         .onChange(of: allZoom) { applyZoom() }
+        .onChange(of: customZoom) { applyZoom() }
     }
 
     private var grid: some View {
@@ -223,7 +226,7 @@ struct SecondaryChartsView: View {
             .buttonStyle(.plain)
             .help(layout == .all ? "Show the custom grid set by the sliders" : "Show the top 18 gainers, 6×3")
             if layout == .all {
-                zoomSlider
+                zoomSlider($allZoom)
             } else {
                 sizeSlider("Cols", value: pendingColumns ?? customColumns, max: SecondaryCharts.maxColumns) {
                     pendingColumns = $0
@@ -231,6 +234,7 @@ struct SecondaryChartsView: View {
                 sizeSlider("Rows", value: pendingRows ?? customRows, max: SecondaryCharts.maxRows) {
                     pendingRows = $0
                 }
+                zoomSlider($customZoom)
             }
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
@@ -273,15 +277,15 @@ struct SecondaryChartsView: View {
         )
     }
 
-    private var zoomSlider: some View {
+    private func zoomSlider(_ zoom: Binding<Double>) -> some View {
         HStack(spacing: 4) {
             Text("Zoom")
                 .font(.system(size: 10))
                 .foregroundStyle(Color.secondary.opacity(0.7))
-            Slider(value: $allZoom, in: 30...600, step: 10)
+            Slider(value: zoom, in: 30...600, step: 10)
                 .controlSize(.mini)
                 .frame(width: 90)
-            Text("\(Int(allZoom))")
+            Text("\(Int(zoom.wrappedValue))")
                 .font(.system(size: 10).monospacedDigit())
                 .foregroundStyle(Color.secondary.opacity(0.7))
                 .frame(width: 20, alignment: .leading)
@@ -291,7 +295,7 @@ struct SecondaryChartsView: View {
 
     /// Sets every chart's default zoom for the current view and zooms them to it.
     private func applyZoom() {
-        let zoom = layout == .all ? allZoom : ChartModel.compactDefaultVisibleBars
+        let zoom = layout == .all ? allZoom : customZoom
         for chart in workspace.secondaryCharts where chart.defaultVisibleBars != zoom || chart.visibleBars != zoom {
             chart.defaultVisibleBars = zoom
             chart.visibleBars = zoom
