@@ -45,8 +45,6 @@ struct SecondaryChartsView: View {
     @Environment(Workspace.self) private var workspace
 
     private static let gap: CGFloat = 4
-    /// How long the sliders must be left alone before the grid takes their size and loads.
-    private static let settleDelay: Duration = .seconds(2)
 
     @State private var lastGainers: [String] = []
     @AppStorage(SecondaryCharts.timeframeKey) private var masterTimeframe: Timeframe = .m1
@@ -58,10 +56,6 @@ struct SecondaryChartsView: View {
     /// Bars on screen at the default zoom, one for All Charts and one for the custom grid.
     @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.compactDefaultVisibleBars
     @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.compactDefaultVisibleBars
-    /// The sliders' values until they settle into `customColumns` / `customRows`.
-    @State private var pendingColumns: Int?
-    @State private var pendingRows: Int?
-    @State private var settleTask: Task<Void, Never>?
     @State private var columnSplits = SplitStore(key: "secondaryChartsColumnSplits")
     @State private var rowSplits = SplitStore(key: "secondaryChartsRowSplits")
 
@@ -225,17 +219,7 @@ struct SecondaryChartsView: View {
             }
             .buttonStyle(.plain)
             .help(layout == .all ? "Show the custom grid set by the sliders" : "Show the top 18 gainers, 6×3")
-            if layout == .all {
-                zoomSlider($allZoom)
-            } else {
-                sizeSlider("Cols", value: pendingColumns ?? customColumns, max: SecondaryCharts.maxColumns) {
-                    pendingColumns = $0
-                }
-                sizeSlider("Rows", value: pendingRows ?? customRows, max: SecondaryCharts.maxRows) {
-                    pendingRows = $0
-                }
-                zoomSlider($customZoom)
-            }
+            SecondaryChartsSliders()
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
@@ -277,63 +261,12 @@ struct SecondaryChartsView: View {
         )
     }
 
-    private func zoomSlider(_ zoom: Binding<Double>) -> some View {
-        HStack(spacing: 4) {
-            Text("Zoom")
-                .font(.system(size: 10))
-                .foregroundStyle(Color.secondary.opacity(0.7))
-            Slider(value: zoom, in: 30...600, step: 10)
-                .controlSize(.mini)
-                .frame(width: 90)
-            Text("\(Int(zoom.wrappedValue))")
-                .font(.system(size: 10).monospacedDigit())
-                .foregroundStyle(Color.secondary.opacity(0.7))
-                .frame(width: 20, alignment: .leading)
-        }
-        .help("Bars on screen at the default zoom; double-clicking a chart goes back to it")
-    }
-
     /// Sets every chart's default zoom for the current view and zooms them to it.
     private func applyZoom() {
         let zoom = layout == .all ? allZoom : customZoom
         for chart in workspace.secondaryCharts where chart.defaultVisibleBars != zoom || chart.visibleBars != zoom {
             chart.defaultVisibleBars = zoom
             chart.visibleBars = zoom
-        }
-    }
-
-    private func sizeSlider(_ label: String, value: Int, max: Int, set: @escaping (Int) -> Void) -> some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(Color.secondary.opacity(0.7))
-            Slider(
-                value: Binding(get: { Double(value) }, set: { new in
-                    set(Int(new.rounded()))
-                    scheduleSettle()
-                }),
-                in: 1...Double(max),
-                step: 1
-            )
-            .controlSize(.mini)
-            .frame(width: 60)
-            Text("\(value)")
-                .font(.system(size: 10).monospacedDigit())
-                .foregroundStyle(Color.secondary.opacity(0.7))
-                .frame(width: 10, alignment: .leading)
-        }
-    }
-
-    /// Restarts the wait on every slider move; once it runs out, the grid takes the sliders' size.
-    private func scheduleSettle() {
-        settleTask?.cancel()
-        settleTask = Task {
-            try? await Task.sleep(for: Self.settleDelay)
-            guard !Task.isCancelled else { return }
-            if let pendingColumns { customColumns = pendingColumns }
-            if let pendingRows { customRows = pendingRows }
-            pendingColumns = nil
-            pendingRows = nil
         }
     }
 
@@ -378,6 +311,91 @@ struct SecondaryChartsView: View {
             } else {
                 workspace.clear(chart, broker: broker)
             }
+        }
+    }
+}
+
+/// The Charts window's Cols / Rows / Zoom sliders (All Charts has Zoom only), in its header and in the
+/// main window's account bar. Each copy keeps its own unsettled values; settled, they go to the shared
+/// settings, so both copies and the grid follow.
+struct SecondaryChartsSliders: View {
+    /// How long the sliders must be left alone before the grid takes their size and loads.
+    private static let settleDelay: Duration = .seconds(2)
+
+    @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
+    @AppStorage(SecondaryCharts.columnsKey) private var customColumns: Int = 5
+    @AppStorage(SecondaryCharts.rowsKey) private var customRows: Int = 2
+    @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.compactDefaultVisibleBars
+    @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.compactDefaultVisibleBars
+    /// The sliders' values until they settle into `customColumns` / `customRows`.
+    @State private var pendingColumns: Int?
+    @State private var pendingRows: Int?
+    @State private var settleTask: Task<Void, Never>?
+
+    var body: some View {
+        HStack {
+            if layout == .all {
+                zoomSlider($allZoom)
+            } else {
+                sizeSlider("Cols", value: pendingColumns ?? customColumns, max: SecondaryCharts.maxColumns) {
+                    pendingColumns = $0
+                }
+                sizeSlider("Rows", value: pendingRows ?? customRows, max: SecondaryCharts.maxRows) {
+                    pendingRows = $0
+                }
+                zoomSlider($customZoom)
+            }
+        }
+    }
+
+    private func zoomSlider(_ zoom: Binding<Double>) -> some View {
+        HStack(spacing: 4) {
+            Text("Zoom")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.secondary.opacity(0.7))
+            Slider(value: zoom, in: 30...600, step: 10)
+                .controlSize(.mini)
+                .frame(width: 90)
+            Text("\(Int(zoom.wrappedValue))")
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(Color.secondary.opacity(0.7))
+                .frame(width: 20, alignment: .leading)
+        }
+        .help("Bars on screen at the default zoom; double-clicking a chart goes back to it")
+    }
+
+    private func sizeSlider(_ label: String, value: Int, max: Int, set: @escaping (Int) -> Void) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.secondary.opacity(0.7))
+            Slider(
+                value: Binding(get: { Double(value) }, set: { new in
+                    set(Int(new.rounded()))
+                    scheduleSettle()
+                }),
+                in: 1...Double(max),
+                step: 1
+            )
+            .controlSize(.mini)
+            .frame(width: 60)
+            Text("\(value)")
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(Color.secondary.opacity(0.7))
+                .frame(width: 10, alignment: .leading)
+        }
+    }
+
+    /// Restarts the wait on every slider move; once it runs out, the grid takes the sliders' size.
+    private func scheduleSettle() {
+        settleTask?.cancel()
+        settleTask = Task {
+            try? await Task.sleep(for: Self.settleDelay)
+            guard !Task.isCancelled else { return }
+            if let pendingColumns { customColumns = pendingColumns }
+            if let pendingRows { customRows = pendingRows }
+            pendingColumns = nil
+            pendingRows = nil
         }
     }
 }

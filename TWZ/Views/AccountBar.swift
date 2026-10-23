@@ -28,6 +28,9 @@ struct AccountBar: View {
             stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true), color: color(broker.unrealizedPnL))
             stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
 
+            // The Charts window's grid and zoom, adjustable here too.
+            SecondaryChartsSliders()
+
             Spacer()
 
             IndicatorToggles()
