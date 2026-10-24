@@ -14,9 +14,9 @@
 //  charts ↕ hotkeys, left column ↔ right column, list A ↔ list B, lists ↕ orders, and
 //  the Orders / Filled / Positions columns ↕ round trips. The account bar's Cols / Rows sliders size
 //  the chart grid, whose charts follow the top gainers (see `ChartGrid`); a ● where four charts meet
-//  drags that column and row line together. With the right column dragged as narrow as it goes,
-//  lists A and B become one list across it (Top Gainers by default; it keeps its own scanner
-//  choice), and drag back left to split them again. The hotkey buttons keep a fixed size while there's
+//  drags that column and row line together. The button beside a list's filters makes lists A and B
+//  one list across their space (Top Gainers by default; it keeps its own scanner choice), or splits
+//  them again. The hotkey buttons keep a fixed size while there's
 //  room (the free space around them changes); dragged shorter, they and the amount box shrink,
 //  and dragged on down the hotkey row collapses, giving the charts the space (drag up to bring it back).
 //
@@ -29,12 +29,14 @@ struct ContentView: View {
     @AppStorage("bottomRowHeight") private var bottomHeight: Double = 190
     @AppStorage("sideWidth") private var storedSideWidth: Double = 0      // 0 = default (a third)
     @AppStorage("listSplit") private var listSplit: Double = 0.5          // left list's share of the lists
+    @AppStorage(ListPanel.singleKey) private var singleList = false
     @AppStorage("ordersHeight") private var ordersHeight: Double = 190
 
     private static let gap: CGFloat = 6
     private static let minTopHeight: CGFloat = 240
     private static let minChartsWidth: CGFloat = 520
-    private static let minListWidth: CGFloat = 190
+    /// The price columns take 188; the rest leaves room for a symbol.
+    private static let minListWidth: CGFloat = 240
     private static let minListsHeight: CGFloat = 160
     private static let minOrdersHeight: CGFloat = 80
 
@@ -53,8 +55,6 @@ struct ContentView: View {
                 let minSide = Self.minListWidth * 2 + gap
                 let maxSide = max(minSide, inner.width - gap - Self.minChartsWidth)
                 let sideWidth = clamp(storedSideWidth > 0 ? storedSideWidth : (inner.width - gap) / 3, minSide...maxSide)
-                // Dragged all the way right, the two lists become one.
-                let singleList = sideWidth <= minSide
 
                 let listsWidth = sideWidth - gap
                 let leftListRange = Self.minListWidth...max(Self.minListWidth, listsWidth - Self.minListWidth)

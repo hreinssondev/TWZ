@@ -17,7 +17,12 @@ struct ListPanel: View {
 
     let panelId: String
     @AppStorage private var scanner: ScannerKind
+    /// One list across the lists' space instead of two (see `ContentView`); the button beside the
+    /// filters switches.
+    @AppStorage(ListPanel.singleKey) private var isSingle = false
     @State private var showFilter = false
+
+    static let singleKey = "singleList"
     /// Row values as of the last refresh, by symbol.
     @State private var rowValues: [String: RowValues] = [:]
 
@@ -66,6 +71,14 @@ struct ListPanel: View {
                         showFilter = false
                     }
                 }
+
+                Button {
+                    isSingle.toggle()
+                } label: {
+                    Image(systemName: isSingle ? "rectangle.split.2x1" : "rectangle")
+                }
+                .buttonStyle(.borderless)
+                .help(isSingle ? "Split into two lists" : "One list across both")
             }
             .padding(6)
 
