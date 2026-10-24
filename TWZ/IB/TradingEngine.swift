@@ -104,15 +104,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var overnightBars: [Int: [Bar]] = [:]
 
     /// Tick-by-tick streams for the chart symbols: every trade (which also builds the live candle)
-    /// and every bid/ask change, for the fast charts only. The selected chart's come first when IB's
-    /// limit is reached.
+    /// for the selected chart and the fast charts, and every bid/ask change for the selected chart
+    /// only. The selected chart's come first when IB's limit is reached.
     private var tickReqByStream: [TickStream: Int] = [:] { didSet { changed(.tickStreams) } }
     private var tickStreamByReq: [Int: TickStream] = [:]
     /// Streams IB refused (no permission, venue unsupported); not asked for again this session.
     private var tickRefused: Set<TickStream> = []
     /// How many streams IB allows at once, learnt from its first refusal for being over the limit.
     private var tickLimit: Int?
-    /// Fast charts' symbols left without a trade stream by IB's limit.
+    /// Selected or fast charts' symbols left without a trade stream by IB's limit.
     private var tickLimitedSymbols: Set<String> = [] { didSet { changed(.tickStreams) } }
 
     /// Orders already asked to cancel, so ⌥Z pressed again moves on to the next one.
@@ -617,24 +617,21 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         syncTickByTick()
     }
 
-    /// Subscribes the fast charts' streams in priority order: the selected chart's trades and
-    /// bid/ask, then the other fast charts' trades, then their bid/ask. Past IB's limit the rest are
-    /// left off, and those charts keep IB's regular bar updates, as do the charts that aren't fast.
+    /// Subscribes the streams in priority order: the selected chart's trades and bid/ask, fast or
+    /// not, since it's the one traded; then the fast charts' trades (their bid/ask comes with the
+    /// regular quotes). Past IB's limit the rest are left off, and those charts keep IB's regular
+    /// bar updates, as do the charts that aren't fast.
     private func syncTickByTick() {
         guard apiReady else { return }
         let venue = phase == .overnight ? "OVERNIGHT" : "SMART"
-        var symbols: [String] = []
-        let ordered = charts.values.sorted { ($0.id == selectedChartId ? -1 : $0.id) < ($1.id == selectedChartId ? -1 : $1.id) }
-        for c in ordered where !c.symbol.isEmpty && fastChartIds.contains(c.id) && !symbols.contains(c.symbol) {
-            symbols.append(c.symbol)
-        }
-
         var wanted: [TickStream] = []
-        if let first = symbols.first {
-            wanted += [TickStream(symbol: first, kind: .last, venue: venue), TickStream(symbol: first, kind: .bidAsk, venue: venue)]
+        if let selected = charts[selectedChartId]?.symbol, !selected.isEmpty {
+            wanted = [TickStream(symbol: selected, kind: .last, venue: venue), TickStream(symbol: selected, kind: .bidAsk, venue: venue)]
         }
-        wanted += symbols.dropFirst().map { TickStream(symbol: $0, kind: .last, venue: venue) }
-        wanted += symbols.dropFirst().map { TickStream(symbol: $0, kind: .bidAsk, venue: venue) }
+        for c in charts.values.sorted(by: { $0.id < $1.id }) where !c.symbol.isEmpty && fastChartIds.contains(c.id) {
+            let stream = TickStream(symbol: c.symbol, kind: .last, venue: venue)
+            if !wanted.contains(stream) { wanted.append(stream) }
+        }
         wanted.removeAll { tickRefused.contains($0) }
         let limited = Set(wanted.dropFirst(tickLimit ?? wanted.count).filter { $0.kind == .last }.map(\.symbol))
         if let tickLimit { wanted = Array(wanted.prefix(tickLimit)) }
@@ -1737,7 +1734,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             if code == Self.tickLimitCode {
                 if tickLimit == nil {
                     lastMessage = "IB's tick-by-tick limit reached: the selected chart streams every tick, "
-                        + "the other fast charts partly or with IB's regular bar updates"
+                        + "fast charts past the limit keep IB's regular bar updates"
                 }
                 tickLimit = tickReqByStream.count
                 if stream.kind == .last { tickLimitedSymbols.insert(stream.symbol) }

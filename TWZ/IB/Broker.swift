@@ -132,12 +132,12 @@ final class Broker {
         engine.perform { $0.registerCharts(specs) }
     }
 
-    /// Only these charts get tick-by-tick streams; the others keep IB's regular bar updates.
+    /// These charts get tick-by-tick trades, as does the selected one; the others keep IB's regular bar updates.
     func setFastCharts(_ ids: Set<Int>) {
         engine.perform { $0.setFastCharts(ids) }
     }
 
-    /// The selected chart's symbol gets tick-by-tick data first when IB limits the streams.
+    /// The selected chart's symbol gets tick-by-tick trades and bid/ask, fast or not, before any other.
     func setSelectedChart(_ id: Int) {
         engine.perform { $0.setSelectedChart(id) }
     }

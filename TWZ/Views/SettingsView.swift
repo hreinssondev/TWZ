@@ -164,8 +164,8 @@ private struct TradingSettings: View {
 
     private let shortcuts: [(String, String)] = [
         ("⌘⇧↩", "Send the selected hotkey"),
-        ("⌘↩", "Turn the selected chart's tick-by-tick data on or off (⚡ in its header while on, "
-            + "a red circle once IB's limit leaves it out)"),
+        ("⌘↩", "Keep the selected chart's tick-by-tick trades on or off once it's deselected (⚡ while on, "
+            + "a red circle once IB's limit leaves it out); the selected chart always gets trades and bid/ask"),
         ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included"),
         ("⌘S", "Close 100% of the chart's position at market"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),

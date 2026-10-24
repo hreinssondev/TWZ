@@ -7,8 +7,9 @@
 //  stop loss and take profit included. Matched by character, so ⌥< is the < key on Nordic
 //  keyboards (⌥⇧, on US ones).
 //  In the main window (not while a sheet or popover is open), for the selected chart's symbol:
-//  a hotkey's own keyboard shortcut sends that hotkey; ⌘⇧↩ sends the selected hotkey; ⌘↩ turns the
-//  selected chart's tick-by-tick streams on or off (see `Workspace.fastChartIDs`); ⌘A, like ⌥<,
+//  a hotkey's own keyboard shortcut sends that hotkey; ⌘⇧↩ sends the selected hotkey; ⌘↩ makes the
+//  selected chart fast or not, so it keeps tick-by-tick trades once deselected (see
+//  `Workspace.fastChartIDs`); ⌘A, like ⌥<,
 //  cancels every order in the symbol, stop loss and take profit included; ⌘S closes 100% of the
 //  position at market; ⌘Z, like ⌥Z, cancels the last order placed.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘Z stay Select All / Undo, and shortcuts
@@ -111,7 +112,7 @@ extension KeyShortcut {
         let k = key.lowercased()
         if command, !option, !control {
             if keyCode == 36 || keyCode == 76 {
-                return shift ? "⌘⇧↩ sends the selected hotkey" : "⌘↩ turns the selected chart's tick-by-tick on or off"
+                return shift ? "⌘⇧↩ sends the selected hotkey" : "⌘↩ keeps the selected chart's tick-by-tick on or off"
             }
             if k == "a" { return "⌘A cancels the symbol's orders" }
             if k == "s" { return "⌘S closes 100% at market" }

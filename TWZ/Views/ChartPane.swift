@@ -121,22 +121,28 @@ struct ChartPane: View {
                     .background(Capsule().fill((p.quantity > 0 ? Color.green : Color.red).opacity(0.25)))
             }
 
-            // A fast chart (⌘↩): lit while its tick-by-tick trades stream, dim offline; a red circle
-            // instead once IB's limit leaves it out.
-            if workspace.fastChartIDs.contains(chart.id) && broker.tickLimitedSymbols.contains(chart.symbol) {
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 7, height: 7)
-                    .help("IB's tick-by-tick limit reached: this chart keeps IB's regular bar updates; "
-                          + "⌘↩ on another fast chart frees a stream, ⌘↩ here stops asking")
-            } else if workspace.fastChartIDs.contains(chart.id) {
-                let streaming = broker.tickTradeSymbols.contains(chart.symbol)
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(streaming ? Color.yellow : Color.secondary.opacity(0.5))
-                    .help(streaming
-                          ? "Tick-by-tick: every trade streams; ⌘↩ turns it off for this chart"
-                          : "Tick-by-tick chosen but not streaming (not connected); ⌘↩ turns it off")
+            // Tick-by-tick: a fast chart (⌘↩, filled ⚡) streams its trades; the selected chart its
+            // trades and bid/ask (outlined ⚡ unless also fast). Lit while trades stream, dim offline
+            // or refused; a red circle instead once IB's limit leaves it out.
+            let isFast = workspace.fastChartIDs.contains(chart.id)
+            if isFast || chart.id == workspace.selectedChartID {
+                if broker.tickLimitedSymbols.contains(chart.symbol) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 7, height: 7)
+                        .help("IB's tick-by-tick limit reached: this chart keeps IB's regular bar updates; "
+                              + "selecting it puts it first, ⌘↩ on another fast chart frees a stream")
+                } else {
+                    let streaming = broker.tickTradeSymbols.contains(chart.symbol)
+                    Image(systemName: isFast ? "bolt.fill" : "bolt")
+                        .font(.system(size: 9))
+                        .foregroundStyle(streaming ? Color.yellow : Color.secondary.opacity(0.5))
+                        .help(!streaming
+                              ? "Tick-by-tick not streaming (not connected, or IB refused it for this symbol)"
+                              : isFast
+                              ? "Tick-by-tick: every trade streams (and bid/ask while selected); ⌘↩ turns it off for this chart"
+                              : "Selected: every trade and bid/ask streams tick by tick; ⌘↩ keeps its trades streaming once deselected")
+                }
             }
 
             Spacer(minLength: 4)

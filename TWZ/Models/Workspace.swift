@@ -96,7 +96,8 @@ final class Workspace {
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
     /// What-if buys by symbol.
     var whatIfs: [String: WhatIf] { didSet { save() } }
-    /// The main charts that get tick-by-tick streams (⌘↩ toggles the selected one); four at first.
+    /// The main charts that get tick-by-tick trades (⌘↩ toggles the selected one); four at first.
+    /// The selected chart gets trades and bid/ask either way (see `TradingEngine.syncTickByTick`).
     var fastChartIDs: Set<Int> { didSet { save() } }
     /// System-wide shortcut that shows and hides the Charts window (see `ChartsWindowShortcut`).
     var chartsWindowShortcut: KeyShortcut? { didSet { save() } }
