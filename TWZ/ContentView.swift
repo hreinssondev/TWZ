@@ -16,7 +16,8 @@
 //  the chart grid, whose charts follow the top gainers (see `ChartGrid`); a ● where four charts meet
 //  drags that column and row line together. The button beside a list's filters makes lists A and B
 //  one list across their space (Top Gainers by default; it keeps its own scanner choice), or splits
-//  them again. The hotkey buttons keep a fixed size while there's
+//  them again, and moves the right column as far right as that allows. The hotkey buttons keep a
+//  fixed size while there's
 //  room (the free space around them changes); dragged shorter, they and the amount box shrink,
 //  and dragged on down the hotkey row collapses, giving the charts the space (drag up to bring it back).
 //
@@ -55,7 +56,7 @@ struct ContentView: View {
                 let maxBottom = max(minBottom, inner.height - gap - Self.minTopHeight)
                 let rowHeight = bottomHeight <= 0 ? 0 : clamp(bottomHeight, minBottom...maxBottom)
 
-                let minSide = singleList ? Self.minSingleListSide : Self.minListWidth * 2 + gap
+                let minSide = Self.minSideWidth(singleList: singleList)
                 let maxSide = max(minSide, inner.width - gap - Self.minChartsWidth)
                 let sideWidth = clamp(storedSideWidth > 0 ? storedSideWidth : (inner.width - gap) / 3, minSide...maxSide)
 
@@ -108,6 +109,13 @@ struct ContentView: View {
         // The title bar is hidden; the account bar takes its place, next to the window controls.
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 1200, minHeight: 760)
+        // Switching between one list and two moves the right column as far right as it goes for that.
+        .onChange(of: singleList) { _, single in storedSideWidth = Self.minSideWidth(singleList: single) }
+    }
+
+    /// The right column's narrowest: two lists need room for their symbols, one list less.
+    private static func minSideWidth(singleList: Bool) -> CGFloat {
+        singleList ? minSingleListSide : minListWidth * 2 + gap
     }
 
     private func clamp(_ value: Double, _ range: ClosedRange<CGFloat>) -> CGFloat {
