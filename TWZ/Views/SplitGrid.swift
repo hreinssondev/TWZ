@@ -180,8 +180,10 @@ struct GridSliders: View {
             Text("Zoom")
                 .font(.system(size: 10))
                 .foregroundStyle(Color.secondary.opacity(0.7))
-            // Runs zoomed out → in, i.e. from the most bars to the fewest.
-            Slider(value: Binding(get: { -zoom }, set: { zoom = -$0 }), in: -ChartModel.maxVisibleBars...(-30), step: 10)
+            // Runs zoomed out → in, i.e. from the most bars to the fewest. Rounds to 10s itself: a
+            // `step` would draw a tick mark per step, packed into a solid line under the slider.
+            Slider(value: Binding(get: { -zoom }, set: { zoom = -($0 / 10).rounded() * 10 }),
+                   in: -ChartModel.maxVisibleBars...(-30))
                 .controlSize(.mini)
                 .frame(width: 90)
             Text("\(Int(zoom))")
