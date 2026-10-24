@@ -14,7 +14,9 @@
 //  charts ↕ hotkeys, left column ↔ right column, list A ↔ list B, lists ↕ orders, and
 //  the Orders / Filled / Positions columns ↕ round trips. The account bar's Cols / Rows sliders size
 //  the chart grid, whose charts follow the top gainers (see `ChartGrid`); a ● where four charts meet
-//  drags that column and row line together. The hotkey buttons keep a fixed size while there's
+//  drags that column and row line together. With the right column dragged as narrow as it goes,
+//  lists A and B become one list across it (Top Gainers by default; it keeps its own scanner
+//  choice), and drag back left to split them again. The hotkey buttons keep a fixed size while there's
 //  room (the free space around them changes); dragged shorter, they and the amount box shrink,
 //  and dragged on down the hotkey row collapses, giving the charts the space (drag up to bring it back).
 //
@@ -51,6 +53,8 @@ struct ContentView: View {
                 let minSide = Self.minListWidth * 2 + gap
                 let maxSide = max(minSide, inner.width - gap - Self.minChartsWidth)
                 let sideWidth = clamp(storedSideWidth > 0 ? storedSideWidth : (inner.width - gap) / 3, minSide...maxSide)
+                // Dragged all the way right, the two lists become one.
+                let singleList = sideWidth <= minSide
 
                 let listsWidth = sideWidth - gap
                 let leftListRange = Self.minListWidth...max(Self.minListWidth, listsWidth - Self.minListWidth)
@@ -76,12 +80,16 @@ struct ContentView: View {
                                  onChange: { storedSideWidth = $0 }, onReset: { storedSideWidth = 0 })
                     VStack(spacing: 0) {
                         HStack(spacing: 0) {
-                            ListPanel(panelId: "list-left", defaultScanner: .gainers)
-                                .frame(width: leftListWidth)
-                            ResizeHandle(resizes: .horizontal, thickness: gap, current: leftListWidth,
-                                         range: leftListRange,
-                                         onChange: { listSplit = $0 / listsWidth }, onReset: { listSplit = 0.5 })
-                            ListPanel(panelId: "list-right", defaultScanner: .dollarVolume)
+                            if singleList {
+                                ListPanel(panelId: "list-single", defaultScanner: .gainers)
+                            } else {
+                                ListPanel(panelId: "list-left", defaultScanner: .gainers)
+                                    .frame(width: leftListWidth)
+                                ResizeHandle(resizes: .horizontal, thickness: gap, current: leftListWidth,
+                                             range: leftListRange,
+                                             onChange: { listSplit = $0 / listsWidth }, onReset: { listSplit = 0.5 })
+                                ListPanel(panelId: "list-right", defaultScanner: .dollarVolume)
+                            }
                         }
                         ResizeHandle(resizes: .vertical, thickness: gap, current: ordersPanelHeight,
                                      range: ordersRange, inverted: true,

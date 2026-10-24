@@ -91,6 +91,12 @@ struct ListPanel: View {
             broker.setScanner(scanSpec, owner: panelId)
             broker.setQuoteSymbols(symbols, owner: panelId)
         }
+        // Gone while the lists are merged into one, or split again (see `ContentView`): no scanner
+        // or quotes meanwhile.
+        .onDisappear {
+            broker.setScanner(nil, owner: panelId)
+            broker.setQuoteSymbols([], owner: panelId)
+        }
         .onChange(of: scanSpec) { _, new in broker.setScanner(new, owner: panelId) }
         .onChange(of: symbols) { _, new in
             broker.setQuoteSymbols(new, owner: panelId)
