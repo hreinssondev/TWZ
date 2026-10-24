@@ -9,10 +9,10 @@
 //  only charts whose stock dropped out load a new one. The selected chart follows too: the
 //  selection moves with it, and stays on it if it gets a new stock.
 //  A chart given a stock by hand (a list, its symbol field) keeps it and its cell until the account
-//  bar's Reset, and the gainers flow around it. They leave its stock out, unless a gainer chart
-//  already shows it: that one keeps it, and the chart set by hand, the second to show it, takes 5m
-//  next to its 1m, or 1m next to anything else. Both are highlighted while either is selected
-//  (see `ChartPane`).
+//  bar's Reset: its stock stands in for the gainer of that cell, which isn't shown, and no other
+//  chart moves. A stock shown twice (set by hand, and a gainer in its own cell) is on 5m in the second
+//  chart to show it next to the first's 1m, or 1m next to anything else; both are highlighted while
+//  either is selected (see `ChartPane`).
 //  Every chart trades like any other (see `ChartPane`); clicking one selects it, so hotkeys and order
 //  shortcuts go to its symbol. A chart that loses its cell to a smaller grid is emptied; if it was
 //  selected, no chart is selected.
@@ -71,7 +71,7 @@ struct ChartGrid: View {
             follow()
         }
         .onChange(of: gainers) { follow() }
-        // The gainers close up around a chart set by hand, and fill the cells Reset frees.
+        // Reset gives the cells set by hand back to their gainers.
         .onChange(of: workspace.manualChartIDs) { follow() }
         .onChange(of: workspace.gainerResets) {
             follow()
@@ -135,24 +135,21 @@ extension Workspace {
         }
     }
 
-    /// Shows the top gainers in reading order in every cell but those set by hand. A chart whose
-    /// stock is still wanted moves to its cell instead of reloading, and keeps its timeframe; the
-    /// others load theirs on `timeframe`. A stock a chart set by hand shows is left out, unless a
-    /// gainer chart already shows it too: that one keeps it. Past the scanner's last row, charts are
-    /// emptied.
+    /// Shows the top gainers in reading order: cell n shows gainer n, but for a cell set by hand,
+    /// whose own stock stands in for that gainer until Reset, so setting one moves no other chart.
+    /// A chart whose stock is still wanted moves to its cell instead of reloading, and keeps its
+    /// timeframe; the others load theirs on `timeframe`, or on the other of 1m / 5m where a chart set
+    /// by hand already shows it. Past the scanner's last row, charts are emptied.
     func followGainers(_ gainers: [String], timeframe: Timeframe, broker: Broker) {
         guard !gainers.isEmpty else { return }
         var cells = mainCells
         let following = cells.indices.filter { !manualChartIDs.contains(cells[$0]) }
-        let byHand = Set(cells.filter(manualChartIDs.contains).compactMap { chart(id: $0)?.symbol })
-        let shown = Set(following.compactMap { chart(id: cells[$0])?.symbol })
-        var queue: [String] = []
-        for symbol in gainers where !symbol.isEmpty && !queue.contains(symbol) && queue.count < following.count
-            && (!byHand.contains(symbol) || shown.contains(symbol)) {
-            queue.append(symbol)
+        var ranks: [String] = []
+        for symbol in gainers where !symbol.isEmpty && !ranks.contains(symbol) && ranks.count < cells.count {
+            ranks.append(symbol)
         }
         var wanted: [Int: String] = [:]
-        for (n, cell) in following.enumerated() { wanted[cell] = n < queue.count ? queue[n] : "" }
+        for cell in following { wanted[cell] = cell < ranks.count ? ranks[cell] : "" }
 
         // A chart already showing a cell's stock moves there; of two (after Reset), the selected one,
         // or else the one on the grid's timeframe. The rest fill the remaining cells.
@@ -179,7 +176,8 @@ extension Workspace {
             if symbol.isEmpty {
                 clear(chart, broker: broker)
             } else {
-                load(symbol, timeframe: timeframe, into: chart, broker: broker)
+                load(symbol, timeframe: self.timeframe(showing: symbol, in: chart, otherwise: timeframe),
+                     into: chart, broker: broker)
             }
         }
     }
