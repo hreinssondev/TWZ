@@ -206,8 +206,8 @@ struct CandleChart: View {
         let x = min(plotWidth, max(0, anchorX))
         let rest = restOfDay
         let oldWidth = barWidth(plotWidth: plotWidth), oldPadding = rightPadding(rest)
-        // Zooms out as far as all the loaded bars (at least 600).
-        chart.visibleBars = min(max(600, Double(chart.bars.count)), max(15, chart.visibleBars * factor))
+        // Zooms out as far as all the loaded bars (at least `maxVisibleBars`).
+        chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, chart.visibleBars * factor))
         let newWidth = barWidth(plotWidth: plotWidth), newPadding = rightPadding(rest)
         let fromRight = Double(plotWidth - x)
         setScrollBack(chart.scrollBack + (newPadding - oldPadding) + fromRight / oldWidth - fromRight / newWidth)

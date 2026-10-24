@@ -168,8 +168,8 @@ struct GridSliders: View {
     var body: some View {
         HStack {
             if showsSize {
-                sizeSlider("Cols", value: pendingColumns ?? columns, range: columnRange) { pendingColumns = $0 }
-                sizeSlider("Rows", value: pendingRows ?? rows, range: rowRange) { pendingRows = $0 }
+                sizeSlider("c", value: pendingColumns ?? columns, range: columnRange) { pendingColumns = $0 }
+                sizeSlider("r", value: pendingRows ?? rows, range: rowRange) { pendingRows = $0 }
             }
             zoomSlider
         }
@@ -181,13 +181,13 @@ struct GridSliders: View {
                 .font(.system(size: 10))
                 .foregroundStyle(Color.secondary.opacity(0.7))
             // Runs zoomed out → in, i.e. from the most bars to the fewest.
-            Slider(value: Binding(get: { -zoom }, set: { zoom = -$0 }), in: -600...(-30), step: 10)
+            Slider(value: Binding(get: { -zoom }, set: { zoom = -$0 }), in: -ChartModel.maxVisibleBars...(-30), step: 10)
                 .controlSize(.mini)
                 .frame(width: 90)
             Text("\(Int(zoom))")
                 .font(.system(size: 10).monospacedDigit())
                 .foregroundStyle(Color.secondary.opacity(0.7))
-                .frame(width: 20, alignment: .leading)
+                .frame(width: 26, alignment: .leading)
         }
         .help(zoomHelp)
     }

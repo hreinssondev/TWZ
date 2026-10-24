@@ -43,6 +43,8 @@ final class ChartModel: Identifiable {
     /// Bars on screen at the default zoom (double-click goes back to it); each grid's Zoom slider sets it.
     var defaultVisibleBars: Double
     static let initialVisibleBars: Double = 240
+    /// The furthest out the Zoom sliders and gestures go (a full extended-hours day of 1m bars fits).
+    static let maxVisibleBars: Double = 1200
 }
 
 /// A pretend buy at the clicked price, placed by ⌃-clicking a chart with no position open: 80% of the
