@@ -75,9 +75,14 @@ struct ListPanel: View {
                 Button {
                     isSingle.toggle()
                 } label: {
-                    Image(systemName: isSingle ? "rectangle.split.2x1" : "rectangle")
+                    // A small dot, brighter while the lists are one.
+                    Circle()
+                        .fill(isSingle ? Color.primary.opacity(0.8) : Color.secondary.opacity(0.6))
+                        .frame(width: 6, height: 6)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help(isSingle ? "Split into two lists" : "One list across both")
             }
             .padding(6)
