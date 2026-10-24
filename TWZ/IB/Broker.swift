@@ -49,6 +49,8 @@ final class Broker {
     private(set) var scans: [String: ScanResult] = [:]
     /// Symbols with a tick-by-tick trade stream open (see `setFastCharts`).
     private(set) var tickTradeSymbols: Set<String> = []
+    /// Fast charts' symbols IB's tick-by-tick limit left without a trade stream.
+    private(set) var tickLimitedSymbols: Set<String> = []
     /// Regular-session closes keyed "SYMBOL|yyyyMMdd", fetched for after-hours scanner rows.
     private(set) var sessionCloses: [String: Double] = [:]
     /// NOK per USD (IDEALPRO mid), used to size alt-click chart buys. Starts at the last saved
@@ -310,6 +312,7 @@ final class Broker {
         if let v = s.unavailableQuotes { update(\.unavailableQuotes, v) }
         if let v = s.scans { update(\.scans, v) }
         if let v = s.tickTradeSymbols { update(\.tickTradeSymbols, v) }
+        if let v = s.tickLimitedSymbols { update(\.tickLimitedSymbols, v) }
         if let v = s.sessionCloses { update(\.sessionCloses, v) }
         if let v = s.chartOrderIds { update(\.chartOrderIds, v) }
         if let v = s.protectiveOrders { update(\.protectiveOrders, v) }

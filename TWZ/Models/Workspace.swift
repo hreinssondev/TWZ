@@ -96,11 +96,8 @@ final class Workspace {
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
     /// What-if buys by symbol.
     var whatIfs: [String: WhatIf] { didSet { save() } }
-    /// The main charts that get tick-by-tick streams (⌘↩ toggles the selected one); four at first,
-    /// and never more than `maxFastCharts`.
+    /// The main charts that get tick-by-tick streams (⌘↩ toggles the selected one); four at first.
     var fastChartIDs: Set<Int> { didSet { save() } }
-    /// How many main charts can be fast at once: with all taken, ⌘↩ adds no other until one is removed.
-    static let maxFastCharts = 4
     /// System-wide shortcut that shows and hides the Charts window (see `ChartsWindowShortcut`).
     var chartsWindowShortcut: KeyShortcut? { didSet { save() } }
     /// Main-window charts given a stock by hand (a list, a symbol field): they keep it and their cell
@@ -167,8 +164,7 @@ final class Workspace {
             whatIfs = [:]
         }
 
-        let fast = defaults.array(forKey: "fastChartIDs") as? [Int] ?? Array(0..<Self.maxFastCharts)
-        fastChartIDs = Set(fast.sorted().prefix(Self.maxFastCharts))
+        fastChartIDs = Set(defaults.array(forKey: "fastChartIDs") as? [Int] ?? Array(0..<4))
 
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
@@ -196,20 +192,6 @@ final class Workspace {
     func countLoad(of chart: ChartModel) {
         loads += 1
         chart.loadOrder = loads
-    }
-
-    /// ⌘↩: removes the selected chart's tick-by-tick, or adds it while fewer than `maxFastCharts`
-    /// shown charts have it (charts left without a cell are emptied, so they give up theirs).
-    /// False when all are taken.
-    func toggleFastChart() -> Bool {
-        if fastChartIDs.contains(selectedChartID) {
-            fastChartIDs.remove(selectedChartID)
-            return true
-        }
-        let shown = fastChartIDs.filter(mainCells.contains)
-        guard shown.count < Self.maxFastCharts else { return false }
-        fastChartIDs = shown.union([selectedChartID])
-        return true
     }
 
     /// The charts set by hand, with their cell and stock.

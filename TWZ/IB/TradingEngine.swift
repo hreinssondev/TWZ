@@ -112,6 +112,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var tickRefused: Set<TickStream> = []
     /// How many streams IB allows at once, learnt from its first refusal for being over the limit.
     private var tickLimit: Int?
+    /// Fast charts' symbols left without a trade stream by IB's limit.
+    private var tickLimitedSymbols: Set<String> = [] { didSet { changed(.tickStreams) } }
 
     /// Orders already asked to cancel, so ⌥Z pressed again moves on to the next one.
     private var cancelsSent: Set<Int> = []
@@ -256,6 +258,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if dirty.contains(.orderSources) { s.orderSources = orderSources }
         if dirty.contains(.tickStreams) {
             s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind == .last }.map(\.symbol))
+            s.tickLimitedSymbols = tickLimitedSymbols
         }
         for id in dirtyCharts {
             guard let c = charts[id] else { continue }
@@ -349,6 +352,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         tickStreamByReq.removeAll()
         tickRefused.removeAll()
         tickLimit = nil
+        tickLimitedSymbols.removeAll()
         stopsAwaitingCancel.removeAll()
         marginPreviews.removeAll()
         positionsLoaded = false
@@ -632,7 +636,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         wanted += symbols.dropFirst().map { TickStream(symbol: $0, kind: .last, venue: venue) }
         wanted += symbols.dropFirst().map { TickStream(symbol: $0, kind: .bidAsk, venue: venue) }
         wanted.removeAll { tickRefused.contains($0) }
+        let limited = Set(wanted.dropFirst(tickLimit ?? wanted.count).filter { $0.kind == .last }.map(\.symbol))
         if let tickLimit { wanted = Array(wanted.prefix(tickLimit)) }
+        if tickLimitedSymbols != limited { tickLimitedSymbols = limited }
 
         let keep = Set(wanted)
         for (stream, reqId) in tickReqByStream where !keep.contains(stream) {
@@ -1734,6 +1740,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                         + "the other fast charts partly or with IB's regular bar updates"
                 }
                 tickLimit = tickReqByStream.count
+                if stream.kind == .last { tickLimitedSymbols.insert(stream.symbol) }
                 logTickStreams()
             } else {
                 Self.log.notice("Tick-by-tick refused for \(stream.symbol, privacy: .public) \(stream.kind.rawValue, privacy: .public): \(code) \(text, privacy: .public)")
@@ -2083,6 +2090,8 @@ nonisolated struct EngineSnapshot: Sendable {
     var orderSources: [Int: String]?
     /// Symbols with a tick-by-tick trade stream open.
     var tickTradeSymbols: Set<String>?
+    /// Fast charts' symbols IB's tick-by-tick limit left without a trade stream.
+    var tickLimitedSymbols: Set<String>?
     var charts: [ChartPatch] = []
 }
 

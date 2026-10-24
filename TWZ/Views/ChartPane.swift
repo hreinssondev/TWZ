@@ -121,15 +121,22 @@ struct ChartPane: View {
                     .background(Capsule().fill((p.quantity > 0 ? Color.green : Color.red).opacity(0.25)))
             }
 
-            // A fast chart (⌘↩): lit while its tick-by-tick trades stream, dim past IB's limit or offline.
-            if workspace.fastChartIDs.contains(chart.id) {
+            // A fast chart (⌘↩): lit while its tick-by-tick trades stream, dim offline; a red circle
+            // instead once IB's limit leaves it out.
+            if workspace.fastChartIDs.contains(chart.id) && broker.tickLimitedSymbols.contains(chart.symbol) {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 7, height: 7)
+                    .help("IB's tick-by-tick limit reached: this chart keeps IB's regular bar updates; "
+                          + "⌘↩ on another fast chart frees a stream, ⌘↩ here stops asking")
+            } else if workspace.fastChartIDs.contains(chart.id) {
                 let streaming = broker.tickTradeSymbols.contains(chart.symbol)
                 Image(systemName: "bolt.fill")
                     .font(.system(size: 9))
                     .foregroundStyle(streaming ? Color.yellow : Color.secondary.opacity(0.5))
                     .help(streaming
                           ? "Tick-by-tick: every trade streams; ⌘↩ turns it off for this chart"
-                          : "Tick-by-tick chosen but not streaming (IB's limit reached, or not connected); ⌘↩ turns it off")
+                          : "Tick-by-tick chosen but not streaming (not connected); ⌘↩ turns it off")
             }
 
             Spacer(minLength: 4)

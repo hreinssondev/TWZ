@@ -8,8 +8,7 @@
 //  keyboards (⌥⇧, on US ones).
 //  In the main window (not while a sheet or popover is open), for the selected chart's symbol:
 //  a hotkey's own keyboard shortcut sends that hotkey; ⌘⇧↩ sends the selected hotkey; ⌘↩ turns the
-//  selected chart's tick-by-tick streams on or off, beeping when all four are taken (see
-//  `Workspace.toggleFastChart`); ⌘A, like ⌥<,
+//  selected chart's tick-by-tick streams on or off (see `Workspace.fastChartIDs`); ⌘A, like ⌥<,
 //  cancels every order in the symbol, stop loss and take profit included; ⌘S closes 100% of the
 //  position at market; ⌘Z, like ⌥Z, cancels the last order placed.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘Z stay Select All / Undo, and shortcuts
@@ -59,7 +58,11 @@ struct TradingShortcuts: ViewModifier {
                         let typing = window.firstResponder is NSTextView
                         if isReturn {
                             if typing { return event }
-                            if !workspace.isChartSelected || !workspace.toggleFastChart() { NSSound.beep() }
+                            if workspace.isChartSelected {
+                                workspace.fastChartIDs.formSymmetricDifference([workspace.selectedChartID])
+                            } else {
+                                NSSound.beep()
+                            }
                             return nil
                         }
                         switch event.charactersIgnoringModifiers?.lowercased() {
