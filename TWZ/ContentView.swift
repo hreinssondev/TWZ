@@ -37,6 +37,9 @@ struct ContentView: View {
     private static let minChartsWidth: CGFloat = 520
     /// The price columns take 188; the rest leaves room for a symbol.
     private static let minListWidth: CGFloat = 240
+    /// The right column's narrowest with one list, which has room for symbols there; also what the
+    /// Orders / Filled / Positions columns below need.
+    private static let minSingleListSide: CGFloat = 386
     private static let minListsHeight: CGFloat = 160
     private static let minOrdersHeight: CGFloat = 80
 
@@ -52,7 +55,7 @@ struct ContentView: View {
                 let maxBottom = max(minBottom, inner.height - gap - Self.minTopHeight)
                 let rowHeight = bottomHeight <= 0 ? 0 : clamp(bottomHeight, minBottom...maxBottom)
 
-                let minSide = Self.minListWidth * 2 + gap
+                let minSide = singleList ? Self.minSingleListSide : Self.minListWidth * 2 + gap
                 let maxSide = max(minSide, inner.width - gap - Self.minChartsWidth)
                 let sideWidth = clamp(storedSideWidth > 0 ? storedSideWidth : (inner.width - gap) / 3, minSide...maxSide)
 
