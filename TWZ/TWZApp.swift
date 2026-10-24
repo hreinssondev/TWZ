@@ -26,7 +26,7 @@ struct TWZApp: App {
                 .environment(workspace)
                 .preferredColorScheme(.dark)
                 .onAppear {
-                    broker.registerCharts(workspace.charts + workspace.secondaryCharts + workspace.mainGainerCharts)
+                    broker.registerCharts(workspace.mainCharts + workspace.secondaryCharts)
                     broker.setFastCharts(workspace.fastChartIDs)
                     broker.connect()
                 }

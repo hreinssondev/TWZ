@@ -190,7 +190,7 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// The shorter history compact charts (the secondary window) load.
+    /// The shorter history every chart load starts with (see `Broker.loadFullHistory`).
     var compactDuration: String {
         switch self {
         case .m1: "1 D"
@@ -453,7 +453,9 @@ nonisolated enum ScannerKind: String, CaseIterable, Identifiable {
     case dollarVolume = "Most Active $"
     var id: String { rawValue }
 
+    /// Rows a list panel's scanner returns; a chart grid's asks for IB's maximum, 50, to fill 8×4.
     static let rowCount = 25
+    static let maxRowCount = 50
 
     /// IB scan codes. The % change scans rank on last vs. prior close, and IB's last
     /// includes extended-hours trades, so gainers/losers track pre-market moves before the open.
@@ -481,6 +483,7 @@ nonisolated struct ScannerFilter: Codable, Equatable {
 nonisolated struct ScanSpec: Equatable {
     var kind: ScannerKind
     var filter: ScannerFilter
+    var rows = ScannerKind.rowCount
 }
 
 nonisolated struct ScanResult: Equatable {

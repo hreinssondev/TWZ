@@ -126,7 +126,7 @@ final class Broker {
 
     func registerCharts(_ charts: [ChartModel]) {
         self.charts = charts
-        let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe, compact: $0.isCompact) }
+        let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe, fullHistory: $0.hasFullHistory) }
         engine.perform { $0.registerCharts(specs) }
     }
 
@@ -149,8 +149,19 @@ final class Broker {
         chart.priceShift = 0
         chart.priceScale = 1
         chart.isLoading = state == .connected && !chart.symbol.isEmpty
-        let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, compact: chart.isCompact)
+        chart.hasFullHistory = false
+        let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe)
         engine.perform { $0.loadChart(spec, generation: generation) }
+    }
+
+    /// The view reached the chart's oldest bar: loads the full history (`Timeframe.duration`, with
+    /// the overnight session) behind the short one it started with. The bars on screen stay until
+    /// it's in, and the view stays where it is. Once per load.
+    func loadFullHistory(_ chart: ChartModel) {
+        guard state == .connected, !chart.hasFullHistory, !chart.isLoading, !chart.symbol.isEmpty, !chart.bars.isEmpty else { return }
+        chart.hasFullHistory = true
+        let (id, generation) = (chart.id, chartGeneration[chart.id] ?? 0)
+        engine.perform { $0.loadFullHistory(id, generation: generation) }
     }
 
     /// `why` goes in the order log, e.g. "Orders panel ✕".

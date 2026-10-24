@@ -56,12 +56,10 @@ struct TradingShortcuts: ViewModifier {
                     if modifiers == .command, inMainWindow, let window = event.window {
                         let symbol = workspace.targetSymbol
                         let typing = window.firstResponder is NSTextView
-                        // ⌘↩: only the four charts stream tick by tick, so a gainer chart just beeps.
                         if isReturn {
                             if typing { return event }
-                            let chart = workspace.selectedChart
-                            if workspace.isChartSelected, !chart.isCompact {
-                                workspace.fastChartIDs.formSymmetricDifference([chart.id])
+                            if workspace.isChartSelected {
+                                workspace.fastChartIDs.formSymmetricDifference([workspace.selectedChartID])
                             } else {
                                 NSSound.beep()
                             }

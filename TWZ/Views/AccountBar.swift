@@ -11,7 +11,8 @@ struct AccountBar: View {
     @State private var showSettings = false
     @AppStorage(MainGrid.columnsKey) private var gridColumns = 2
     @AppStorage(MainGrid.rowsKey) private var gridRows = 2
-    @AppStorage(MainGrid.zoomKey) private var gridZoom: Double = ChartModel.compactDefaultVisibleBars
+    @AppStorage(MainGrid.zoomKey) private var gridZoom: Double = ChartModel.initialVisibleBars
+    @AppStorage(MainGrid.timeframeKey) private var gridTimeframe: Timeframe = .m1
     /// Distance from the window's top edge to the center of the close/minimize/zoom buttons.
     @State private var controlsCenterY: CGFloat = 14
 
@@ -32,24 +33,29 @@ struct AccountBar: View {
             stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true), color: color(broker.unrealizedPnL))
             stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
 
-            // The chart grid's size and its charts' zoom (see `ChartGrid`).
+            // The chart grid's size, its charts' zoom and timeframe (see `ChartGrid`).
             GridSliders(columns: $gridColumns, rows: $gridRows, zoom: $gridZoom,
                         columnRange: 2...MainGrid.maxColumns, rowRange: 2...MainGrid.maxRows)
                 .background(NoWindowDrag())
 
-            Button {
-                workspace.resetToGainers()
-            } label: {
-                Text("Reset")
-                    .font(.system(size: 10).monospacedDigit())
-                    .foregroundStyle(Color.secondary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(0.08)))
-                    .contentShape(Rectangle())
+            HStack(spacing: 8) {
+                TimeframePicker(selection: $gridTimeframe)
+                    .help("Every chart's timeframe; a chart's own switch changes just that chart, until it gets a new gainer or Reset")
+
+                Button {
+                    workspace.resetToGainers()
+                } label: {
+                    Text("Reset")
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(Color.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(0.08)))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Every chart shows the top gainers in order again, on the timeframe beside it; charts set by hand let go of their stock")
             }
-            .buttonStyle(.plain)
-            .help("Every chart, the selected one too, shows the top gainers in order again; charts set by hand let go of their stock")
 
             Spacer()
 

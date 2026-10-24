@@ -4,7 +4,8 @@
 //
 //  Live IB scanner list (gainers, losers, after-hours gainers, most active by
 //  dollar volume), with each symbol's % change over the last 5 minutes and a green dot after the
-//  symbols traded today. Clicking a row loads it into the selected chart. Prices refresh every
+//  symbols traded today. Clicking a row loads it into the selected chart, which keeps it until the
+//  account bar's Reset (see `ChartGrid`). Prices refresh every
 //  2 seconds rather than every tick, which keeps the UI free for the charts.
 //
 
@@ -198,8 +199,9 @@ struct ListPanel: View {
             workspace.loadIntoSelectedChart(symbol, broker: broker)
         }
         .contextMenu {
-            ForEach(workspace.charts) { chart in
-                Button("Load into Chart \(chart.id + 1)") {
+            // The grid's charts in reading order.
+            ForEach(Array(workspace.mainCells.compactMap(workspace.chart(id:)).enumerated()), id: \.element.id) { index, chart in
+                Button("Load into Chart \(index + 1)") {
                     workspace.loadByHand(symbol, into: chart, broker: broker)
                 }
             }

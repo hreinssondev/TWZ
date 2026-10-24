@@ -140,9 +140,18 @@ struct CandleChart: View {
                 onRightClick: resetView
             ))
         }
+        .onChange(of: showsOldestBar, initial: true) { _, shows in
+            if shows { broker.loadFullHistory(chart) }
+        }
     }
 
     // MARK: Viewport
+
+    /// The view reaches the oldest bar loaded: zoomed or scrolled out that far, or too little
+    /// history to fill it. The full history then loads behind it (once per load).
+    private var showsOldestBar: Bool {
+        !chart.bars.isEmpty && chart.scrollBack + chart.visibleBars >= Double(chart.bars.count)
+    }
 
     private func barWidth(plotWidth: CGFloat) -> CGFloat {
         plotWidth / (chart.visibleBars + rightPadding(restOfDay))

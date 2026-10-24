@@ -2,7 +2,7 @@
 //  SecondaryChartsView.swift
 //  TWZ
 //
-//  A grid of charts that follow the top gainers (their own scanner, 25 rows), laid out in rank order:
+//  A grid of charts that follow the top gainers (their own scanner, 50 rows), laid out in rank order:
 //  6×3 for the top 18, or a custom grid set by the Cols / Rows sliders (the "All Charts" / "Top N"
 //  title toggles them). A slider change applies once the sliders have been left alone for a moment.
 //  Each view also has its own Zoom slider: its charts' default zoom, applied as it moves.
@@ -29,8 +29,8 @@ enum SecondaryCharts {
     static let scannerOwner = "secondary-charts"
     static let windowID = "secondary-charts"
     static let windowTitle = "Charts"
-    /// The scanner gainer charts follow, here and in the main window's extra cells.
-    static let gainersScan = ScanSpec(kind: .gainers, filter: ScannerFilter(minPrice: 0.1))
+    /// The scanner gainer charts follow, here and in the main window's grid: enough rows for 8×4.
+    static let gainersScan = ScanSpec(kind: .gainers, filter: ScannerFilter(minPrice: 0.1), rows: ScannerKind.maxRowCount)
 
     static func isWindow(_ window: NSWindow?) -> Bool {
         guard let window else { return false }
@@ -42,7 +42,7 @@ enum SecondaryCharts {
     }
 }
 
-/// Gainer charts: the Charts window's and the main window's past its four charts.
+/// Gainer charts: the Charts window's and the main window's.
 extension Workspace {
     /// `charts` in gainer rank order, empty ones last. Only their place in a grid follows the ranking:
     /// a chart keeps its symbol and data, so a reshuffle reloads nothing.
@@ -104,8 +104,8 @@ struct SecondaryChartsView: View {
     @AppStorage(SecondaryCharts.columnsKey) private var customColumns: Int = 5
     @AppStorage(SecondaryCharts.rowsKey) private var customRows: Int = 2
     /// Bars on screen at the default zoom, one for All Charts and one for the custom grid.
-    @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.compactDefaultVisibleBars
-    @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.compactDefaultVisibleBars
+    @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.initialVisibleBars
+    @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.initialVisibleBars
     @State private var columnSplits = SplitStore(key: "secondaryChartsColumnSplits")
     @State private var rowSplits = SplitStore(key: "secondaryChartsRowSplits")
 
@@ -241,42 +241,27 @@ struct SecondaryChartsView: View {
     }
 }
 
-/// A gainer chart pane. In the Charts window, clicking loads the symbol into the main window's
-/// selected chart; in the main window's cells past its four charts (`selectable`), clicking selects
-/// this chart, so hotkeys and order shortcuts go to its symbol.
+/// A Charts window chart pane: clicking it loads its symbol into the main window's selected chart.
 /// ⌃-click, the what-if, its lines and hover P/L work as on the main charts; ⌥-click orders are left off.
 struct SecondaryChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     let chart: ChartModel
-    var selectable = false
 
-    @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
-
-    private var isSelected: Bool { selectable && workspace.isChartSelected && workspace.selectedChartID == chart.id }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            TradingChart(chart: chart, allowsAltClick: false) {
-                if selectable { workspace.selectedChartID = chart.id }
-            }
+            TradingChart(chart: chart, allowsAltClick: false)
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: isSelected ? outlineWidth : 1)
-        )
+        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
         .simultaneousGesture(TapGesture().onEnded {
-            if selectable {
-                workspace.selectedChartID = chart.id
-            } else if !chart.symbol.isEmpty {
-                workspace.loadIntoSelectedChart(chart.symbol, broker: broker)
-            }
+            if !chart.symbol.isEmpty { workspace.loadIntoSelectedChart(chart.symbol, broker: broker) }
         })
         .onAppear { symbolText = chart.symbol }
         .onChange(of: chart.symbol) { _, new in
@@ -295,11 +280,7 @@ struct SecondaryChartPane: View {
                 .frame(width: 70)
                 .focused($symbolFocused)
                 .onSubmit {
-                    if selectable {
-                        workspace.loadByHand(symbolText, into: chart, broker: broker)
-                    } else {
-                        workspace.load(symbolText, into: chart, broker: broker)
-                    }
+                    workspace.load(symbolText, into: chart, broker: broker)
                     symbolText = chart.symbol
                     symbolFocused = false
                 }

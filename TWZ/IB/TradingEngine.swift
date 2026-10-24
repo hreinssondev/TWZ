@@ -98,6 +98,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// since SMART's extended-hours bars stop at 20:00. Bars are kept per chart id.
     private var overnightChartByReq: [Int: Int] = [:]
     private var overnightReqByChart: [Int: Int] = [:]
+    /// Overnight requests sent outside the overnight session: history only, no live updates (nothing
+    /// new comes from the venue until 20:00), so they don't hold one of IB's open requests.
+    private var overnightHistoryReqs: Set<Int> = []
     private var overnightBars: [Int: [Bar]] = [:]
 
     /// Tick-by-tick streams for the chart symbols: every trade (which also builds the live candle)
@@ -340,6 +343,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         reqByChart.removeAll()
         overnightChartByReq.removeAll()
         overnightReqByChart.removeAll()
+        overnightHistoryReqs.removeAll()
         overnightBars.removeAll()
         tickReqByStream.removeAll()
         tickStreamByReq.removeAll()
@@ -460,7 +464,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     }
 
     /// Checks the session every 30 s and moves quotes and tick-by-tick streams onto or off the
-    /// OVERNIGHT venue when it changes.
+    /// OVERNIGHT venue when it changes; as the overnight session starts, intraday charts without its
+    /// bars (see `requestChart`) start loading them.
     private func watchSessionPhase() {
         let current = session
         queue.asyncAfter(deadline: .now() + 30) { [weak self] in
@@ -472,6 +477,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 self.syncTickByTick()
                 for symbol in Set(self.smartQuotes.keys).union(self.overnightQuotes.keys) {
                     self.updateQuote(symbol)
+                }
+                if now == .overnight {
+                    for c in self.charts.values where self.overnightReqByChart[c.id] == nil
+                        && !c.symbol.isEmpty && !c.isLoading && c.timeframe.isIntraday {
+                        self.requestOvernightBars(c)
+                    }
                 }
             }
             self.watchSessionPhase()
@@ -610,7 +621,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let venue = phase == .overnight ? "OVERNIGHT" : "SMART"
         var symbols: [String] = []
         let ordered = charts.values.sorted { ($0.id == selectedChartId ? -1 : $0.id) < ($1.id == selectedChartId ? -1 : $1.id) }
-        for c in ordered where !c.symbol.isEmpty && !c.compact && fastChartIds.contains(c.id) && !symbols.contains(c.symbol) {
+        for c in ordered where !c.symbol.isEmpty && fastChartIds.contains(c.id) && !symbols.contains(c.symbol) {
             symbols.append(c.symbol)
         }
 
@@ -726,7 +737,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let f = spec.filter
         // reqScannerSubscription (server ≥ 143: no version field)
         sendFields([
-            22, reqId, ScannerKind.rowCount, "STK", "STK.US.MAJOR", spec.kind.scanCode,
+            22, reqId, spec.rows, "STK", "STK.US.MAJOR", spec.kind.scanCode,
             f.minPrice ?? Self.unsetDouble, f.maxPrice ?? Self.unsetDouble, f.minVolume ?? Int.unset,
             Self.unsetDouble, Self.unsetDouble,       // market cap above/below
             "", "", "", "", "", "",                   // moody/S&P ratings, maturity dates
@@ -770,12 +781,23 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let symbolChanged = c.symbol != spec.symbol
         c.symbol = spec.symbol
         c.timeframe = spec.timeframe
+        c.fullHistory = spec.fullHistory
         c.generation = generation
         requestChart(spec.id)
         if symbolChanged { syncTickByTick() }
     }
 
-    private func requestChart(_ id: Int) {
+    /// The view reached the chart's oldest bar: asks for its full history, keeping the bars it shows
+    /// until that's in. Skipped if the chart has loaded something else since (`generation`).
+    func loadFullHistory(_ id: Int, generation: Int) {
+        guard let c = charts[id], c.generation == generation, !c.fullHistory, !c.symbol.isEmpty, !c.isLoading else { return }
+        c.fullHistory = true
+        requestChart(id, keepingBars: true)
+    }
+
+    /// (Re)requests a chart's bars. `keepingBars`: the bars it has stay on screen, not loading,
+    /// until the new ones replace them.
+    private func requestChart(_ id: Int, keepingBars: Bool = false) {
         guard let c = charts[id] else { return }
         if let old = reqByChart.removeValue(forKey: id) {
             if apiReady { send(25, 1, old) }                                      // cancelHistoricalData
@@ -784,30 +806,41 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if let old = overnightReqByChart.removeValue(forKey: id) {
             if apiReady { send(25, 1, old) }                                      // cancelHistoricalData
             overnightChartByReq[old] = nil
+            overnightHistoryReqs.remove(old)
         }
         overnightBars[id] = nil
-        c.bars = []
-        c.error = nil
-        c.isLoading = apiReady && !c.symbol.isEmpty
-        chartChanged(c, all: true)
-        guard c.isLoading else { return }
+        if !keepingBars {
+            c.bars = []
+            c.error = nil
+            c.isLoading = apiReady && !c.symbol.isEmpty
+            chartChanged(c, all: true)
+        }
+        guard apiReady, !c.symbol.isEmpty, c.isLoading || keepingBars else { return }
         let reqId = makeReqId()
         chartByReq[reqId] = id
         reqByChart[id] = reqId
         let tf = c.timeframe
         // reqHistoricalData: endDateTime "" + keepUpToDate streams live bar updates.
-        // Compact charts (the secondary window) take a short history and skip the OVERNIGHT
-        // venue outside the overnight session: a fraction of the data to load for 18 charts.
-        let duration = c.compact ? tf.compactDuration : tf.duration
+        // Every chart starts with a short history and skips the OVERNIGHT venue outside the overnight
+        // session: a fraction of the data to load for a grid of charts. Its full history loads once
+        // its view reaches the oldest bar (`loadFullHistory`).
         sendFields([20, reqId] + contract(c.symbol) + [
-            false, "", tf.barSize, duration, tf.isIntraday ? 0 : 1, "TRADES", 2, true, "",
+            false, "", tf.barSize, c.duration, tf.isIntraday ? 0 : 1, "TRADES", 2, true, "",
         ])
-        guard tf.isIntraday, !c.compact || phase == .overnight else { return }
-        let overnightReq = makeReqId()
-        overnightChartByReq[overnightReq] = id
-        overnightReqByChart[id] = overnightReq
-        sendFields([20, overnightReq] + contract(c.symbol, exchange: "OVERNIGHT") + [
-            false, "", tf.barSize, duration, 0, "TRADES", 2, true, "",
+        guard tf.isIntraday, c.fullHistory || phase == .overnight else { return }
+        requestOvernightBars(c)
+    }
+
+    /// The chart's bars from the OVERNIGHT venue (20:00–03:50 ET), merged into its own as they come;
+    /// live during the overnight session, history only outside it (see `overnightHistoryReqs`).
+    private func requestOvernightBars(_ c: ChartState) {
+        let reqId = makeReqId()
+        let live = phase == .overnight
+        overnightChartByReq[reqId] = c.id
+        overnightReqByChart[c.id] = reqId
+        if !live { overnightHistoryReqs.insert(reqId) }
+        sendFields([20, reqId] + contract(c.symbol, exchange: "OVERNIGHT") + [
+            false, "", c.timeframe.barSize, c.duration, 0, "TRADES", 2, live, "",
         ])
     }
 
@@ -1714,6 +1747,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if overnightSymbolByReq[reqId] != nil { return }
         if let id = overnightChartByReq.removeValue(forKey: reqId) {
             overnightReqByChart[id] = nil
+            overnightHistoryReqs.remove(reqId)
             return
         }
 
@@ -1732,6 +1766,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             return
         }
         if let id = chartByReq[reqId], let c = charts[id] {
+            // The full history failed behind the bars on screen: back to the short one, so they stay live.
+            if c.fullHistory, !c.bars.isEmpty {
+                Self.log.notice("Full history refused for \(c.symbol, privacy: .public): \(code) \(text, privacy: .public)")
+                c.fullHistory = false
+                requestChart(id, keepingBars: true)
+                return
+            }
             c.isLoading = false
             c.error = text
             chartChanged(c)
@@ -1780,6 +1821,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         if let id = overnightChartByReq[reqId], let c = charts[id] {
             overnightBars[id] = bars
+            // History only: the request is done; the overnight session's start asks again, live.
+            if overnightHistoryReqs.remove(reqId) != nil {
+                overnightChartByReq[reqId] = nil
+                overnightReqByChart[id] = nil
+            }
             if !c.isLoading, !c.bars.isEmpty {
                 c.bars = Self.merge(c.bars, bars)
                 chartChanged(c, all: true)
@@ -1966,8 +2012,9 @@ nonisolated private final class ChartState {
     let id: Int
     var symbol: String
     var timeframe: Timeframe
-    /// A secondary-window chart: short history, no tick-by-tick streams (see `requestChart`).
-    let compact: Bool
+    /// The full history, with the overnight session, rather than the short one every load starts
+    /// with (see `requestChart`).
+    var fullHistory: Bool
     var generation = 0
     var bars: [Bar] = []
     var isLoading = false
@@ -1981,8 +2028,11 @@ nonisolated private final class ChartState {
         id = spec.id
         symbol = spec.symbol
         timeframe = spec.timeframe
-        compact = spec.compact
+        fullHistory = spec.fullHistory
     }
+
+    /// How far back its history goes.
+    var duration: String { fullHistory ? timeframe.duration : timeframe.compactDuration }
 }
 
 /// What a chart shows, as the UI passes it to the engine.
@@ -1990,7 +2040,7 @@ nonisolated struct ChartSpec: Sendable {
     var id: Int
     var symbol: String
     var timeframe: Timeframe
-    var compact = false
+    var fullHistory = false
 }
 
 /// What changed in the engine since the last snapshot; nil fields didn't change.

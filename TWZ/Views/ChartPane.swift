@@ -12,28 +12,33 @@ extension Workspace {
         isChartSelected = true
     }
 
-    /// Loads a symbol picked by hand: the main-window chart keeps it instead of following the
-    /// gainers, until Reset.
+    /// Loads a symbol picked by hand: the main-window chart keeps it and its cell instead of following
+    /// the gainers, until Reset. A chart that already shows it just keeps it; next to another chart
+    /// showing it, it takes the other of 1m / 5m (see `timeframe(showing:in:otherwise:)`).
     func loadByHand(_ symbol: String, into chart: ChartModel, broker: Broker) {
-        guard !symbol.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        load(symbol, into: chart, broker: broker)
+        let s = symbol.trimmingCharacters(in: .whitespaces).uppercased()
+        guard !s.isEmpty else { return }
+        if chart.symbol != s {
+            load(s, timeframe: timeframe(showing: s, in: chart, otherwise: chart.timeframe), into: chart, broker: broker)
+        }
         manualChartIDs.insert(chart.id)
     }
 
-    /// Every main-window chart follows the gainers again, the selected one too.
+    /// Every main-window chart follows the gainers again, on the account bar's timeframe.
     func resetToGainers() {
         manualChartIDs = []
         gainerResets += 1
     }
 
-    /// Loads a symbol into a chart and (re)subscribes its data.
-    func load(_ symbol: String, into chart: ChartModel, broker: Broker) {
+    /// Loads a symbol into a chart, on `timeframe` if given, and (re)subscribes its data.
+    func load(_ symbol: String, timeframe: Timeframe? = nil, into chart: ChartModel, broker: Broker) {
         let s = symbol.trimmingCharacters(in: .whitespaces).uppercased()
         guard !s.isEmpty else { return }
         chart.symbol = s
+        if let timeframe { chart.timeframe = timeframe }
+        countLoad(of: chart)
         broker.setQuoteSymbols([s], owner: "chart-\(chart.id)")
         broker.loadChart(chart)
-        saveChart(chart)
     }
 
     /// Empties a chart and drops its data: history, live bars and quotes.
@@ -42,10 +47,12 @@ extension Workspace {
         chart.symbol = ""
         broker.setQuoteSymbols([], owner: "chart-\(chart.id)")
         broker.loadChart(chart)
-        saveChart(chart)
     }
 }
 
+/// A main-window chart: its symbol field, position, ⚡ while fast (⌘↩) and its own timeframe switch
+/// over a chart that trades. Clicking it selects it; the selected chart is outlined, and so, a little
+/// fainter, is any other chart showing the same stock, since hotkeys go to that stock either way.
 struct ChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
@@ -57,6 +64,8 @@ struct ChartPane: View {
     @FocusState private var symbolFocused: Bool
 
     private var isSelected: Bool { workspace.isChartSelected && workspace.selectedChartID == chart.id }
+    /// Shows the selected chart's stock (in another chart).
+    private var showsTarget: Bool { !chart.symbol.isEmpty && chart.symbol == workspace.targetSymbol }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -68,7 +77,8 @@ struct ChartPane: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.12), lineWidth: isSelected ? outlineWidth : 1)
+                .strokeBorder(isSelected ? Color.accentColor : showsTarget ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.12),
+                              lineWidth: isSelected || showsTarget ? outlineWidth : 1)
         )
         .simultaneousGesture(TapGesture().onEnded { workspace.selectedChartID = chart.id })
         .onAppear {
@@ -87,7 +97,7 @@ struct ChartPane: View {
     private var timeframe: Binding<Timeframe> {
         Binding(
             get: { chart.timeframe },
-            set: { chart.timeframe = $0; broker.loadChart(chart); workspace.saveChart(chart) }
+            set: { chart.timeframe = $0; broker.loadChart(chart) }
         )
     }
 
@@ -124,21 +134,40 @@ struct ChartPane: View {
 
             Spacer(minLength: 4)
 
-            switch pickerStyle {
-            case .segmented:
-                Picker("", selection: timeframe) {
-                    ForEach(Timeframe.allCases) { Text($0.rawValue).tag($0) }
+            // A chart too narrow for the switch (a big grid) gets a menu showing its timeframe.
+            ViewThatFits(in: .horizontal) {
+                switch pickerStyle {
+                case .segmented:
+                    Picker("", selection: timeframe) {
+                        ForEach(Timeframe.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .controlSize(.mini)
+                    .frame(width: 170)
+                case .minimal:
+                    TimeframePicker(selection: timeframe)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.mini)
-                .frame(width: 170)
-            case .minimal:
-                TimeframePicker(selection: timeframe)
+                timeframeMenu
             }
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
+    }
+
+    private var timeframeMenu: some View {
+        Menu {
+            Picker("", selection: timeframe) {
+                ForEach(Timeframe.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            Text(chart.timeframe.rawValue)
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 }
 

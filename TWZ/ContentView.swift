@@ -12,9 +12,9 @@
 //
 //  Every ┃/═/━ separator is a drag handle (resize cursor on hover, double-click resets):
 //  charts ↕ hotkeys, left column ↔ right column, list A ↔ list B, lists ↕ orders, and
-//  the Orders / Filled / Positions columns ↕ round trips. The account bar's Cols / Rows sliders add
-//  gainer charts around the four charts (see `ChartGrid`); a ● where four charts meet drags that
-//  column and row line together. The hotkey buttons keep a fixed size while there's
+//  the Orders / Filled / Positions columns ↕ round trips. The account bar's Cols / Rows sliders size
+//  the chart grid, whose charts follow the top gainers (see `ChartGrid`); a ● where four charts meet
+//  drags that column and row line together. The hotkey buttons keep a fixed size while there's
 //  room (the free space around them changes); dragged shorter, they and the amount box shrink,
 //  and dragged on down the hotkey row collapses, giving the charts the space (drag up to bring it back).
 //
