@@ -54,7 +54,7 @@ struct AccountBar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Every chart shows the top gainers in order again, on the timeframe beside it; charts set by hand let go of their stock")
+                .help("Every chart shows the top gainers in order again, on the timeframe beside it and at the Zoom slider's zoom; charts set by hand let go of their stock")
             }
 
             Spacer()
