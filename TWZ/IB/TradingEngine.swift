@@ -59,8 +59,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var ssrSymbolByReq: [Int: String] = [:]
     /// Nasdaq's Rule 201 list (`SSRList`), handed over by the UI.
     private var nasdaqSSR: Set<String> = []
-    /// What the last short sale under SSR had its price raised to, for `submit`'s status line.
+    /// What the last sell under SSR was priced at, for `submit`'s status line.
     private var ssrRaise: String?
+    /// Sells under SSR kept a tick above the bid until they fill, by order id, with what to resend
+    /// them with; and when each was last re-priced.
+    private struct SSRChase {
+        var symbol: String
+        var tif: TimeInForce
+        var outsideRth: Bool
+        var exchange: String
+    }
+    private var ssrChase: [Int: SSRChase] = [:]
+    private var ssrChaseSent: [Int: UInt64] = [:]
+    private var ssrChaseRecheck: Set<String> = []
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private var unavailableQuotes: [String: String] = [:] { didSet { changed(.unavailable) } }
     /// Latest scanner results per list panel.
@@ -388,6 +399,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         closeKeyByReq.removeAll()
         closesRequested.removeAll()
         ssrRequested.removeAll()
+        ssrChase.removeAll()
+        ssrChaseSent.removeAll()
         ssrSymbolByReq.removeAll()
         scans.removeAll()
         fxReq = nil
@@ -812,6 +825,43 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         nasdaqSSR.contains(symbol) || ssr[symbol] != nil
     }
 
+    /// The lowest price a sell under SSR can fill at: a tick above the bid.
+    private static func ssrFloor(_ bid: Double) -> Double {
+        roundToTick(bid + (bid < 1 ? 0.0001 : 0.01))
+    }
+
+    /// Moves `symbol`'s chasing SSR sells to a tick above the bid as it moves, at most every half
+    /// second each (checked again then, so the last move isn't missed).
+    private func chaseSSRSells(_ symbol: String) {
+        guard let bid = quotes[symbol]?.bid, bid > 0 else { return }
+        let floor = Self.ssrFloor(bid)
+        let now = DispatchTime.now().uptimeNanoseconds
+        var throttled = false
+        for (id, chase) in ssrChase where chase.symbol == symbol {
+            guard let o = orders[id], o.isActive else {
+                ssrChase[id] = nil
+                ssrChaseSent[id] = nil
+                continue
+            }
+            guard o.limitPrice != floor, o.status != "PendingSubmit", o.status != "PendingCancel",
+                  !cancelsSent.contains(id) else { continue }
+            if let sent = ssrChaseSent[id], now - sent < 500_000_000 {
+                throttled = true
+                continue
+            }
+            ssrChaseSent[id] = now
+            placeOrder(symbol: symbol, action: "SELL", quantity: o.quantity, limit: floor, tif: chase.tif,
+                       outsideRth: chase.outsideRth, exchange: chase.exchange, modifying: id,
+                       why: "SSR: following the bid, \(Fmt.price(floor))")
+        }
+        if throttled, ssrChaseRecheck.insert(symbol).inserted {
+            queue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.ssrChaseRecheck.remove(symbol)
+                self?.chaseSSRSells(symbol)
+            }
+        }
+    }
+
     /// A chart symbol's last few regular-session daily bars, for `ssr`: once a day per symbol.
     private func requestSSRBars(_ symbol: String) {
         guard apiReady, !symbol.isEmpty, ssrRequested.insert(symbol).inserted else { return }
@@ -935,26 +985,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "Order quantity must be > 0"
             return nil
         }
-        var limit = limit, why = why
-        // Under the short sale restriction a short sale fills only above the best bid: one that would
-        // open or add to a short goes in at least a tick above it (a market order as that limit).
-        // A market sell within the long position goes in as a limit 0.5% through the bid, as IB holds
-        // market sells under SSR (PreSubmitted, never filled) while marketable limits fill at once.
-        // Stop orders stay as they are.
-        if !whatIf, action == "SELL", stop == nil, isSSR(symbol), let bid = quotes[symbol]?.bid, bid > 0 {
-            var note: String?
-            if quantity > max(0, positions[symbol]?.quantity ?? 0) {
-                let floor = Self.roundToTick(bid + (bid < 1 ? 0.0001 : 0.01))
-                if limit.map({ $0 < floor }) ?? true {
-                    note = "SSR: short priced above the bid, \(limit.map { Fmt.price($0) } ?? "MKT") → \(Fmt.price(floor))"
-                    limit = floor
-                }
-            } else if limit == nil {
-                let through = Self.roundToTick(max(0.0001, bid - max(0.01, bid * 0.005)))
-                note = "SSR: market sell sent as a limit through the bid, \(Fmt.price(through))"
-                limit = through
-            }
-            if let note {
+        var limit = limit, why = why, chases = false
+        // Under the short sale restriction a sell fills only above the best bid. IB applies that to
+        // sells closing a long too: it holds sells at or through the bid (PreSubmitted) and market sells
+        // never fill. So a sell meant to fill now (a market order, or a limit no higher than a tick above
+        // the bid) goes in a tick above the bid and follows the bid until it fills (`chaseSSRSells`).
+        // Stop orders, and limits set higher, stay as they are.
+        if !whatIf, modifying == nil, action == "SELL", stop == nil, isSSR(symbol),
+           let bid = quotes[symbol]?.bid, bid > 0 {
+            let floor = Self.ssrFloor(bid)
+            if limit.map({ $0 <= floor }) ?? true {
+                let note = "SSR: sell a tick above the bid, following it, \(limit.map { Fmt.price($0) } ?? "MKT") → \(Fmt.price(floor))"
+                limit = floor
+                chases = true
                 why += " — \(note)"
                 ssrRaise = note
                 lastMessage = "\(symbol): \(note)"
@@ -1013,6 +1056,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             row.filled = old.filled
         }
         orders[orderId] = row
+        if chases { ssrChase[orderId] = SSRChase(symbol: symbol, tif: tif, outsideRth: outsideRth, exchange: exchange) }
         return orderId
     }
 
@@ -1779,6 +1823,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             ssr[symbol] = "Traded 10% below yesterday's close today (\(Fmt.price(last)) vs \(Fmt.price(close)))"
         }
         updateQuote(symbol)
+        if !ssrChase.isEmpty { chaseSSRSells(symbol) }
     }
 
     /// Volume stays SMART's full-day figure; the overnight venue's own volume isn't shown.
