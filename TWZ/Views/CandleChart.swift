@@ -37,6 +37,13 @@ struct PriceLine {
     var axisText: String?
 }
 
+/// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
+enum RightSpace {
+    static let key = "chartRightSpaceBars"
+    static let defaultBars = 3.0
+    static let range = 0.0...40.0
+}
+
 struct CandleChart: View {
     @Environment(Broker.self) private var broker
     let chart: ChartModel
@@ -78,6 +85,7 @@ struct CandleChart: View {
     @AppStorage(PriceAxis.fontSizeKey) private var axisFontSize = PriceAxis.defaultFontSize
     @AppStorage(PriceAxis.labelSpacingKey) private var labelSpacing = PriceAxis.defaultLabelSpacing
     @AppStorage(PriceAxis.lastPriceOpacityKey) private var lastPriceOpacity = PriceAxis.defaultLastPriceOpacity
+    @AppStorage(RightSpace.key) private var rightPaddingBars = RightSpace.defaultBars
     @State private var hover: CGPoint?
     @State private var dragStart: (scroll: Double, shift: Double)?
     @State private var optionHeld = false
@@ -88,7 +96,6 @@ struct CandleChart: View {
     /// Height of the price boxes on the axis.
     private var tagHeight: CGFloat { axisFontSize + 6 }
     private let timeAxisHeight: CGFloat = 16
-    private let rightPaddingBars = 3.0
 
     var body: some View {
         GeometryReader { geo in
@@ -183,7 +190,7 @@ struct CandleChart: View {
                          slots: Int((end.timeIntervalSince(from) / seconds).rounded(.up)), todayBars: todayBars)
     }
 
-    /// Empty slots right of the last bar: a few normally; zooming out past today's bars (and the default
+    /// Empty slots right of the last bar: the Space slider's count normally; zooming out past today's bars (and the default
     /// zoom) uses the room for the rest of the day, until all of it through after hours (20:00 ET) is on screen.
     private func rightPadding(_ rest: RestOfDay?) -> Double {
         guard let rest else { return rightPaddingBars }

@@ -144,7 +144,7 @@ struct SplitStore {
     }
 }
 
-/// A chart grid's Cols / Rows / Zoom sliders. Cols and Rows take effect once the sliders have been
+/// A chart grid's Cols / Rows / Zoom / Space sliders. Cols and Rows take effect once the sliders have been
 /// left alone for a moment (the grid reloads charts as it changes size); Zoom applies as it moves.
 struct GridSliders: View {
     /// How long the sliders must be left alone before the grid takes their size and loads.
@@ -160,6 +160,9 @@ struct GridSliders: View {
     var showsSize = true
     var zoomHelp = "Bars on screen at the default zoom; double-clicking a chart goes back to it"
 
+    /// Shared by every chart, in both windows.
+    @AppStorage(RightSpace.key) private var rightSpace = RightSpace.defaultBars
+
     /// The sliders' values until they settle into `columns` / `rows`.
     @State private var pendingColumns: Int?
     @State private var pendingRows: Int?
@@ -172,7 +175,26 @@ struct GridSliders: View {
                 sizeSlider("r", value: pendingRows ?? rows, range: rowRange) { pendingRows = $0 }
             }
             zoomSlider
+            spaceSlider
         }
+    }
+
+    private var spaceSlider: some View {
+        HStack(spacing: 4) {
+            Text("Space")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.secondary.opacity(0.7))
+            // Rounds to whole bars itself, for the same reason as Zoom.
+            Slider(value: Binding(get: { rightSpace }, set: { rightSpace = $0.rounded() }),
+                   in: RightSpace.range)
+                .controlSize(.mini)
+                .frame(width: 60)
+            Text("\(Int(rightSpace))")
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(Color.secondary.opacity(0.7))
+                .frame(width: 16, alignment: .leading)
+        }
+        .help("Empty bars between the latest candle and the price axis, on every chart")
     }
 
     private var zoomSlider: some View {
