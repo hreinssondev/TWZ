@@ -59,9 +59,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var ssrSymbolByReq: [Int: String] = [:]
     /// Nasdaq's Rule 201 list (`SSRList`), handed over by the UI.
     private var nasdaqSSR: Set<String> = []
-    /// What the last sell under SSR was priced at, for `submit`'s status line.
+    /// What the last short sale under SSR was priced at, for `submit`'s status line.
     private var ssrRaise: String?
-    /// Sells under SSR kept a tick above the bid until they fill, by order id, with what to resend
+    /// Short sales under SSR kept a tick above the bid until they fill, by order id, with what to resend
     /// them with; and when each was last re-priced.
     private struct SSRChase {
         var symbol: String
@@ -825,12 +825,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         nasdaqSSR.contains(symbol) || ssr[symbol] != nil
     }
 
-    /// The lowest price a sell under SSR can fill at: a tick above the bid.
+    /// The lowest price a short sale under SSR can fill at: a tick above the bid.
     private static func ssrFloor(_ bid: Double) -> Double {
         roundToTick(bid + (bid < 1 ? 0.0001 : 0.01))
     }
 
-    /// Moves `symbol`'s chasing SSR sells to a tick above the bid as it moves, at most every half
+    /// Moves `symbol`'s chasing SSR short sales to a tick above the bid as it moves, at most every half
     /// second each (checked again then, so the last move isn't missed).
     private func chaseSSRSells(_ symbol: String) {
         guard let bid = quotes[symbol]?.bid, bid > 0 else { return }
@@ -986,16 +986,16 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             return nil
         }
         var limit = limit, why = why, chases = false
-        // Under the short sale restriction a sell fills only above the best bid. IB applies that to
-        // sells closing a long too: it holds sells at or through the bid (PreSubmitted) and market sells
-        // never fill. So a sell meant to fill now (a market order, or a limit no higher than a tick above
-        // the bid) goes in a tick above the bid and follows the bid until it fills (`chaseSSRSells`).
-        // Stop orders, and limits set higher, stay as they are.
+        // Under the short sale restriction a short sale fills only above the best bid (sells closing a
+        // long are exempt and stay as they are). One meant to fill now (a market order, or a limit no
+        // higher than a tick above the bid) goes in a tick above the bid and follows the bid until it
+        // fills (`chaseSSRSells`). Stop orders, and limits set higher, stay as they are.
         if !whatIf, modifying == nil, action == "SELL", stop == nil, isSSR(symbol),
+           quantity > max(0, positions[symbol]?.quantity ?? 0),
            let bid = quotes[symbol]?.bid, bid > 0 {
             let floor = Self.ssrFloor(bid)
             if limit.map({ $0 <= floor }) ?? true {
-                let note = "SSR: sell a tick above the bid, following it, \(limit.map { Fmt.price($0) } ?? "MKT") → \(Fmt.price(floor))"
+                let note = "SSR: short a tick above the bid, following it, \(limit.map { Fmt.price($0) } ?? "MKT") → \(Fmt.price(floor))"
                 limit = floor
                 chases = true
                 why += " — \(note)"
