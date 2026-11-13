@@ -27,7 +27,8 @@ struct PriceLine {
     var color: Color
     var label: String
     var dashed = true
-    /// The order the line belongs to; double-clicking the line cancels it.
+    /// The order the line belongs to; double-clicking the line cancels it. An order's price box sits in
+    /// the chart, just left of the axis, above the last price line, so the axis boxes never cover it.
     var orderId: Int?
     /// Drawn above the last price line, and its price box moves into the chart, just left of the axis,
     /// where the last price box would cover it.
@@ -459,17 +460,19 @@ struct CandleChart: View {
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
         if showTrades { drawTrades(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y) }
 
-        // Position / order lines; the ones that move aside for the last price (avg cost) go on top of it.
+        // Position / order lines; orders and the ones that move aside for the last price (avg cost) go
+        // on top of it.
         let last = (lastPrice ?? bars.last?.close).flatMap { $0 > lo && $0 < hi ? $0 : nil }
+        func isOrder(_ line: PriceLine) -> Bool { line.orderId != nil && !line.movesAsideForLastPrice }
         func draw(_ line: PriceLine) {
             let lineY = y(line.price)
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed,
                      tag: line.axisText ?? (line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))"),
-                     tagInside: covered)
+                     tagInside: covered || isOrder(line))
         }
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
-        visibleLines.filter { !$0.movesAsideForLastPrice }.forEach(draw)
+        visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)
 
         // Last price: color, dashes and whether the line shows (the box always does) from Settings.
         if let last {
@@ -477,7 +480,7 @@ struct CandleChart: View {
                      color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: lastPriceDashed,
                      tag: Fmt.price(last), tagOpacity: lastPriceOpacity, showsLine: showLastPriceLine)
         }
-        visibleLines.filter(\.movesAsideForLastPrice).forEach(draw)
+        visibleLines.filter { $0.movesAsideForLastPrice || isOrder($0) }.forEach(draw)
 
         // Crosshair (horizontal only).
         if let hover, plot.contains(hover) {

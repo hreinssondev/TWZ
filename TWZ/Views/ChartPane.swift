@@ -345,7 +345,7 @@ struct TradingChart: View {
             let side = o.action == "BUY" ? "B" : "S"
             if let p = broker.protectiveOrders[o.id] {
                 // Placed by ⌃-clicking the chart: a stop loss (at its stop) or take profit line, just the
-                // price on the axis.
+                // price in its box (in the chart beside the axis, as for every order).
                 let isStop = p.kind == .stopLoss
                 if let price = isStop ? o.auxPrice : o.limitPrice {
                     lines.append(PriceLine(price: price, color: protectiveColor(p.kind),
@@ -355,14 +355,14 @@ struct TradingChart: View {
             }
             if broker.chartOrderIds.contains(o.id) {
                 // Placed by ⌥-clicking the chart: one line (a stop-limit's stop equals its limit), just the
-                // price on the axis.
+                // price in its box.
                 if let price = o.auxPrice ?? o.limitPrice {
                     lines.append(PriceLine(price: price, color: LineColors.resolve(altClickHex, default: LineColors.defaultAltClick),
                                            label: "", dashed: altClickDashed, orderId: o.id))
                 }
                 continue
             }
-            // Other orders: the side, no share count, on the axis.
+            // Other orders: the side, no share count, in the box.
             if let lmt = o.limitPrice {
                 lines.append(PriceLine(price: lmt, color: LineColors.resolve(ordersHex, default: LineColors.defaultOrders),
                                        label: side, dashed: ordersDashed, orderId: o.id))
