@@ -938,14 +938,23 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         var limit = limit, why = why
         // Under the short sale restriction a short sale fills only above the best bid: one that would
         // open or add to a short goes in at least a tick above it (a market order as that limit).
-        // Stop orders and sells within the long position stay as they are.
-        if !whatIf, action == "SELL", stop == nil, isSSR(symbol),
-           quantity > max(0, positions[symbol]?.quantity ?? 0),
-           let bid = quotes[symbol]?.bid, bid > 0 {
-            let floor = Self.roundToTick(bid + (bid < 1 ? 0.0001 : 0.01))
-            if limit.map({ $0 < floor }) ?? true {
-                let note = "SSR: short priced above the bid, \(limit.map { Fmt.price($0) } ?? "MKT") → \(Fmt.price(floor))"
-                limit = floor
+        // A market sell within the long position goes in as a limit 0.5% through the bid, as IB holds
+        // market sells under SSR (PreSubmitted, never filled) while marketable limits fill at once.
+        // Stop orders stay as they are.
+        if !whatIf, action == "SELL", stop == nil, isSSR(symbol), let bid = quotes[symbol]?.bid, bid > 0 {
+            var note: String?
+            if quantity > max(0, positions[symbol]?.quantity ?? 0) {
+                let floor = Self.roundToTick(bid + (bid < 1 ? 0.0001 : 0.01))
+                if limit.map({ $0 < floor }) ?? true {
+                    note = "SSR: short priced above the bid, \(limit.map { Fmt.price($0) } ?? "MKT") → \(Fmt.price(floor))"
+                    limit = floor
+                }
+            } else if limit == nil {
+                let through = Self.roundToTick(max(0.0001, bid - max(0.01, bid * 0.005)))
+                note = "SSR: market sell sent as a limit through the bid, \(Fmt.price(through))"
+                limit = through
+            }
+            if let note {
                 why += " — \(note)"
                 ssrRaise = note
                 lastMessage = "\(symbol): \(note)"
