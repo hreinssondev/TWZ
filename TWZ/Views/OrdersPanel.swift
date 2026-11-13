@@ -8,7 +8,8 @@
 //  Fills and round trips name what placed their orders: the hotkey's price (Mid, Last, Bid, Ask),
 //  Mkt, ⌥-click, or SL / TP.
 //  A working order's row has a thin bar along its bottom that fills to the right as the order fills.
-//  Below them, behind a draggable divider, today's round trips with their profit or loss.
+//  Below them, behind a draggable divider, two tabs: today's round trips with their profit or loss,
+//  and Borrow, what shorting the selected chart's stock takes (see BorrowTab).
 //  Clicking empty space in the Orders or Positions column deselects the chart, so no hotkey or
 //  order shortcut has a symbol to act on until a chart is clicked again.
 //
@@ -23,6 +24,9 @@ struct OrdersPanel: View {
     @AppStorage("filledColumn") private var filledShare: Double = 1 / 3
     /// Height of the three columns as a share of the panel; round trips take the rest.
     @AppStorage("roundTripsSplit") private var columnsShare: Double = 0.5
+    @AppStorage("bottomTab") private var bottomTab: BottomTab = .roundTrips
+
+    private enum BottomTab: String { case roundTrips, borrow }
 
     private static let minColumnWidth: CGFloat = 90
     private static let minSectionHeight: CGFloat = 40
@@ -39,7 +43,10 @@ struct OrdersPanel: View {
                              range: minH...(total - minH),
                              onChange: { columnsShare = $0 / total },
                              onReset: { columnsShare = 0.5 })
-                roundTrips
+                switch bottomTab {
+                case .roundTrips: roundTrips
+                case .borrow: borrow
+                }
             }
         }
         .font(.system(size: 11).monospacedDigit())
@@ -90,11 +97,20 @@ struct OrdersPanel: View {
     private func column<Rows: View>(_ title: String, count: Int, trailing: Text? = nil,
                                     onEmptyClick: (() -> Void)? = nil,
                                     @ViewBuilder rows: () -> Rows) -> some View {
+        column(title: {
+            Text(title).fontWeight(.semibold)
+            Text("\(count)").foregroundStyle(.secondary)
+        }, trailing: trailing, onEmptyClick: onEmptyClick, rows: rows)
+    }
+
+    /// A column whose header starts with `title` (the bottom section's tabs).
+    private func column<Title: View, Rows: View>(@ViewBuilder title: () -> Title, trailing: Text? = nil,
+                                                 onEmptyClick: (() -> Void)? = nil,
+                                                 @ViewBuilder rows: () -> Rows) -> some View {
         let content = rows()
         return VStack(spacing: 0) {
             HStack(spacing: 4) {
-                Text(title).fontWeight(.semibold)
-                Text("\(count)").foregroundStyle(.secondary)
+                title()
                 Spacer(minLength: 0)
                 if let trailing { trailing }
             }
@@ -245,7 +261,7 @@ struct OrdersPanel: View {
         let trips = RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions)
         let closed = trips.filter { !$0.isOpen }.compactMap { $0.pnl(last: nil) }
         let realized = closed.isEmpty ? nil : closed.reduce(0, +)
-        return column("Round trips", count: trips.count,
+        return column(title: { tabs(roundTripCount: trips.count) },
                       trailing: realized.map { pnlText($0).fontWeight(.semibold) }) {
             if trips.isEmpty { empty("No trades today") }
             ForEach(trips) { t in
@@ -269,6 +285,34 @@ struct OrdersPanel: View {
                 .rowStyle()
             }
         }
+    }
+
+    private var borrow: some View {
+        column(title: { tabs(roundTripCount: RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions).count) }) {
+            BorrowTab()
+        }
+    }
+
+    /// "Round trips 3  Borrow": the bottom section's tabs, the open one in bold.
+    private func tabs(roundTripCount: Int) -> some View {
+        HStack(spacing: 10) {
+            tab(.roundTrips) {
+                Text("Round trips")
+                Text("\(roundTripCount)").foregroundStyle(.secondary)
+            }
+            tab(.borrow) {
+                Text("Borrow")
+                if !workspace.targetSymbol.isEmpty { Text(workspace.targetSymbol).foregroundStyle(.secondary) }
+            }
+        }
+    }
+
+    private func tab<Label: View>(_ tab: BottomTab, @ViewBuilder label: () -> Label) -> some View {
+        HStack(spacing: 4) { label() }
+            .fontWeight(bottomTab == tab ? .semibold : .regular)
+            .opacity(bottomTab == tab ? 1 : 0.6)
+            .contentShape(Rectangle())
+            .onTapGesture { bottomTab = tab }
     }
 
     /// "Mid → Bid": what placed the entry and exit orders ("?" for an unknown side).

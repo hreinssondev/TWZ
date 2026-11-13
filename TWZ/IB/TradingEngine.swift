@@ -46,6 +46,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var quotes: [String: Quote] = [:] { didSet { changed(.quotes) } }
     /// IB's shortable tick per symbol: above 2.5 easy to borrow, above 1.5 hard to borrow, else not shortable.
     private var shortability: [String: Double] = [:] { didSet { changed(.shortability) } }
+    /// Shares IB has to lend per symbol (tick 89, also from generic tick 236).
+    private var shortableShares: [String: Double] = [:] { didSet { changed(.shortability) } }
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private var unavailableQuotes: [String: String] = [:] { didSet { changed(.unavailable) } }
     /// Latest scanner results per list panel.
@@ -263,7 +265,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind == .last }.map(\.symbol))
             s.tickLimitedSymbols = tickLimitedSymbols
         }
-        if dirty.contains(.shortability) { s.shortability = shortability }
+        if dirty.contains(.shortability) {
+            s.shortability = shortability
+            s.shortableShares = shortableShares
+        }
         for id in dirtyCharts {
             guard let c = charts[id] else { continue }
             var patch = EngineSnapshot.ChartPatch(id: id, generation: c.generation, isLoading: c.isLoading, error: c.error)
@@ -342,6 +347,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         noDataCheckScheduled = false
         unavailableQuotes.removeAll()
         shortability.removeAll()
+        shortableShares.removeAll()
         quoteReqBySymbol.removeAll()
         quoteSymbolByReq.removeAll()
         overnightReqBySymbol.removeAll()
@@ -455,6 +461,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             quoteReqBySymbol[symbol] = nil
             quoteSymbolByReq[reqId] = nil
             shortability[symbol] = nil
+            shortableShares[symbol] = nil
         }
         for symbol in wanted where quoteReqBySymbol[symbol] == nil {
             subscribeQuote(symbol)
@@ -1640,6 +1647,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case 8, 74:
             smartQuotes[symbol, default: Quote()].volume = f.double(4)
             updateQuote(symbol)
+        case 89:
+            let shares = f.double(4)
+            if shortableShares[symbol] != shares { shortableShares[symbol] = shares }
         default: break
         }
     }
@@ -2105,6 +2115,7 @@ nonisolated struct EngineSnapshot: Sendable {
     var tickLimitedSymbols: Set<String>?
     /// IB's shortable tick per symbol (see `TradingEngine.shortability`).
     var shortability: [String: Double]?
+    var shortableShares: [String: Double]?
     var charts: [ChartPatch] = []
 }
 

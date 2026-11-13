@@ -53,6 +53,10 @@ final class Broker {
     private(set) var tickLimitedSymbols: Set<String> = []
     /// IB's shortable tick per symbol: above 2.5 easy to borrow, above 1.5 hard to borrow, else not shortable.
     private(set) var shortability: [String: Double] = [:]
+    /// Shares IB has to lend per symbol, live (tick 89).
+    private(set) var shortableShares: [String: Double] = [:]
+    /// IB's borrow fees and rebates, from its short stock file (see the Borrow tab).
+    let borrowRates = BorrowRates()
     /// Regular-session closes keyed "SYMBOL|yyyyMMdd", fetched for after-hours scanner rows.
     private(set) var sessionCloses: [String: Double] = [:]
     /// NOK per USD (IDEALPRO mid), used to size alt-click chart buys. Starts at the last saved
@@ -316,6 +320,7 @@ final class Broker {
         if let v = s.tickTradeSymbols { update(\.tickTradeSymbols, v) }
         if let v = s.tickLimitedSymbols { update(\.tickLimitedSymbols, v) }
         if let v = s.shortability { update(\.shortability, v) }
+        if let v = s.shortableShares { update(\.shortableShares, v) }
         if let v = s.sessionCloses { update(\.sessionCloses, v) }
         if let v = s.chartOrderIds { update(\.chartOrderIds, v) }
         if let v = s.protectiveOrders { update(\.protectiveOrders, v) }
