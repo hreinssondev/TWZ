@@ -4,7 +4,7 @@
 //
 //  The Borrow tab beside Round trips: whether the selected chart's stock can be shorted, how many
 //  shares IB has to lend (live, else from IB's short stock file), the borrow fee and rebate, and what
-//  borrowing a number of shares costs a day. IB's API can't borrow ahead: IB borrows the shares when a
+//  borrowing a $3,000 short costs a day and a week. IB's API can't borrow ahead: IB borrows the shares when a
 //  sell with no position (a short sale) fills, and charges the fee each day the position stays short.
 //
 
@@ -13,9 +13,8 @@ import SwiftUI
 struct BorrowTab: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
-    @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
-    /// Shares typed for the cost estimate; empty uses the order amount's shares.
-    @State private var sharesText = ""
+    /// The short the borrow cost is shown for, in dollars.
+    private static let costValue = 3000.0
 
     private var symbol: String { workspace.targetSymbol }
 
@@ -27,7 +26,6 @@ struct BorrowTab: View {
                 content
             }
         }
-        .onChange(of: symbol) { sharesText = "" }
     }
 
     /// Keeps IB's borrow rates loaded (the Orders panel runs it, for the tab's label too). IB updates
@@ -44,8 +42,6 @@ struct BorrowTab: View {
         let rate = rates.rates[symbol]
         let level = broker.shortability[symbol]
         let last = broker.quote(symbol)?.last
-        let defaultShares = last.flatMap { broker.shares(forNOK: orderNOK, at: $0) }
-        let shares = Double(sharesText.replacingOccurrences(of: ",", with: "")) ?? defaultShares
 
         HStack(spacing: 4) {
             Text(symbol).fontWeight(.semibold)
@@ -67,21 +63,17 @@ struct BorrowTab: View {
         }
         row("Fee") { Text(yearly(rate?.feeRate)) }
         row("Rebate") { Text(yearly(rate?.rebateRate)) }
-        row("Shares") {
-            TextField(defaultShares.map { Fmt.shares($0) } ?? "Shares", text: $sharesText)
-                .textFieldStyle(.plain)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 80)
-        }
-        row("Cost / day") {
-            // IB's USD borrow fees are annual on a 360-day year, charged every calendar day short.
-            if let shares, let last, let fee = rate?.feeRate {
-                let value = shares * last
-                Text("\(Fmt.money(value * fee / 100 / 360)) \(Text("of \(Fmt.money(value))").foregroundStyle(.secondary))")
+        // Borrowing a $3,000 short. IB's USD borrow fees are annual on a 360-day year, charged every
+        // calendar day short.
+        row("$\(Int(Self.costValue).formatted()) short") {
+            if let last, last > 0 {
+                Text("\(Fmt.shares((Self.costValue / last).rounded(.down))) shares")
             } else {
                 Text("—")
             }
         }
+        row("Cost / day") { Text(rate?.feeRate.map { Fmt.money(Self.costValue * $0 / 100 / 360) } ?? "—") }
+        row("Cost / week") { Text(rate?.feeRate.map { Fmt.money(Self.costValue * $0 / 100 / 360 * 7) } ?? "—") }
 
         note(level.map { $0 <= 1.5 } == true
              ? "IB has no shares to lend now, so a short sale won't fill. IB finds more through the day; watch Available."
