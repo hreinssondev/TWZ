@@ -277,7 +277,14 @@ struct OrdersPanel: View {
                     }
                     HStack(spacing: 4) {
                         let prices = "\(t.entryPrice.map { Fmt.price($0) } ?? "earlier") → \(t.exitPrice.map { Fmt.price($0) } ?? "…")"
-                        Text("\(Text(Fmt.shares(t.entryShares)).foregroundStyle(sideColor(t.isLong))) - \(prices)")
+                        // The position's dollar value at the entry price (the exit's for shares held from before today).
+                        let value = (t.entryPrice ?? t.exitPrice).map { "$" + Int((t.entryShares * $0).rounded()).formatted() }
+                        let shares = Text(Fmt.shares(t.entryShares)).foregroundStyle(sideColor(t.isLong))
+                        if let value {
+                            Text("\(shares) \(Text(value).foregroundStyle(.white)) - \(prices)")
+                        } else {
+                            Text("\(shares) - \(prices)")
+                        }
                         Spacer(minLength: 2)
                         Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
                     }
