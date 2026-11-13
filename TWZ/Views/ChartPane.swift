@@ -204,7 +204,8 @@ struct ChartPane: View {
 }
 
 /// A candle chart that trades: ⌃-click places a stop loss / take profit (or, with no position, a
-/// what-if buy), ⌥-click buys where allowed, and the position, orders and what-if are drawn as lines
+/// what-if buy), ⌥-click places the selected hotkey's order (or the ⌥-click buy) at the clicked price
+/// where allowed, and the position, orders and what-if are drawn as lines
 /// (double-click one to cancel it). Shared by the main charts and the Charts window.
 struct TradingChart: View {
     @Environment(Broker.self) private var broker
@@ -235,9 +236,15 @@ struct TradingChart: View {
         CandleChart(
             chart: chart, lines: priceLines,
             // Switched off in the top bar: no handler, so ⌥ neither tints the price tag nor places orders.
+            // The selected hotkey's order at the clicked price, or with none selected (the ⌥-click
+            // buy box is), a buy for its NOK amount.
             onAltClick: allowsAltClick && altClickOrders ? { price in
                 onTrade()
-                broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
+                if let hotkey = workspace.selectedHotkey {
+                    broker.run(hotkey, symbol: chart.symbol, at: price)
+                } else {
+                    broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
+                }
             } : nil,
             onControlClick: { price in
                 guard !chart.symbol.isEmpty else { return }

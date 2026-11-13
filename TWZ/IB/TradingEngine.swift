@@ -1129,10 +1129,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
     }
 
+    /// Shares a close of `fraction` of the position takes; all of it when that's under one share.
+    private static func closeQuantity(_ p: Position, fraction: Double) -> Double {
+        let quantity = (abs(p.quantity) * fraction).rounded(.down)
+        return quantity < 1 ? abs(p.quantity) : quantity
+    }
+
     private func close(_ p: Position, fraction: Double, hotkey: Hotkey) {
         let action = p.quantity > 0 ? "SELL" : "BUY"
-        var quantity = (abs(p.quantity) * fraction).rounded(.down)
-        if quantity < 1 { quantity = abs(p.quantity) }
+        let quantity = Self.closeQuantity(p, fraction: fraction)
         guard let price = orderPrice(symbol: p.symbol, action: action, hotkey: hotkey) else { return }
         submit(symbol: p.symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
                source: Self.source(hotkey, isBuy: action == "BUY"),
@@ -1163,12 +1168,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return (nok / usdNok / price).rounded(.down)
     }
 
-    /// What an alt-click buy places, decided from the live last trade only (no fallback prices).
-    enum ChartBuy {
-        /// At or below the last trade: a limit at the clicked price.
+    /// What an alt-click order places, decided from the live last trade only (no fallback prices).
+    enum ChartOrder {
+        /// On the side that fills at the clicked price or better (a buy at or below the last trade,
+        /// a sell at or above it): a limit at the clicked price.
         case limit(Double)
-        /// Above it: a stop-limit that triggers when the last trade reaches the clicked price and
-        /// buys at that price or better.
+        /// On the other side: a stop-limit that triggers when the last trade reaches the clicked
+        /// price and fills at that price or better.
         case stopLimit(Double)
         /// Can't place one; the reason.
         case unavailable(String)
@@ -1180,40 +1186,33 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             }
         }
 
-        /// "BUY 45 @ 10.00" or "BUY STP 45 @ 10.00".
-        func label(shares: Double) -> String? {
+        /// "BUY 45 @ 10.00" or "SELL STP 45 @ 10.00".
+        func label(_ action: String, shares: Double) -> String? {
             switch self {
-            case .limit(let p): "BUY \(Fmt.shares(shares)) @ \(Fmt.price(p))"
-            case .stopLimit(let p): "BUY STP \(Fmt.shares(shares)) @ \(Fmt.price(p))"
+            case .limit(let p): "\(action) \(Fmt.shares(shares)) @ \(Fmt.price(p))"
+            case .stopLimit(let p): "\(action) STP \(Fmt.shares(shares)) @ \(Fmt.price(p))"
             case .unavailable: nil
             }
         }
     }
 
-    private func chartBuy(symbol: String, clicked: Double) -> ChartBuy {
+    private func chartOrder(symbol: String, action: String, clicked: Double) -> ChartOrder {
         let price = Self.roundToTick(clicked)
         guard let last = quotes[symbol]?.last, last > 0 else {
             return .unavailable("No live price for \(symbol) yet")
         }
-        guard price > last else { return .limit(price) }
+        if action == "BUY" ? price <= last : price >= last { return .limit(price) }
         // IBKR's overnight venue takes plain limit orders only.
         if MarketSession.phase() == .overnight { return .unavailable("No stop orders overnight") }
         return .stopLimit(price)
     }
 
-    /// Alt-click on a chart: a DAY buy for `nok` worth of `symbol` at the clicked price; a limit
-    /// below the last trade, a stop-limit above it.
+    /// Alt-click on a chart with no hotkey selected: a DAY buy for `nok` worth of `symbol` at the
+    /// clicked price; a limit below the last trade, a stop-limit above it.
     func buyNOK(_ nok: Double, symbol rawSymbol: String, at clickedPrice: Double) {
         let symbol = rawSymbol.uppercased()
-        guard apiReady else {
-            lastMessage = "Not connected to IB Gateway"
-            return
-        }
-        guard !symbol.isEmpty else {
-            lastMessage = "Load a symbol into the chart first"
-            return
-        }
-        let plan = chartBuy(symbol: symbol, clicked: clickedPrice)
+        guard chartOrderReady(symbol) else { return }
+        let plan = chartOrder(symbol: symbol, action: "BUY", clicked: clickedPrice)
         if case .unavailable(let reason) = plan {
             lastMessage = "\(reason), so the order wasn't sent"
             return
@@ -1222,15 +1221,72 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "No USD.NOK rate yet, so the order can't be sized"
             return
         }
-        guard quantity >= 1, let label = plan.label(shares: quantity) else {
+        guard quantity >= 1, let label = plan.label("BUY", shares: quantity) else {
             lastMessage = "\(OrderAmount.format(nok)) NOK is less than one share of \(symbol) at \(Fmt.price(limit))"
             return
         }
-        var price = HotkeyPrice(limit: limit, outsideRth: true)
+        placeChartOrder(symbol: symbol, action: "BUY", quantity: quantity, plan: plan, tif: .day,
+                        outsideRth: true, summary: "\(label) (\(OrderAmount.format(nok)) NOK)")
+    }
+
+    /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price instead
+    /// of at its quote. Buy / Sell size as the hotkey does (dollars at the clicked price), Close 50% /
+    /// 100% from the position; a limit or stop-limit as for `buyNOK`, on the order's side.
+    func run(_ hotkey: Hotkey, symbol rawSymbol: String, at clickedPrice: Double) {
+        let symbol = rawSymbol.uppercased()
+        guard chartOrderReady(symbol) else { return }
+        let action: String
+        let quantity: Double
+        switch hotkey.action {
+        case .buy, .sell:
+            action = hotkey.action == .buy ? "BUY" : "SELL"
+            let price = Self.roundToTick(clickedPrice)
+            guard price > 0 else { return }
+            quantity = (hotkey.sizing == .shares ? hotkey.amount : hotkey.amount / price).rounded(.down)
+        case .closeHalf, .closeAll:
+            guard let p = positions[symbol], p.quantity != 0 else {
+                lastMessage = "No position in \(symbol)"
+                return
+            }
+            action = p.quantity > 0 ? "SELL" : "BUY"
+            quantity = Self.closeQuantity(p, fraction: hotkey.action == .closeHalf ? 0.5 : 1)
+        case .cancelSymbol, .cancelAll, .flattenAll:
+            lastMessage = "⌥-click: \"\(hotkey.label)\" doesn't place an order at a price"
+            return
+        }
+        guard quantity >= 1 else {
+            lastMessage = "Size too small for \(symbol)"
+            return
+        }
+        let plan = chartOrder(symbol: symbol, action: action, clicked: clickedPrice)
+        guard let label = plan.label(action, shares: quantity) else {
+            if case .unavailable(let reason) = plan { lastMessage = "\(reason), so the order wasn't sent" }
+            return
+        }
+        placeChartOrder(symbol: symbol, action: action, quantity: quantity, plan: plan, tif: hotkey.tif,
+                        outsideRth: hotkey.outsideRth, summary: "\(label) (\(hotkey.label))")
+    }
+
+    private func chartOrderReady(_ symbol: String) -> Bool {
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return false
+        }
+        guard !symbol.isEmpty else {
+            lastMessage = "Load a symbol into the chart first"
+            return false
+        }
+        return true
+    }
+
+    /// Sends an alt-click order and marks it as one, for its line color.
+    private func placeChartOrder(symbol: String, action: String, quantity: Double, plan: ChartOrder,
+                                 tif: TimeInForce, outsideRth: Bool, summary: String) {
+        guard let limit = plan.price else { return }
+        var price = HotkeyPrice(limit: limit, outsideRth: outsideRth)
         if case .stopLimit(let stop) = plan { price.stop = stop }
         if MarketSession.phase() == .overnight { price.exchange = "OVERNIGHT" }
-        let summary = "\(label) (\(OrderAmount.format(nok)) NOK)"
-        guard let id = submit(symbol: symbol, action: "BUY", quantity: quantity, price: price, tif: .day,
+        guard let id = submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: tif,
                               summary: summary, source: "⌥-click", why: "⌥-click \(summary)") else { return }
         chartOrderIds.insert(id)
         defaults.set(Array(chartOrderIds.sorted().suffix(500)), forKey: "chartOrderIds")

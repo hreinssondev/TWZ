@@ -6,7 +6,8 @@
 //  Clicking a button selects it, and ⌘⇧↩ sends the selected one (see TradingShortcuts); or, set in
 //  Settings ▸ Trading, clicking sends the order on mouse-down (and selects it too).
 //  Click the "Hotkeys" title to customize them all, or right-click a button to edit just that one.
-//  Beside them, the NOK amount that ⌥-clicking a chart buys.
+//  ⌥-clicking a chart places the selected hotkey's order at the clicked price. Beside the buttons,
+//  the NOK amount that ⌥-clicking buys instead when no hotkey is selected: clicking it selects it.
 //
 
 import SwiftUI
@@ -73,6 +74,7 @@ struct HotkeyPanel: View {
                             }
                             .help((clickMode == .send ? "Click sends · ⌘⇧↩ sends it again" : "Click to select · ⌘⇧↩ sends it")
                                   + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
+                                  + " · ⌥-click a chart places it at the clicked price while selected"
                                   + " · ⌘S closes 100% at market")
                             .contextMenu {
                                 Button("Edit…") { editing = index }
@@ -207,8 +209,9 @@ private struct HotkeyButton: View {
     }
 }
 
-/// The NOK amount ⌥-clicking a chart buys (a DAY limit at the clicked price), converted to shares
-/// at the live USD.NOK rate. Type it, or step it in 5 000 NOK steps with ↑/↓ or the arrows.
+/// The NOK amount ⌥-clicking a chart buys (a DAY limit at the clicked price) while no hotkey is
+/// selected, converted to shares at the live USD.NOK rate. Clicking it (or its field) selects it in
+/// place of a hotkey, outlined like one. Type it, or step it in 5 000 NOK steps with ↑/↓ or the arrows.
 /// When the panel is short it drops the title, then the size line, keeping just the field.
 private struct OrderAmountBox: View {
     let height: CGFloat
@@ -259,13 +262,18 @@ private struct OrderAmountBox: View {
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
-        .help("⌥-click a chart to place a limit buy for this many NOK at the clicked price. ↑/↓ step 5 000 NOK (500–300 000).")
+        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor, lineWidth: isSelected ? 2.5 : 0))
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded { workspace.selectedHotkeyID = nil })
+        .help("Selected (click it), ⌥-click a chart to place a limit buy for this many NOK at the clicked price; "
+              + "with a hotkey selected, ⌥-click places that instead. ↑/↓ step 5 000 NOK (500–300 000).")
         .onAppear { text = OrderAmount.format(amount) }
         .onChange(of: text) { _, new in
             if let typed = OrderAmount.parse(new) { amount = OrderAmount.clamp(typed) }
         }
         .onChange(of: focused) { _, isFocused in
             if isFocused {
+                workspace.selectedHotkeyID = nil
                 hideCaret()
             } else {
                 restoreCaret()
@@ -273,6 +281,9 @@ private struct OrderAmountBox: View {
             }
         }
     }
+
+    /// What ⌥-click places when no hotkey is selected (a selection whose hotkey was deleted counts as none).
+    private var isSelected: Bool { workspace.selectedHotkey == nil }
 
     /// The window's field editor is shared by every text field, so the caret is hidden only while
     /// this one is being edited. Deferred a tick: focus flips before the editor becomes first responder.

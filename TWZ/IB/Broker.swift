@@ -206,9 +206,14 @@ final class Broker {
         order { $0.run(hotkey, symbol: symbol) }
     }
 
-    /// Alt-click on a chart: a DAY buy for `nok` worth of `symbol` at the clicked price.
+    /// Alt-click on a chart with no hotkey selected: a DAY buy for `nok` worth of `symbol` at the clicked price.
     func buyNOK(_ nok: Double, symbol: String, at clickedPrice: Double) {
         order { $0.buyNOK(nok, symbol: symbol, at: clickedPrice) }
+    }
+
+    /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price.
+    func run(_ hotkey: Hotkey, symbol: String, at clickedPrice: Double) {
+        order { $0.run(hotkey, symbol: symbol, at: clickedPrice) }
     }
 
     /// ⌃-click on a chart: a GTC stop loss or take profit closing the whole position at the clicked price.
