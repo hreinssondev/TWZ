@@ -50,7 +50,7 @@ extension Workspace {
     }
 }
 
-/// A main-window chart: its symbol field, position, ⚡ while fast (⌘↩) and its own timeframe switch
+/// A main-window chart: its symbol field, position, ⚡ while fast (⌘↩), a red S if shortable and its own timeframe switch
 /// over a chart that trades. Clicking it selects it; the selected chart is outlined, and so, a little
 /// fainter, is any other chart showing the same stock, since hotkeys go to that stock either way.
 struct ChartPane: View {
@@ -143,6 +143,15 @@ struct ChartPane: View {
                               ? "Tick-by-tick: every trade streams (and bid/ask while selected); ⌘↩ turns it off for this chart"
                               : "Selected: every trade and bid/ask streams tick by tick; ⌘↩ keeps its trades streaming once deselected")
                 }
+            }
+
+            // Shortable (IB's tick 46): red S, faint while hard to borrow; none when it can't be shorted.
+            if let shortable = broker.shortability[chart.symbol], shortable > 1.5 {
+                Text("S")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color.red.opacity(shortable > 2.5 ? 1 : 0.45))
+                    .help(shortable > 2.5 ? "Shortable: at least 1,000 shares available to borrow"
+                                          : "Hard to borrow: shortable only if IB can locate shares")
             }
 
             Spacer(minLength: 4)

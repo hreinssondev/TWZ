@@ -44,6 +44,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var orders: [Int: OrderRow] = [:] { didSet { changed(.orders) } }
     private var fills: [String: Fill] = [:] { didSet { changed(.fills) } }
     private var quotes: [String: Quote] = [:] { didSet { changed(.quotes) } }
+    /// IB's shortable tick per symbol: above 2.5 easy to borrow, above 1.5 hard to borrow, else not shortable.
+    private var shortability: [String: Double] = [:] { didSet { changed(.shortability) } }
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private var unavailableQuotes: [String: String] = [:] { didSet { changed(.unavailable) } }
     /// Latest scanner results per list panel.
@@ -160,6 +162,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         static let protective = Dirty(rawValue: 1 << 9)
         static let orderSources = Dirty(rawValue: 1 << 10)
         static let tickStreams = Dirty(rawValue: 1 << 11)
+        static let shortability = Dirty(rawValue: 1 << 12)
     }
 
     /// One display frame at 120 Hz (ProMotion): the UI never gets more snapshots than it can show.
@@ -202,7 +205,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// Everything the UI shows, for its initial state. Call on the engine queue.
     func fullSnapshot() -> EngineSnapshot {
-        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources, .tickStreams]
+        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources, .tickStreams, .shortability]
         return takeSnapshot()
     }
 
@@ -260,6 +263,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind == .last }.map(\.symbol))
             s.tickLimitedSymbols = tickLimitedSymbols
         }
+        if dirty.contains(.shortability) { s.shortability = shortability }
         for id in dirtyCharts {
             guard let c = charts[id] else { continue }
             var patch = EngineSnapshot.ChartPatch(id: id, generation: c.generation, isLoading: c.isLoading, error: c.error)
@@ -337,6 +341,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         hasLiveQuote = false
         noDataCheckScheduled = false
         unavailableQuotes.removeAll()
+        shortability.removeAll()
         quoteReqBySymbol.removeAll()
         quoteSymbolByReq.removeAll()
         overnightReqBySymbol.removeAll()
@@ -449,6 +454,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             send(2, 2, reqId)                                                      // cancelMktData
             quoteReqBySymbol[symbol] = nil
             quoteSymbolByReq[reqId] = nil
+            shortability[symbol] = nil
         }
         for symbol in wanted where quoteReqBySymbol[symbol] == nil {
             subscribeQuote(symbol)
@@ -557,7 +563,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let reqId = makeReqId()
         quoteReqBySymbol[symbol] = reqId
         quoteSymbolByReq[reqId] = symbol
-        sendFields([1, 11, reqId] + contract(symbol) + [false, "", false, false, ""])   // reqMktData
+        sendFields([1, 11, reqId] + contract(symbol) + [false, "236", false, false, ""])   // reqMktData, 236: shortable
     }
 
     private func subscribeOvernightQuote(_ symbol: String) {
@@ -1589,6 +1595,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             checkReady()
         case 17: historicalData(f)
         case 20: scannerData(f)
+        case 45: tickGeneric(f)
         case 53:
             log("LOADED open orders (\(orders.values.filter(\.isActive).count) working)")
             openOrdersLoaded = true
@@ -1635,6 +1642,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             updateQuote(symbol)
         default: break
         }
+    }
+
+    /// Tick 46, "Shortable" (generic tick 236 on the SMART quote).
+    private func tickGeneric(_ f: [String]) {
+        guard f.int(3) == 46, let symbol = quoteSymbolByReq[f.int(2)] else { return }
+        let value = f.double(4)
+        if shortability[symbol] != value { shortability[symbol] = value }
     }
 
     private func orderStatus(_ f: [String]) {
@@ -2089,6 +2103,8 @@ nonisolated struct EngineSnapshot: Sendable {
     var tickTradeSymbols: Set<String>?
     /// Fast charts' symbols IB's tick-by-tick limit left without a trade stream.
     var tickLimitedSymbols: Set<String>?
+    /// IB's shortable tick per symbol (see `TradingEngine.shortability`).
+    var shortability: [String: Double]?
     var charts: [ChartPatch] = []
 }
 
