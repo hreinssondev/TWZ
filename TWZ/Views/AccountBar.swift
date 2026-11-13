@@ -61,10 +61,9 @@ struct AccountBar: View {
 
             IndicatorToggles()
 
-            HStack(spacing: 6) {
-                Circle().fill(statusColor).frame(width: 8, height: 8)
-                MessageLabel(text: broker.statusText, size: 11)
-            }
+            // The status text (e.g. why it disconnected) shows on hover.
+            Circle().fill(statusColor).frame(width: 8, height: 8)
+                .help(broker.statusText)
 
             Button(broker.state == .disconnected ? "Connect" : "Disconnect") {
                 broker.state == .disconnected ? broker.connect() : broker.disconnect()
