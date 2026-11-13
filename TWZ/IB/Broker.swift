@@ -28,6 +28,8 @@ final class Broker {
     private(set) var state: ConnectionState = .disconnected
     private(set) var statusText = "Disconnected"
     private(set) var lastMessage: String?
+    /// The latest status and error messages, oldest first (at most 50), for the floating message tab.
+    private(set) var messageHistory: [LoggedMessage] = []
     private(set) var account = ""
 
     private(set) var netLiquidation: Double?
@@ -314,6 +316,10 @@ final class Broker {
         if let st = s.status {
             update(\.state, st.state)
             update(\.statusText, st.statusText)
+            if let message = st.lastMessage, message != lastMessage {
+                messageHistory.append(LoggedMessage(time: Date(), text: message))
+                if messageHistory.count > 50 { messageHistory.removeFirst(messageHistory.count - 50) }
+            }
             update(\.lastMessage, st.lastMessage)
             update(\.account, st.account)
             update(\.netLiquidation, st.netLiquidation)
@@ -375,4 +381,11 @@ final class Broker {
 fileprivate final class QuoteBox {
     var quote: Quote?
     init(quote: Quote?) { self.quote = quote }
+}
+
+/// A status or error message and when it came.
+struct LoggedMessage: Identifiable, Equatable {
+    let id = UUID()
+    var time: Date
+    var text: String
 }

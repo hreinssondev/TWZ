@@ -73,6 +73,10 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
                         ChartGrid(gap: gap)
+                            // The hotkey row shows messages; collapsed, they float over the charts.
+                            .overlay(alignment: .bottom) {
+                                if rowHeight <= 0 { FloatingMessages().padding(.bottom, 10) }
+                            }
                         ResizeHandle(resizes: .vertical, thickness: gap, current: rowHeight,
                                      range: minBottom...maxBottom, inverted: true, collapsible: true,
                                      onChange: { bottomHeight = $0 }, onReset: { bottomHeight = 190 })
