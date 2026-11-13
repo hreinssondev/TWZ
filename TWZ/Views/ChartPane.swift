@@ -50,7 +50,8 @@ extension Workspace {
     }
 }
 
-/// A main-window chart: its symbol field, position, ⚡ while fast (⌘↩), a red S if shortable and its own timeframe switch
+/// A main-window chart: its symbol field, position, ⚡ while fast (⌘↩), a red S if shortable, SSR under
+/// the short sale restriction and its own timeframe switch
 /// over a chart that trades. Clicking it selects it; the selected chart is outlined, and so, a little
 /// fainter, is any other chart showing the same stock, since hotkeys go to that stock either way.
 struct ChartPane: View {
@@ -152,6 +153,15 @@ struct ChartPane: View {
                     .foregroundStyle(Color.red.opacity(shortable > 2.5 ? 1 : 0.45))
                     .help(shortable > 2.5 ? "Shortable: at least 1,000 shares available to borrow"
                                           : "Hard to borrow: shortable only if IB can locate shares")
+            }
+
+            // Short sale restriction (SEC Rule 201), from Nasdaq's list or IB's prices.
+            if let reason = broker.ssrReason(chart.symbol) {
+                Text("SSR")
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(Color.orange)
+                    .help("Short sale restriction: short sales fill only above the best bid until the end of "
+                          + "the next trading day. \(reason).")
             }
 
             Spacer(minLength: 4)

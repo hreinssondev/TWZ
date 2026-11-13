@@ -48,6 +48,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var shortability: [String: Double] = [:] { didSet { changed(.shortability) } }
     /// Shares IB has to lend per symbol (tick 89, also from generic tick 236).
     private var shortableShares: [String: Double] = [:] { didSet { changed(.shortability) } }
+    /// Short sale restriction (SEC Rule 201: a fall of 10% below the prior close restricts short sales
+    /// to above the best bid for the rest of that day and the next) worked out from IB's prices, with
+    /// why: seen live today, or in the regular-session lows of chart symbols' daily bars (today and
+    /// yesterday). Nasdaq's own list (`SSRList`) adds what this misses.
+    private var ssr: [String: String] = [:] { didSet { changed(.shortability) } }
+    /// The ET day `ssr` holds; a new day clears it and asks for the charts' daily bars again.
+    private var ssrDay = MarketSession.dayKey()
+    private var ssrRequested: Set<String> = []
+    private var ssrSymbolByReq: [Int: String] = [:]
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private var unavailableQuotes: [String: String] = [:] { didSet { changed(.unavailable) } }
     /// Latest scanner results per list panel.
@@ -268,6 +277,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if dirty.contains(.shortability) {
             s.shortability = shortability
             s.shortableShares = shortableShares
+            s.ssr = ssr
         }
         for id in dirtyCharts {
             guard let c = charts[id] else { continue }
@@ -373,6 +383,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         scanOwnerByReq.removeAll()
         closeKeyByReq.removeAll()
         closesRequested.removeAll()
+        ssrRequested.removeAll()
+        ssrSymbolByReq.removeAll()
         scans.removeAll()
         fxReq = nil
         fxBid = nil
@@ -487,6 +499,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let current = session
         queue.asyncAfter(deadline: .now() + 30) { [weak self] in
             guard let self, self.session == current, self.apiReady else { return }
+            if MarketSession.dayKey() != self.ssrDay {
+                self.ssrDay = MarketSession.dayKey()
+                self.ssr.removeAll()
+                self.ssrRequested.removeAll()
+                for c in self.charts.values { self.requestSSRBars(c.symbol) }
+            }
             let now = MarketSession.phase()
             if now != self.phase {
                 self.phase = now
@@ -781,6 +799,30 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
     }
 
+    /// A chart symbol's last few regular-session daily bars, for `ssr`: once a day per symbol.
+    private func requestSSRBars(_ symbol: String) {
+        guard apiReady, !symbol.isEmpty, ssrRequested.insert(symbol).inserted else { return }
+        let reqId = makeReqId()
+        ssrSymbolByReq[reqId] = symbol
+        sendFields([20, reqId] + contract(symbol) + [false, "", "1 day", "5 D", 1, "TRADES", 1, false, ""])
+    }
+
+    /// Restricted if yesterday's low was 10% below the close before it, or today's below yesterday's close.
+    private func ssrFromDailyBars(_ symbol: String, _ bars: [(day: String, low: Double, close: Double)]) {
+        guard ssr[symbol] == nil else { return }
+        let past = bars.filter { $0.day < ssrDay }
+        if past.count >= 2 {
+            let y = past[past.count - 1], before = past[past.count - 2]
+            if before.close > 0, y.low <= before.close * 0.9 {
+                ssr[symbol] = "Fell 10% below the prior close yesterday (low \(Fmt.price(y.low)) vs \(Fmt.price(before.close)))"
+                return
+            }
+        }
+        if let today = bars.last, today.day == ssrDay, let y = past.last, y.close > 0, today.low <= y.close * 0.9 {
+            ssr[symbol] = "Fell 10% below yesterday's close today (low \(Fmt.price(today.low)) vs \(Fmt.price(y.close)))"
+        }
+    }
+
     // MARK: - Charts
 
     func registerCharts(_ specs: [ChartSpec]) {
@@ -832,6 +874,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             chartChanged(c, all: true)
         }
         guard apiReady, !c.symbol.isEmpty, c.isLoading || keepingBars else { return }
+        requestSSRBars(c.symbol)
         let reqId = makeReqId()
         chartByReq[reqId] = id
         reqByChart[id] = reqId
@@ -1636,6 +1679,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         default: return
         }
         if isOvernight { overnightQuotes[symbol] = q } else { smartQuotes[symbol] = q }
+        if !isOvernight, ssr[symbol] == nil, let last = q.last, let close = q.prevClose, close > 0, last <= close * 0.9 {
+            ssr[symbol] = "Traded 10% below yesterday's close today (\(Fmt.price(last)) vs \(Fmt.price(close)))"
+        }
         updateQuote(symbol)
     }
 
@@ -1788,6 +1834,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
 
         if closeKeyByReq.removeValue(forKey: reqId) != nil { return }
+        if ssrSymbolByReq.removeValue(forKey: reqId) != nil { return }
         if let owner = scanOwnerByReq.removeValue(forKey: reqId) {
             scanReqByOwner[owner] = nil
             scans[owner, default: ScanResult()].error = text
@@ -1836,6 +1883,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if let key = closeKeyByReq.removeValue(forKey: reqId) {
             let closeIndex = 5 + (count - 1) * 8 + 4
             if count > 0, closeIndex < f.count { sessionCloses[key] = f.double(closeIndex) }
+            return
+        }
+        if let symbol = ssrSymbolByReq.removeValue(forKey: reqId) {
+            // Daily bars' dates are "yyyyMMdd".
+            let days = stride(from: 5, to: min(f.count - 7, 5 + count * 8), by: 8)
+                .map { (day: String(f[$0].prefix(8)), low: f.double($0 + 3), close: f.double($0 + 4)) }
+            ssrFromDailyBars(symbol, days)
             return
         }
         var bars: [Bar] = []
@@ -2116,6 +2170,8 @@ nonisolated struct EngineSnapshot: Sendable {
     /// IB's shortable tick per symbol (see `TradingEngine.shortability`).
     var shortability: [String: Double]?
     var shortableShares: [String: Double]?
+    /// Short sale restriction worked out from IB's prices, with why (see `TradingEngine.ssr`).
+    var ssr: [String: String]?
     var charts: [ChartPatch] = []
 }
 

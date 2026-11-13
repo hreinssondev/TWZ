@@ -57,6 +57,16 @@ final class Broker {
     private(set) var shortableShares: [String: Double] = [:]
     /// IB's borrow fees and rebates, from its short stock file (see the Borrow tab).
     let borrowRates = BorrowRates()
+    /// Short sale restriction worked out from IB's prices, with why (see `TradingEngine.ssr`).
+    private(set) var ssr: [String: String] = [:]
+    /// Nasdaq's Rule 201 list, for Nasdaq-listed stocks.
+    let ssrList = SSRList()
+
+    /// Why `symbol` is under the short sale restriction (SSR), or nil if it isn't.
+    func ssrReason(_ symbol: String) -> String? {
+        if let time = ssrList.triggers[symbol] { return "On Nasdaq's Rule 201 list, triggered \(time) ET" }
+        return ssr[symbol]
+    }
     /// Regular-session closes keyed "SYMBOL|yyyyMMdd", fetched for after-hours scanner rows.
     private(set) var sessionCloses: [String: Double] = [:]
     /// NOK per USD (IDEALPRO mid), used to size alt-click chart buys. Starts at the last saved
@@ -321,6 +331,7 @@ final class Broker {
         if let v = s.tickLimitedSymbols { update(\.tickLimitedSymbols, v) }
         if let v = s.shortability { update(\.shortability, v) }
         if let v = s.shortableShares { update(\.shortableShares, v) }
+        if let v = s.ssr { update(\.ssr, v) }
         if let v = s.sessionCloses { update(\.sessionCloses, v) }
         if let v = s.chartOrderIds { update(\.chartOrderIds, v) }
         if let v = s.protectiveOrders { update(\.protectiveOrders, v) }

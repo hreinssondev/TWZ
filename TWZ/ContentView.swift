@@ -25,6 +25,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     /// 0 = the hotkey row is collapsed.
     @AppStorage("bottomRowHeight") private var bottomHeight: Double = 190
@@ -47,6 +48,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             AccountBar()
+                .task { await broker.ssrList.keepLoaded() }
             Divider()
             GeometryReader { geo in
                 let gap = Self.gap
