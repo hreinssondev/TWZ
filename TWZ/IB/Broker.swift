@@ -119,6 +119,7 @@ final class Broker {
         let engine = engine
         apply(engine.queue.sync { engine.fullSnapshot() })
         engine.sink = { [weak self] snapshot in self?.apply(snapshot) }
+        ssrList.onChange = { symbols in engine.perform { $0.setNasdaqSSR(symbols) } }
     }
 
     // MARK: - Commands

@@ -14,7 +14,9 @@ import Observation
 @Observable
 final class SSRList {
     /// Symbol → when it was triggered, as Nasdaq writes it ("11/12/2026 9:30:08 AM", ET).
-    private(set) var triggers: [String: String] = [:]
+    private(set) var triggers: [String: String] = [:] { didSet { onChange?(Set(triggers.keys)) } }
+    /// Told the restricted symbols whenever the list changes (the engine prices short sales by it).
+    @ObservationIgnored var onChange: ((Set<String>) -> Void)?
 
     private static let refresh: Duration = .seconds(5 * 60)
 

@@ -57,6 +57,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var ssrDay = MarketSession.dayKey()
     private var ssrRequested: Set<String> = []
     private var ssrSymbolByReq: [Int: String] = [:]
+    /// Nasdaq's Rule 201 list (`SSRList`), handed over by the UI.
+    private var nasdaqSSR: Set<String> = []
+    /// What the last short sale under SSR had its price raised to, for `submit`'s status line.
+    private var ssrRaise: String?
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private var unavailableQuotes: [String: String] = [:] { didSet { changed(.unavailable) } }
     /// Latest scanner results per list panel.
@@ -799,6 +803,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
     }
 
+    func setNasdaqSSR(_ symbols: Set<String>) {
+        nasdaqSSR = symbols
+    }
+
+    /// Under the short sale restriction, by Nasdaq's list or IB's prices.
+    private func isSSR(_ symbol: String) -> Bool {
+        nasdaqSSR.contains(symbol) || ssr[symbol] != nil
+    }
+
     /// A chart symbol's last few regular-session daily bars, for `ssr`: once a day per symbol.
     private func requestSSRBars(_ symbol: String) {
         guard apiReady, !symbol.isEmpty, ssrRequested.insert(symbol).inserted else { return }
@@ -921,6 +934,22 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard quantity > 0 else {
             lastMessage = "Order quantity must be > 0"
             return nil
+        }
+        var limit = limit, why = why
+        // Under the short sale restriction a short sale fills only above the best bid: one that would
+        // open or add to a short goes in at least a tick above it (a market order as that limit).
+        // Stop orders and sells within the long position stay as they are.
+        if !whatIf, action == "SELL", stop == nil, isSSR(symbol),
+           quantity > max(0, positions[symbol]?.quantity ?? 0),
+           let bid = quotes[symbol]?.bid, bid > 0 {
+            let floor = Self.roundToTick(bid + (bid < 1 ? 0.0001 : 0.01))
+            if limit.map({ $0 < floor }) ?? true {
+                let note = "SSR: short priced above the bid, \(limit.map { Fmt.price($0) } ?? "MKT") → \(Fmt.price(floor))"
+                limit = floor
+                why += " — \(note)"
+                ssrRaise = note
+                lastMessage = "\(symbol): \(note)"
+            }
         }
         let orderId = modifying ?? next
         if modifying == nil {
@@ -1520,11 +1549,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let replaced = replaceableOrders(symbol)
         for o in replaced { cancelOrder(o.id, why: "replaced by a new \(symbol) order (\(why))") }
         let overnight = price.exchange == "OVERNIGHT"
+        ssrRaise = nil
         guard let id = placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
                                   stop: price.stop, tif: overnight ? .day : tif, outsideRth: price.outsideRth,
                                   exchange: price.exchange, why: why) else { return nil }
         recordSource(source, for: id)
         var notes = summary.map { [$0] } ?? []
+        if let ssrRaise { notes.append(ssrRaise) }
         if !replaced.isEmpty {
             notes.append("replaced \(replaced.count == 1 ? "the previous order" : "\(replaced.count) orders")")
         }
