@@ -51,17 +51,23 @@ struct MessageLabel: View {
     }
 }
 
-/// The latest message in a small tab floating at the bottom of the charts, for when the hotkey row
-/// (whose header shows it) is collapsed. Click it for the whole message and the ones before it; ×
-/// hides it until the next message.
+/// The latest message in a bar as wide as the charts, floating at their bottom, for when the hotkey
+/// row (whose header shows it) is collapsed. Each message shows for 10 seconds, or until the list
+/// opened by clicking it (the whole message and the ones before it) closes; × hides it sooner.
 struct FloatingMessages: View {
     @Environment(Broker.self) private var broker
     @State private var showingAll = false
-    /// The message × hid.
+    /// The message hidden by × or after its 10 seconds.
     @State private var dismissed: UUID?
+    /// The message whose 10 seconds ran out while its list was open.
+    @State private var expired: UUID?
+
+    private static let shownFor: TimeInterval = 10
 
     var body: some View {
-        if let latest = broker.messageHistory.last, latest.id != dismissed {
+        // Counted from the message's arrival, so collapsing the row later doesn't bring back an old one.
+        if let latest = broker.messageHistory.last, latest.id != dismissed,
+           Date().timeIntervalSince(latest.time) < Self.shownFor || expired == latest.id {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.bubble")
                     .foregroundStyle(.orange)
@@ -69,6 +75,7 @@ struct FloatingMessages: View {
                     .foregroundStyle(.orange)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                Spacer(minLength: 6)
                 Text(latest.time, format: .dateTime.hour().minute().second())
                     .foregroundStyle(.secondary)
                 Button {
@@ -83,15 +90,24 @@ struct FloatingMessages: View {
             .font(.system(size: 11))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.orange.opacity(0.4)))
+            .frame(maxWidth: .infinity)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.orange.opacity(0.4)))
             .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
-            .frame(maxWidth: 520)
-            .contentShape(Capsule())
+            .contentShape(RoundedRectangle(cornerRadius: 6))
             .onTapGesture { showingAll = true }
             .pointerStyle(.link)
             .help("Click to show the whole message and the ones before it")
             .popover(isPresented: $showingAll, arrowEdge: .top) { history }
+            .task(id: latest.id) {
+                let left = Self.shownFor - Date().timeIntervalSince(latest.time)
+                if left > 0 { try? await Task.sleep(for: .seconds(left)) }
+                guard !Task.isCancelled else { return }
+                if showingAll { expired = latest.id } else { dismissed = latest.id }
+            }
+            .onChange(of: showingAll) { _, open in
+                if !open, let expired { dismissed = expired }
+            }
         }
     }
 
