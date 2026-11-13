@@ -50,6 +50,7 @@ struct OrdersPanel: View {
             }
         }
         .font(.system(size: 11).monospacedDigit())
+        .task { await BorrowTab.keepRatesLoaded(broker) }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
@@ -293,7 +294,8 @@ struct OrdersPanel: View {
         }
     }
 
-    /// "Round trips 3  Borrow": the bottom section's tabs, the open one in bold.
+    /// "Round trips 3  Borrow AAPL Shortable 1.2M": the bottom section's tabs, the open one in bold.
+    /// The selected chart's shortable status and shares to lend show on the Borrow tab either way.
     private func tabs(roundTripCount: Int) -> some View {
         HStack(spacing: 10) {
             tab(.roundTrips) {
@@ -302,15 +304,23 @@ struct OrdersPanel: View {
             }
             tab(.borrow) {
                 Text("Borrow")
-                if !workspace.targetSymbol.isEmpty { Text(workspace.targetSymbol).foregroundStyle(.secondary) }
+                let symbol = workspace.targetSymbol
+                if !symbol.isEmpty {
+                    Text(symbol).foregroundStyle(.secondary)
+                    if let level = broker.shortability[symbol] { ShortStatus(level: level) }
+                    if let lendable = lendableShares(symbol, broker: broker) {
+                        Text(lendable).foregroundStyle(.secondary).help("Shares IB has to lend")
+                    }
+                }
             }
         }
+        .lineLimit(1)
     }
 
     private func tab<Label: View>(_ tab: BottomTab, @ViewBuilder label: () -> Label) -> some View {
         HStack(spacing: 4) { label() }
             .fontWeight(bottomTab == tab ? .semibold : .regular)
-            .opacity(bottomTab == tab ? 1 : 0.6)
+            .foregroundStyle(bottomTab == tab ? .primary : .secondary)
             .contentShape(Rectangle())
             .onTapGesture { bottomTab = tab }
     }

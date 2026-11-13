@@ -27,14 +27,16 @@ struct BorrowTab: View {
                 content
             }
         }
-        // IB updates its file about every 15 minutes; `refreshIfStale` loads it no more often.
-        .task {
-            while !Task.isCancelled {
-                broker.borrowRates.refreshIfStale()
-                try? await Task.sleep(for: .seconds(60))
-            }
-        }
         .onChange(of: symbol) { sharesText = "" }
+    }
+
+    /// Keeps IB's borrow rates loaded (the Orders panel runs it, for the tab's label too). IB updates
+    /// its file about every 15 minutes; `refreshIfStale` loads it no more often.
+    static func keepRatesLoaded(_ broker: Broker) async {
+        while !Task.isCancelled {
+            broker.borrowRates.refreshIfStale()
+            try? await Task.sleep(for: .seconds(60))
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -49,7 +51,7 @@ struct BorrowTab: View {
             Text(symbol).fontWeight(.semibold)
             if let rate { Text(rate.name.capitalized).foregroundStyle(.secondary) }
             Spacer(minLength: 2)
-            status(level, rate: rate)
+            ShortStatus(level: level)
         }
         .borrowRow()
 
@@ -104,21 +106,6 @@ struct BorrowTab: View {
         .borrowRow()
     }
 
-    /// The chart header's red S, spelled out: IB's shortable tick, live.
-    private func status(_ level: Double?, rate: BorrowRate?) -> some View {
-        Group {
-            switch level {
-            case let l? where l > 2.5: Text("Shortable").foregroundStyle(.red)
-            case let l? where l > 1.5: Text("Hard to borrow").foregroundStyle(.orange)
-            case .some: Text("Not shortable").foregroundStyle(.secondary)
-            case nil: Text("—").foregroundStyle(.secondary)
-            }
-        }
-        .fontWeight(.semibold)
-        .help("IB's live shortable status: shortable (1,000+ shares to lend), hard to borrow "
-              + "(only if IB can locate shares) or not shortable")
-    }
-
     private func row<Value: View>(_ label: String, @ViewBuilder value: () -> Value) -> some View {
         HStack(spacing: 4) {
             Text(label).foregroundStyle(.secondary)
@@ -140,6 +127,32 @@ struct BorrowTab: View {
     private func yearly(_ percent: Double?) -> String {
         percent.map { $0.formatted(.number.precision(.fractionLength(2))) + "% / yr" } ?? "—"
     }
+}
+
+/// The chart header's red S, spelled out: IB's shortable tick, live. Also on the Borrow tab's label.
+struct ShortStatus: View {
+    let level: Double?
+
+    var body: some View {
+        Group {
+            switch level {
+            case let l? where l > 2.5: Text("Shortable").foregroundStyle(.red)
+            case let l? where l > 1.5: Text("Hard to borrow").foregroundStyle(.orange)
+            case .some: Text("Not shortable").foregroundStyle(.secondary)
+            case nil: Text("—").foregroundStyle(.secondary)
+            }
+        }
+        .fontWeight(.semibold)
+        .help("IB's live shortable status: shortable (1,000+ shares to lend), hard to borrow "
+              + "(only if IB can locate shares) or not shortable")
+    }
+}
+
+/// Shares IB has to lend, compact ("1.2M"): live, else from IB's short stock file (">10M" where it caps the figure).
+@MainActor func lendableShares(_ symbol: String, broker: Broker) -> String? {
+    if let live = broker.shortableShares[symbol] { return live.formatted(.number.notation(.compactName)) }
+    guard let rate = broker.borrowRates.rates[symbol], let available = rate.available else { return nil }
+    return (rate.availableIsCapped ? ">" : "") + available.formatted(.number.notation(.compactName))
 }
 
 private extension View {
