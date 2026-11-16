@@ -12,6 +12,18 @@ extension Workspace {
         isChartSelected = true
     }
 
+    /// Double-clicking a position: selects the grid's chart showing its stock (the first, in reading
+    /// order), or with none, loads the stock into the grid's last chart and selects that.
+    func focusPosition(_ symbol: String, broker: Broker) {
+        let s = symbol.uppercased()
+        if let id = mainCells.first(where: { chart(id: $0)?.symbol == s }) {
+            selectedChartID = id
+        } else if let id = mainCells.last, let last = chart(id: id) {
+            loadByHand(s, into: last, broker: broker)
+            selectedChartID = id
+        }
+    }
+
     /// Loads a symbol picked by hand: the main-window chart keeps it and its cell instead of following
     /// the gainers, until Reset. A chart that already shows it just keeps it; next to another chart
     /// showing it, it takes the other of 1m / 5m (see `timeframe(showing:in:otherwise:)`).

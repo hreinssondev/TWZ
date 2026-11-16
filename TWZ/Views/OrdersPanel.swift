@@ -12,6 +12,7 @@
 //  and Borrow, what shorting the selected chart's stock takes (see BorrowTab).
 //  Clicking empty space in the Orders or Positions column deselects the chart, so no hotkey or
 //  order shortcut has a symbol to act on until a chart is clicked again.
+//  Double-clicking a position selects the chart showing its stock, or loads it into the grid's last chart.
 //
 
 import SwiftUI
@@ -240,7 +241,10 @@ struct OrdersPanel: View {
             let valueNOK = broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * $0 }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
-                    symbolButton(p.symbol, color: sideColor(p.quantity > 0))
+                    // Double-click is told apart from the symbol's single click (loading it into the selected chart).
+                    Text(p.symbol).fontWeight(.semibold).foregroundStyle(sideColor(p.quantity > 0))
+                        .onTapGesture(count: 2) { workspace.focusPosition(p.symbol, broker: broker) }
+                        .onTapGesture { workspace.loadIntoSelectedChart(p.symbol, broker: broker) }
                     Spacer(minLength: 2)
                     Text(Fmt.money(pnl, signed: true)).foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
                 }
@@ -253,6 +257,9 @@ struct OrdersPanel: View {
                 }
                 .font(.system(size: 10).monospacedDigit())
             }
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { workspace.focusPosition(p.symbol, broker: broker) }
+            .help("Double-click to show \(p.symbol)'s chart")
             .rowStyle()
         }
     }
