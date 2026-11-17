@@ -169,7 +169,7 @@ struct GridSliders: View {
     @State private var settleTask: Task<Void, Never>?
 
     var body: some View {
-        HStack {
+        HStack(spacing: 4) {
             if showsSize {
                 sizeSlider("c", value: pendingColumns ?? columns, range: columnRange) { pendingColumns = $0 }
                 sizeSlider("r", value: pendingRows ?? rows, range: rowRange) { pendingRows = $0 }
@@ -180,59 +180,35 @@ struct GridSliders: View {
     }
 
     private var spaceSlider: some View {
-        HStack(spacing: 4) {
-            Text("Space")
-                .font(.system(size: 10))
-                .foregroundStyle(Color.secondary.opacity(0.7))
-            // Rounds to whole bars itself, for the same reason as Zoom.
-            MiniSlider(value: Binding(get: { rightSpace }, set: { rightSpace = $0.rounded() }),
-                       range: RightSpace.range)
-                .frame(width: 60)
-            Text("\(Int(rightSpace))")
-                .font(.system(size: 10).monospacedDigit())
-                .foregroundStyle(Color.secondary.opacity(0.7))
-                .frame(width: 16, alignment: .leading)
-        }
-        .help("Empty bars between the latest candle and the price axis, on every chart")
+        // Rounds to whole bars itself, for the same reason as Zoom.
+        MiniSlider(label: "Space", valueText: "\(Int(rightSpace))",
+                   value: Binding(get: { rightSpace }, set: { rightSpace = $0.rounded() }),
+                   range: RightSpace.range)
+            .frame(width: 64)
+            .help("Empty bars between the latest candle and the price axis, on every chart")
     }
 
     private var zoomSlider: some View {
-        HStack(spacing: 4) {
-            Text("Zoom")
-                .font(.system(size: 10))
-                .foregroundStyle(Color.secondary.opacity(0.7))
-            // Runs zoomed out → in, i.e. from the most bars to the fewest, in 10s.
-            MiniSlider(value: Binding(get: { -zoom }, set: { zoom = -($0 / 10).rounded() * 10 }),
-                       range: -ChartModel.maxVisibleBars...(-30))
-                .frame(width: 90)
-            Text("\(Int(zoom))")
-                .font(.system(size: 10).monospacedDigit())
-                .foregroundStyle(Color.secondary.opacity(0.7))
-                .frame(width: 26, alignment: .leading)
-        }
-        .help(zoomHelp)
+        // Runs zoomed out → in, i.e. from the most bars to the fewest, in 10s.
+        MiniSlider(label: "Zoom", valueText: "\(Int(zoom))",
+                   value: Binding(get: { -zoom }, set: { zoom = -($0 / 10).rounded() * 10 }),
+                   range: -ChartModel.maxVisibleBars...(-30))
+            .frame(width: 84)
+            .help(zoomHelp)
     }
 
     private func sizeSlider(_ label: String, value: Int, range: ClosedRange<Int>, set: @escaping (Int) -> Void) -> some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(Color.secondary.opacity(0.7))
-            MiniSlider(
-                value: Binding(get: { Double(value) }, set: { new in
-                    let rounded = Int(new.rounded())
-                    guard rounded != value else { return }
-                    set(rounded)
-                    scheduleSettle()
-                }),
-                range: Double(range.lowerBound)...Double(range.upperBound)
-            )
-            .frame(width: 60)
-            Text("\(value)")
-                .font(.system(size: 10).monospacedDigit())
-                .foregroundStyle(Color.secondary.opacity(0.7))
-                .frame(width: 10, alignment: .leading)
-        }
+        MiniSlider(
+            label: label, valueText: "\(value)",
+            value: Binding(get: { Double(value) }, set: { new in
+                let rounded = Int(new.rounded())
+                guard rounded != value else { return }
+                set(rounded)
+                scheduleSettle()
+            }),
+            range: Double(range.lowerBound)...Double(range.upperBound)
+        )
+        .frame(width: 44)
     }
 
     /// Restarts the wait on every slider move to a new size; once it runs out, the grid takes the sliders' size.
@@ -249,42 +225,52 @@ struct GridSliders: View {
     }
 }
 
-/// A bare slider in the grays of the chips beside it: a hairline track and a short tick for the
-/// value, a shade brighter while hovered or dragged. Clicking the track jumps there; the binding rounds.
+/// A slider drawn like the timeframe switch's chips: a small box holding its label and value, filled
+/// from the left up to the value in the selected chip's shade. Dragging across it (anywhere, sideways)
+/// changes the value by how far it moves, so a click alone changes nothing; the binding rounds.
 struct MiniSlider: View {
+    let label: String
+    let valueText: String
     @Binding var value: Double
     let range: ClosedRange<Double>
 
     @State private var isHovering = false
-    @State private var isDragging = false
-
-    private static let tickWidth: CGFloat = 2
+    @State private var dragStart: Double?
+    @State private var width: CGFloat = 1
 
     var body: some View {
-        GeometryReader { geo in
-            let travel = max(1, geo.size.width - Self.tickWidth)
-            let span = range.upperBound - range.lowerBound
-            let fraction = span > 0 ? (min(max(value, range.lowerBound), range.upperBound) - range.lowerBound) / span : 0
-            let tickX = Self.tickWidth / 2 + travel * fraction
-            ZStack {
-                Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
-                Capsule()
-                    .fill(isHovering || isDragging ? Color.primary : Color.secondary.opacity(0.7))
-                    .frame(width: Self.tickWidth, height: 8)
-                    .position(x: tickX, y: geo.size.height / 2)
-            }
-            .contentShape(Rectangle())
-            .onHover { isHovering = $0 }
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { drag in
-                        isDragging = true
-                        let f = min(max((drag.location.x - Self.tickWidth / 2) / travel, 0), 1)
-                        value = range.lowerBound + f * span
-                    }
-                    .onEnded { _ in isDragging = false }
-            )
+        let active = isHovering || dragStart != nil
+        let span = range.upperBound - range.lowerBound
+        let fraction = span > 0 ? (min(max(value, range.lowerBound), range.upperBound) - range.lowerBound) / span : 0
+        HStack(spacing: 4) {
+            Text(label)
+            Spacer(minLength: 0)
+            Text(valueText).fontWeight(active ? .semibold : .regular)
         }
-        .frame(height: 14)
+        .font(.system(size: 10).monospacedDigit())
+        .foregroundStyle(active ? Color.primary : Color.secondary.opacity(0.7))
+        .lineLimit(1)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                Color.primary.opacity(0.05)
+                Color.primary.opacity(active ? 0.16 : 0.12).frame(width: width * fraction)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = max(1, $0) }
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .pointerStyle(.columnResize)
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { drag in
+                    let start = dragStart ?? value
+                    dragStart = start
+                    value = min(max(start + drag.translation.width / width * span, range.lowerBound), range.upperBound)
+                }
+                .onEnded { _ in dragStart = nil }
+        )
     }
 }
