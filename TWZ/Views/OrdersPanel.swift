@@ -11,7 +11,7 @@
 //  Filled orders and round trips name what placed them: the hotkey's price (Mid, Last, Bid, Ask),
 //  Mkt, ⌥-click, or SL / TP.
 //  A working order's row has a thin bar along its bottom that fills to the right as the order fills.
-//  Below them, behind a draggable divider, two tabs: today's round trips with their profit or loss,
+//  Below them, behind a draggable divider, two tabs: today's round trips with their profit or loss (dimmed),
 //  and Borrow, what shorting the selected chart's stock takes (see BorrowTab).
 //  Clicking empty space in the Orders or Positions column deselects the chart, so no hotkey or
 //  order shortcut has a symbol to act on until a chart is clicked again.
@@ -38,6 +38,8 @@ struct OrdersPanel: View {
 
     private static let minColumnWidth: CGFloat = 60
     private static let minSectionHeight: CGFloat = 40
+    /// Done orders and round trips are dimmed this much.
+    private static let doneOpacity = 0.45
 
     var body: some View {
         GeometryReader { geo in
@@ -245,7 +247,7 @@ struct OrdersPanel: View {
     private func filledRow(_ g: FillGroup) -> some View {
         let f = g.fill
         let valueNOK = broker.usdNok.map { f.shares * f.price * $0 }
-        let dim = 0.45
+        let dim = Self.doneOpacity
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
                 symbolButton(f.symbol, onDoubleClick: { workspace.focusOrder(f.symbol, broker: broker) })
@@ -383,6 +385,7 @@ struct OrdersPanel: View {
                     }
                     .font(.system(size: 10).monospacedDigit())
                 }
+                .opacity(Self.doneOpacity)
                 .rowStyle()
             }
         }
