@@ -1374,55 +1374,58 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// small order gives the available funds and margin per share; margin per share can rise with
     /// the position's size, so a second near the largest size allowed refines it. Takes a second or
     /// two; `completion` runs on the engine queue, and not at all if IB can't size it (`lastMessage` says why).
-    func sizeWhatIf(symbol rawSymbol: String, at clickedPrice: Double, fraction: Double,
+    /// `quiet` (the hover P/L's sizing) leaves `lastMessage` alone.
+    func sizeWhatIf(symbol rawSymbol: String, at clickedPrice: Double, fraction: Double, quiet: Bool = false,
                     completion: @escaping @Sendable (WhatIfSize) -> Void) {
         let symbol = rawSymbol.uppercased()
+        func say(_ message: String) { if !quiet { lastMessage = message } }
+        let why = quiet ? "margin preview for the hover P/L" : "margin preview for a ⌃-click what-if"
         guard apiReady else {
-            lastMessage = "Not connected to IB Gateway"
+            say("Not connected to IB Gateway")
             return
         }
         guard !symbol.isEmpty else {
-            lastMessage = "Load a symbol into the chart first"
+            say("Load a symbol into the chart first")
             return
         }
         guard clickedPrice > 0 else {
-            lastMessage = "\(symbol) what-if: no price there"
+            say("\(symbol) what-if: no price there")
             return
         }
         let price = Self.roundToTick(clickedPrice)
-        lastMessage = "\(symbol) what-if: asking IB for the margin…"
-        previewMargin(symbol, shares: max(1, (1000 / price).rounded(.down)), price: price) { [self] first in
+        say("\(symbol) what-if: asking IB for the margin…")
+        previewMargin(symbol, shares: max(1, (1000 / price).rounded(.down)), price: price, why: why) { [self] first in
             let small: MarginPreview
             switch first {
             case .success(let preview): small = preview
             case .failure(let failure):
-                lastMessage = "\(symbol) what-if: \(failure.reason)"
+                say("\(symbol) what-if: \(failure.reason)")
                 return
             }
             guard small.maxShares >= 1 else {
-                lastMessage = "\(symbol) what-if: no buying power left for a long"
+                say("\(symbol) what-if: no buying power left for a long")
                 return
             }
-            previewMargin(symbol, shares: max(1, (small.maxShares * 0.95).rounded(.down)), price: price) { [self] second in
+            previewMargin(symbol, shares: max(1, (small.maxShares * 0.95).rounded(.down)), price: price, why: why) { [self] second in
                 // Without the second answer, the small order's margin per share is the best there is.
                 let preview = (try? second.get()) ?? small
                 let shares = (preview.maxShares * fraction).rounded(.down)
                 guard shares >= 1 else {
-                    lastMessage = "\(symbol) what-if: no buying power left for a long"
+                    say("\(symbol) what-if: no buying power left for a long")
                     return
                 }
-                lastMessage = "\(symbol) what-if: BUY \(Fmt.shares(shares)) @ \(Fmt.price(price)), "
-                    + "\(Int((fraction * 100).rounded()))% of the \(Fmt.shares(preview.maxShares)) IB's margin allows"
+                say("\(symbol) what-if: BUY \(Fmt.shares(shares)) @ \(Fmt.price(price)), "
+                    + "\(Int((fraction * 100).rounded()))% of the \(Fmt.shares(preview.maxShares)) IB's margin allows")
                 completion(WhatIfSize(price: price, shares: shares, maxShares: preview.maxShares))
             }
         }
     }
 
     /// Asks IB what buying `shares` at `price` would do to the account's margin, without placing the order.
-    private func previewMargin(_ symbol: String, shares: Double, price: Double,
+    private func previewMargin(_ symbol: String, shares: Double, price: Double, why: String,
                                _ reply: @escaping (Result<MarginPreview, PreviewFailure>) -> Void) {
         guard let id = placeOrder(symbol: symbol, action: "BUY", quantity: shares, limit: price,
-                                  whatIf: true, why: "margin preview for a ⌃-click what-if") else { return }
+                                  whatIf: true, why: why) else { return }
         whatIfOrderIds.insert(id)
         marginPreviews[id] = reply
         let current = session

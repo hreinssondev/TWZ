@@ -283,11 +283,15 @@ struct TradingChart: View {
                       !broker.protectiveFillsNow(symbol: chart.symbol, kind: kind, at: price) else { return nil }
                 return protectiveColor(kind)
             },
-            controlHoverPnL: { price in
-                guard let p = broker.positions[chart.symbol], p.quantity != 0 else { return nil }
-                return (price - p.avgCost) * p.quantity
+            hoverPnL: { price in
+                // The open position's if it closed there, else the what-if line's, else a pretend buy
+                // at the last price, sized like a ⌃-click what-if.
+                if let p = broker.positions[chart.symbol], p.quantity != 0 { return (price - p.avgCost) * p.quantity }
+                if let whatIf = workspace.whatIfs[chart.symbol] { return whatIf.pnl(at: price) }
+                guard let size = broker.hoverSizes[chart.symbol], let last = broker.quote(chart.symbol)?.last else { return nil }
+                return (price - last) * size.shares
             },
-            whatIfPnL: { price in workspace.whatIfs[chart.symbol]?.pnl(at: price) },
+            onHover: { broker.refreshHoverSize(symbol: chart.symbol) },
             onCancelOrder: { id in
                 if id == WhatIf.lineId {
                     workspace.whatIfs[chart.symbol] = nil

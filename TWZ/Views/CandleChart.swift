@@ -14,10 +14,9 @@
 //  each can be turned off, and their thickness set, in Settings › Appearance.
 //  Trades (off by default): the day's fills in the symbol, a green ▲ under each buy and a red ▼
 //  over each sell, tip at the fill price, on the bar the fill came in.
-//  Holding ⌃ over the price area with a position open shows, left of the price tag, the P/L if the
-//  position closed at that price.
-//  ⌃-clicking with no position open places a what-if buy at that price instead (see `WhatIf`), and
-//  ⌃-clicking its line removes it; hovering the price area shows its P/L at the hovered price.
+//  Hovering the price area shows, left of the price tag, the P/L at the hovered price (see `hoverPnL`).
+//  ⌃-clicking with no position open places a what-if buy at that price (see `WhatIf`), and
+//  ⌃-clicking its line removes it.
 //
 
 import SwiftUI
@@ -59,10 +58,10 @@ struct CandleChart: View {
     var onControlClickLine: ((Int) -> Bool)?
     /// Price tag color while ⌃ is held: what a ⌃-click there would place (nil: nothing).
     var controlClickColor: ((Double) -> Color?)?
-    /// While ⌃ is held: the open position's P/L if it closed at that price (nil: no position).
-    var controlHoverPnL: ((Double) -> Double?)?
-    /// While hovering: the what-if buy's P/L if sold at that price (nil: no what-if).
-    var whatIfPnL: ((Double) -> Double?)?
+    /// While hovering the price area: the P/L if sold at that price (nil: none to show).
+    var hoverPnL: ((Double) -> Double?)?
+    /// While the pointer is over the chart, on every move.
+    var onHover: (() -> Void)?
     /// Double-click on an order line: called with its order id.
     var onCancelOrder: ((Int) -> Void)?
     /// Any left click on the chart, modified or not (it still pans, zooms or places orders as usual).
@@ -110,6 +109,7 @@ struct CandleChart: View {
             .onContinuousHover { phase in
                 if case .active(let p) = phase {
                     hover = p
+                    onHover?()
                     optionHeld = NSEvent.modifierFlags.contains(.option)
                     controlHeld = NSEvent.modifierFlags.contains(.control)
                 } else {
@@ -515,9 +515,7 @@ struct CandleChart: View {
                     tagColor = LineColors.resolve(altClickHex, default: LineColors.defaultAltClick)
                 }
                 drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor)
-                if controlHeld, let pnl = controlHoverPnL?(hoverPrice) {
-                    drawPnLTag(in: &ctx, pnl: pnl, y: hover.y, plot: plot)
-                } else if let pnl = whatIfPnL?(hoverPrice) {
+                if let pnl = hoverPnL?(hoverPrice) {
                     drawPnLTag(in: &ctx, pnl: pnl, y: hover.y, plot: plot)
                 }
             }
