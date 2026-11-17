@@ -569,9 +569,9 @@ nonisolated enum Fmt {
         return (v < 0 ? "-" : "") + s
     }
 
-    /// Whole kroner, e.g. "12,346 NOK".
+    /// Whole kroner, e.g. "12346".
     static func nok(_ v: Double) -> String {
-        String(Int(v.rounded())) + " NOK"
+        String(Int(v.rounded()))
     }
 
     static func price(_ v: Double?) -> String {
