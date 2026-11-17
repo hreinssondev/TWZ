@@ -256,14 +256,12 @@ struct OrdersPanel: View {
             .foregroundStyle(.secondary)
             .opacity(dim)
             HStack(spacing: 4) {
-                Group {
-                    if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(f.side == "BOT")) }
-                    Text("\(Fmt.shares(f.shares)) \(g.order?.priceSummary ?? "")")
-                }
-                .opacity(dim)
+                if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(f.side == "BOT")) }
+                Text("\(Fmt.shares(f.shares)) \(g.order?.priceSummary ?? "")")
                 Text("@ \(Fmt.price(f.price))").fontWeight(.semibold)
                 Spacer(minLength: 0)
             }
+            .opacity(dim)
             .font(.system(size: 10).monospacedDigit())
         }
         .contentShape(Rectangle())
