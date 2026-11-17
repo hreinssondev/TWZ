@@ -372,8 +372,11 @@ struct OrdersPanel: View {
                     }
                     HStack(spacing: 4) {
                         let prices = "\(t.entryPrice.map { Fmt.price($0) } ?? "earlier") → \(t.exitPrice.map { Fmt.price($0) } ?? "…")"
-                        // The position's dollar value at the entry price (the exit's for shares held from before today).
-                        let value = (t.entryPrice ?? t.exitPrice).map { "$" + Int((t.entryShares * $0).rounded()).formatted() }
+                        // The position's value in NOK at the entry price (the exit's for shares held from before today);
+                        // in dollars until there's an exchange rate.
+                        let value = (t.entryPrice ?? t.exitPrice).map { p in
+                            broker.usdNok.map { Fmt.nok(t.entryShares * p * $0) } ?? "$" + Int((t.entryShares * p).rounded()).formatted()
+                        }
                         Text(value.map { "\($0) - \(prices)" } ?? prices)
                         Spacer(minLength: 2)
                         Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
