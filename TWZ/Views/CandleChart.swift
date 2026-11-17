@@ -508,14 +508,12 @@ struct CandleChart: View {
                 // Holding ⌥ turns the price tag white: an alt-click buys there.
                 // Holding ⌃ turns it red or green: a ⌃-click places a stop loss or take profit there.
                 var tagColor = hoverColor
-                var textColor = Color.white
                 if controlHeld, let color = controlClickColor?(hoverPrice) {
                     tagColor = color
                 } else if optionHeld, onAltClick != nil {
                     tagColor = .white
-                    textColor = .black
                 }
-                drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor, textColor: textColor)
+                drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor)
                 if let pnl = hoverPnL?(hoverPrice) {
                     drawPnLTag(in: &ctx, pnl: pnl, y: hover.y, plot: plot)
                 }
@@ -657,11 +655,13 @@ struct CandleChart: View {
         drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside)
     }
 
-    /// `opacity` fades only the box, not its white text; at the opacity slider's minimum there's no box.
+    /// `opacity` fades only the box, not its text; at the opacity slider's minimum there's no box.
+    /// The text is white, or black on a light box (white ⌥-click lines, say).
     /// `inside` puts the box in the chart, just left of the price axis, instead of on it.
     private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
-                         textColor: Color = .white, opacity: Double = 1, inside: Bool = false) {
+                         opacity: Double = 1, inside: Bool = false) {
         let boxed = !PriceAxis.hidesLastPriceBox(opacity)
+        let textColor: Color = boxed && opacity >= 0.5 && color.isLight ? .black : .white
         let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(textColor))
         let textSize = resolved.measure(in: CGSize(width: 300, height: 40))
         let rect = inside

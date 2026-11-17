@@ -156,8 +156,7 @@ enum LineColors {
     static let showLastPriceLineKey = "showLastPriceLine"
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
-    /// Bright orange, a shade hotter than the default order line orange.
-    static let defaultAltClick = Color(red: 1.0, green: 0.45, blue: 0.0)
+    static let defaultAltClick = Color.white
     static let defaultHover = Color.gray
     static let defaultStopLoss = Color.red
     static let defaultTakeProfit = Color.green
@@ -219,6 +218,12 @@ extension Color {
         let s = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
         self.init(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
+    }
+
+    /// Light enough to need dark text on it.
+    var isLight: Bool {
+        guard let c = NSColor(self).usingColorSpace(.sRGB) else { return false }
+        return 0.299 * c.redComponent + 0.587 * c.greenComponent + 0.114 * c.blueComponent > 0.7
     }
 
     var hex: String {
