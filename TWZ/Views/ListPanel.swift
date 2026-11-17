@@ -102,7 +102,7 @@ struct ListPanel: View {
                 Button {
                     workspace.loadList(symbols, timeframe: gridTimeframe, broker: broker)
                 } label: {
-                    Image(systemName: "square.and.arrow.down")
+                    Image(systemName: "arrow.down")
                         .font(.system(size: 10))
                         .frame(width: 16, height: 16)
                         .contentShape(Rectangle())
