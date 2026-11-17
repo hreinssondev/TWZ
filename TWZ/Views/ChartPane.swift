@@ -292,7 +292,7 @@ struct TradingChart: View {
                 if id == WhatIf.lineId {
                     workspace.whatIfs[chart.symbol] = nil
                 } else {
-                    broker.cancelOrder(id, why: "chart: double-clicked the order line")
+                    broker.cancelOrder(id, why: "chart: clicked the order line")
                 }
             },
             onClick: { dismissedTrip = closedTrip?.id ?? dismissedTrip }
@@ -355,20 +355,22 @@ struct TradingChart: View {
         if let whatIf = workspace.whatIfs[chart.symbol] {
             // ⌃-clicked with no position: a line at the pretend buy's price with, on the axis, what it's
             // worth in NOK (80% of what IB's margin allows; "W" until the rate is in), just left of the
-            // axis where the last price box would cover it; ⌃-click or double-click removes it.
+            // axis where the last price box would cover it; a click on it removes it.
             let valueNOK = broker.usdNok.map { whatIf.shares * whatIf.price * $0 }
             lines.append(PriceLine(price: whatIf.price, color: Self.whatIfColor, label: "W", orderId: WhatIf.lineId,
-                                   movesAsideForLastPrice: true, axisText: valueNOK.map(OrderAmount.format) ?? "W"))
+                                   movesAsideForLastPrice: true, axisText: valueNOK.map(OrderAmount.format) ?? "W",
+                                   cancelsOnClick: true))
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
             let side = o.action == "BUY" ? "B" : "S"
             if let p = broker.protectiveOrders[o.id] {
                 // Placed by ⌃-clicking the chart: a stop loss (at its stop) or take profit line, just the
-                // price in its box (in the chart beside the axis, as for every order).
+                // price in its box (in the chart beside the axis, as for every order); a click cancels it.
                 let isStop = p.kind == .stopLoss
                 if let price = isStop ? o.auxPrice : o.limitPrice {
                     lines.append(PriceLine(price: price, color: protectiveColor(p.kind),
-                                           label: "", dashed: isStop ? stopLossDashed : takeProfitDashed, orderId: o.id))
+                                           label: "", dashed: isStop ? stopLossDashed : takeProfitDashed, orderId: o.id,
+                                           cancelsOnClick: true))
                 }
                 continue
             }

@@ -6,7 +6,8 @@
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
 //  around the cursor; a diagonal swipe does both. Mouse: wheel zooms, shift-wheel pans.
 //  Drag pans freely, in time and price. Right-click resets the view, as does double-clicking
-//  anywhere but an order line; double-clicking an order line cancels that order.
+//  anywhere but an order line; double-clicking an order line cancels that order, and a single click
+//  does for the lines placed by ⌃-click (stop loss, take profit, what-if).
 //  Intraday charts shade the sessions outside regular hours: pre-market and after hours in grey,
 //  overnight in indigo.
 //  Indicators: SMA 9 and SMA 21 on every chart, plus VWAP (from 04:00 ET) on intraday charts;
@@ -35,6 +36,8 @@ struct PriceLine {
     var movesAsideForLastPrice = false
     /// Shown on the axis in place of the label and price.
     var axisText: String?
+    /// A single click on the line cancels it too (the ⌃-click lines: stop loss, take profit, what-if).
+    var cancelsOnClick = false
 }
 
 /// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
@@ -120,6 +123,9 @@ struct CandleChart: View {
                 } else {
                     resetView()
                 }
+            }
+            .onTapGesture { location in
+                if let id = orderLine(near: location, size: geo.size, singleClick: true) { onCancelOrder?(id) }
             }
             .background(ScrollCatcher(
                 onScroll: { dx, dy, location in
@@ -313,18 +319,21 @@ struct CandleChart: View {
                         anchor: anchor, anchorX: anchorX, start: start, end: end, lo: lo, hi: hi, rest: rest)
     }
 
-    /// The order line closest to `point` vertically, if one is within a few points of it.
-    private func orderLine(near point: CGPoint, size: CGSize) -> Int? {
+    /// The order line closest to `point` vertically, if one is within a few points of it; for a
+    /// `singleClick`, only if that closest line cancels on a single click.
+    private func orderLine(near point: CGPoint, size: CGSize, singleClick: Bool = false) -> Int? {
         guard onCancelOrder != nil, let v = viewport(size: size),
               point.y >= v.plot.minY, point.y <= v.plot.maxY else { return nil }
-        return lines
+        let closest = lines
             .compactMap { line in
                 line.orderId.flatMap { id in
-                    line.price > v.lo && line.price < v.hi ? (id, abs(v.y(line.price) - point.y)) : nil
+                    line.price > v.lo && line.price < v.hi ? (id, abs(v.y(line.price) - point.y), line.cancelsOnClick) : nil
                 }
             }
             .filter { $0.1 <= 8 }
-            .min { $0.1 < $1.1 }?.0
+            .min { $0.1 < $1.1 }
+        guard let closest, !singleClick || closest.2 else { return nil }
+        return closest.0
     }
 
     /// The price under a point in the price area, or nil outside it.
