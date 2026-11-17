@@ -5,6 +5,14 @@
 
 import SwiftUI
 
+extension Broker {
+    /// A chart header's tint: green while long the stock, red while short, none while flat.
+    func positionTint(_ symbol: String) -> Color {
+        guard let quantity = positions[symbol]?.quantity, quantity != 0 else { return .clear }
+        return (quantity > 0 ? Color.green : Color.red).opacity(0.3)
+    }
+}
+
 extension Workspace {
     /// Loads a symbol into the selected chart (the last selected one while none is) and selects it.
     func loadIntoSelectedChart(_ symbol: String, broker: Broker) {
@@ -74,8 +82,8 @@ extension Workspace {
     }
 }
 
-/// A main-window chart: its symbol field, position, ⚡ while fast (⌘↩), a red S if shortable, SSR under
-/// the short sale restriction and its own timeframe switch
+/// A main-window chart: its symbol field, position (the header green while long, red while short), ⚡ while
+/// fast (⌘↩), a red S if shortable, SSR under the short sale restriction and its own timeframe switch
 /// over a chart that trades. Clicking it selects it; the selected chart is outlined, and so, a little
 /// fainter, is any other chart showing the same stock, since hotkeys go to that stock either way.
 struct ChartPane: View {
@@ -209,6 +217,7 @@ struct ChartPane: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
+        .background(broker.positionTint(chart.symbol))
     }
 
     private var timeframeMenu: some View {

@@ -299,5 +299,6 @@ struct SecondaryChartPane: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
+        .background(broker.positionTint(chart.symbol))
     }
 }
