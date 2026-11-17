@@ -229,7 +229,7 @@ struct OrdersPanel: View {
             HStack(spacing: 4) {
                 if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(o.action == "BUY")) }
                 // Shares still to fill; the bar below shows how much has filled.
-                Text("\(Fmt.shares(o.quantity - o.filled)) \(o.priceSummary)")
+                Text("\(Fmt.shares(o.quantity - o.filled))\(o.priceSummary)")
                 Spacer(minLength: 0)
             }
             .font(.system(size: 10).monospacedDigit())
@@ -257,7 +257,7 @@ struct OrdersPanel: View {
             .opacity(dim)
             HStack(spacing: 4) {
                 if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(f.side == "BOT")) }
-                Text("\(Fmt.shares(f.shares)) \(g.order?.priceSummary ?? "")")
+                Text("\(Fmt.shares(f.shares))\(g.order?.priceSummary ?? "")")
                 Text("@ \(Fmt.price(f.price))").fontWeight(.semibold)
                 Spacer(minLength: 0)
             }
