@@ -4,7 +4,8 @@
 //
 //  Live IB scanner list (gainers, losers, after-hours gainers, most active by
 //  dollar volume), with each symbol's % change over the last 5 minutes and a green dot after the
-//  symbols traded today. The price columns' widths drag from their header's left edge (double-click
+//  symbols traded today. The load button beside the filters puts the list's symbols into the chart
+//  grid, in the list's order, until the account bar's Reset (see `ChartGrid`). The price columns' widths drag from their header's left edge (double-click
 //  resets) and are kept per list; a list narrower than its columns clips them on the right. Clicking a row loads it into the selected chart, which keeps it until the
 //  account bar's Reset (see `ChartGrid`). Prices refresh every
 //  2 seconds rather than every tick, which keeps the UI free for the charts.
@@ -21,6 +22,7 @@ struct ListPanel: View {
     /// One list across the lists' space instead of two (see `ContentView`); the button beside the
     /// filters switches.
     @AppStorage(ListPanel.singleKey) private var isSingle = false
+    @AppStorage(MainGrid.timeframeKey) private var gridTimeframe: Timeframe = .m1
     @State private var showFilter = false
     @AppStorage private var lastWidth: Double
     @AppStorage private var changeWidth: Double
@@ -96,6 +98,19 @@ struct ListPanel: View {
                 }
                 .buttonStyle(.plain)
                 .help(isSingle ? "Split into two lists" : "One list across both")
+
+                Button {
+                    workspace.loadList(symbols, timeframe: gridTimeframe, broker: broker)
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 10))
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .disabled(symbols.isEmpty)
+                .help("Load this list into the chart grid, top first (until Reset)")
             }
             .padding(6)
 

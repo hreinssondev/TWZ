@@ -10,7 +10,7 @@
 //  selection moves with it, and stays on it if it gets a new stock.
 //  A chart given a stock by hand (a list, its symbol field) keeps it and its cell until the account
 //  bar's Reset: its stock stands in for the gainer of that cell, which isn't shown, and no other
-//  chart moves. A stock shown twice (set by hand, and a gainer in its own cell) is on 5m in the second
+//  chart moves. A list's load button sets the whole grid by hand to the list's symbols, in its order. A stock shown twice (set by hand, and a gainer in its own cell) is on 5m in the second
 //  chart to show it next to the first's 1m, or 1m next to anything else; both are highlighted while
 //  either is selected (see `ChartPane`).
 //  Every chart trades like any other (see `ChartPane`); clicking one selects it, so hotkeys and order
@@ -181,6 +181,18 @@ extension Workspace {
                      into: chart, broker: broker)
             }
         }
+    }
+
+    /// A list's load button: the grid shows `symbols` in reading order, every chart keeping its stock
+    /// until Reset as if set by hand. A chart already showing one moves to its cell instead of
+    /// reloading; cells past the list's end go back to following the gainers.
+    func loadList(_ symbols: [String], timeframe: Timeframe, broker: Broker) {
+        var seen: Set<String> = []
+        let count = min(symbols.filter { !$0.isEmpty && seen.insert($0).inserted }.count, mainCells.count)
+        guard count > 0 else { return }
+        manualChartIDs = []
+        followGainers(symbols, timeframe: timeframe, broker: broker)
+        manualChartIDs = Set(mainCells.prefix(count))
     }
 
     /// The timeframe for `chart` about to show `symbol`: where another chart in the grid already
