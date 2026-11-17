@@ -213,7 +213,7 @@ struct OrdersPanel: View {
     private func workingRow(_ o: OrderRow) -> some View {
         // Value in NOK of the shares still to fill, at the order's price (the last price for market orders).
         let price = o.limitPrice ?? o.auxPrice ?? broker.quote(o.symbol)?.last
-        let valueNOK = price.flatMap { p in broker.usdNok.map { (o.quantity - o.filled) * p * $0 } }
+        let valueNOK = price.flatMap { p in (o.usdNok ?? broker.usdNok).map { (o.quantity - o.filled) * p * $0 } }
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
                 symbolButton(o.symbol, onDoubleClick: { workspace.focusOrder(o.symbol, broker: broker) })
@@ -246,7 +246,7 @@ struct OrdersPanel: View {
     /// A done order laid out like a working one, dimmed, with its fill time and average fill price.
     private func filledRow(_ g: FillGroup) -> some View {
         let f = g.fill
-        let valueNOK = broker.usdNok.map { f.shares * f.price * $0 }
+        let valueNOK = (f.usdNok ?? broker.usdNok).map { f.shares * f.price * $0 }
         let dim = Self.doneOpacity
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
@@ -377,7 +377,7 @@ struct OrdersPanel: View {
                         // The position's value in NOK at the entry price (the exit's for shares held from before today);
                         // in dollars until there's an exchange rate.
                         let value = (t.entryPrice ?? t.exitPrice).map { p in
-                            broker.usdNok.map { Fmt.nok(t.entryShares * p * $0) } ?? "$" + Int((t.entryShares * p).rounded()).formatted()
+                            (t.usdNok ?? broker.usdNok).map { Fmt.nok(t.entryShares * p * $0) } ?? "$" + Int((t.entryShares * p).rounded()).formatted()
                         }
                         Text(value.map { "\($0) - \(prices)" } ?? prices)
                         Spacer(minLength: 2)

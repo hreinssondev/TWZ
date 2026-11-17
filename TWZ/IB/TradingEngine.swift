@@ -1049,11 +1049,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
         var row = OrderRow(
             id: orderId, symbol: symbol, action: action, quantity: quantity,
-            orderType: orderType, limitPrice: limit, auxPrice: stop, status: "PendingSubmit"
+            orderType: orderType, limitPrice: limit, auxPrice: stop, status: "PendingSubmit", usdNok: usdNok
         )
         if modifying != nil, let old = orders[orderId] {
             row.status = old.status
             row.filled = old.filled
+            row.usdNok = old.usdNok ?? usdNok
         }
         orders[orderId] = row
         if chases { ssrChase[orderId] = SSRChase(symbol: symbol, tif: tif, outsideRth: outsideRth, exchange: exchange) }
@@ -1888,7 +1889,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let before = orders[id]
         var o = orders[id] ?? OrderRow(
             id: id, symbol: f.str(3), action: f.str(13), quantity: 0,
-            orderType: f.str(15), limitPrice: nil, status: "Submitted"
+            orderType: f.str(15), limitPrice: nil, status: "Submitted", usdNok: usdNok
         )
         o.symbol = f.str(3)
         o.action = f.str(13)
@@ -1912,14 +1913,16 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     private func execDetails(_ f: [String]) {
         guard f.count > 20 else { return }
+        let id = f.str(14)
         let fill = Fill(
-            id: f.str(14),
+            id: id,
             orderId: f.int(2),
             symbol: f.str(4),
             side: f.str(18),
             shares: f.double(19),
             price: f.double(20),
-            time: Self.parseExecTime(f.str(15)) ?? Date()
+            time: Self.parseExecTime(f.str(15)) ?? Date(),
+            usdNok: fills[id]?.usdNok ?? usdNok
         )
         if fills[fill.id] == nil {
             log("FILL #\(fill.orderId) \(fill.side) \(Fmt.shares(fill.shares)) \(fill.symbol) @ \(Fmt.price(fill.price)) exec \(fill.id)")

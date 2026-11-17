@@ -61,6 +61,8 @@ nonisolated struct OrderRow: Identifiable, Equatable {
     var filled: Double = 0
     var avgFillPrice: Double = 0
     var updated = Date()
+    /// USD/NOK when the order was placed (or first seen), so its NOK value doesn't move with the rate.
+    var usdNok: Double?
 
     var isActive: Bool {
         ["PendingSubmit", "PreSubmitted", "Submitted", "ApiPending", "PendingCancel"].contains(status)
@@ -75,6 +77,8 @@ nonisolated struct Fill: Identifiable, Equatable {
     var shares: Double
     var price: Double
     var time: Date
+    /// USD/NOK when the fill came in, so its NOK value doesn't move with the rate.
+    var usdNok: Double?
 }
 
 /// One trade in a symbol, from flat back to flat, built from the day's fills.
@@ -84,6 +88,8 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
     var isLong: Bool
     var start: Date
     var lastFill: Date
+    /// USD/NOK at the trip's first fill, so its NOK value doesn't move with the rate.
+    var usdNok: Double?
     var buyShares = 0.0, buyValue = 0.0
     var sellShares = 0.0, sellValue = 0.0
     /// Shares still held; 0 once the trip is closed.
@@ -123,7 +129,7 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
             var trip: RoundTrip?
             if qty != 0, let first = sorted.first {
                 trip = RoundTrip(id: first.id + "#carried", symbol: symbol, isLong: qty > 0, start: first.time,
-                                 lastFill: first.time, openShares: qty, carried: qty)
+                                 lastFill: first.time, usdNok: first.usdNok, openShares: qty, carried: qty)
             }
             for fill in sorted {
                 var remaining = fill.side == "BOT" ? fill.shares : -fill.shares
@@ -131,7 +137,7 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
                 while abs(remaining) > 1e-9 {
                     if trip == nil {
                         trip = RoundTrip(id: part == 0 ? fill.id : "\(fill.id)#\(part)", symbol: symbol,
-                                         isLong: remaining > 0, start: fill.time, lastFill: fill.time)
+                                         isLong: remaining > 0, start: fill.time, lastFill: fill.time, usdNok: fill.usdNok)
                     }
                     // Up to the whole fill adds to the trip; a fill against it closes at most what's held.
                     let opening = qty == 0 || (qty > 0) == (remaining > 0)
