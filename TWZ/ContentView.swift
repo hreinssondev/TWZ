@@ -7,12 +7,12 @@
 //  │ ──────────●────────── ┃          ┃          │
 //  │  chart 3  │  chart 4  ┃          ┃          │
 //  ╞═══ handle ════════════╡┃━━━━━ handle ━━━━━━━┥
-//  │  hotkeys (6×2) │ NOK  ┃ orders ┃ filled ┃ pos │
+//  │  hotkeys (6×2) │ NOK  ┃  orders  ┃ positions│
 //  └───────────────────────┴───────────────────────┘
 //
 //  Every ┃/═/━ separator is a drag handle (resize cursor on hover, double-click resets):
 //  charts ↕ hotkeys, left column ↔ right column, list A ↔ list B, lists ↕ orders, and
-//  the Orders / Filled / Positions columns ↕ round trips. The account bar's Cols / Rows sliders size
+//  the Orders / Positions columns ↕ round trips. The account bar's Cols / Rows sliders size
 //  the chart grid, whose charts follow the top gainers (see `ChartGrid`); a ● where four charts meet
 //  drags that column and row line together. The button beside a list's filters makes lists A and B
 //  one list across their space (Top Gainers by default; it keeps its own scanner choice), or splits
@@ -41,7 +41,7 @@ struct ContentView: View {
     /// A list this narrow shows its symbols and clips the price columns on the right.
     private static let minListWidth: CGFloat = 100
     /// Where the one-list / two-lists button puts the right column: as narrow as it goes with every
-    /// list column and Orders / Filled / Positions column in full. Dragging goes further, to `minListWidth`.
+    /// list column and Orders / Positions column in full. Dragging goes further, to `minListWidth`.
     private static let snapListWidth: CGFloat = 240
     private static let snapSingleListSide: CGFloat = 386
     private static let minListsHeight: CGFloat = 160

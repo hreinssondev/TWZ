@@ -2,11 +2,13 @@
 //  OrdersPanel.swift
 //  TWZ
 //
-//  Orders, Filled and Positions side by side as three always-visible columns,
-//  with draggable dividers between them; clicking one of their headers stacks them instead, Positions
-//  on top, then Orders, then Filled (clicking again puts them side by side). Rows are two lines so they fit the narrow columns.
-//  Fills in the same symbol, side and second show as one row at their average price.
-//  Fills and round trips name what placed their orders: the hotkey's price (Mid, Last, Bid, Ask),
+//  Orders and Positions side by side as two always-visible columns, with a draggable divider
+//  between them; clicking one of their headers stacks them instead, Positions on top (clicking again
+//  puts them side by side). Rows are two lines so they fit the narrow columns.
+//  Orders lists the working orders and, once done, what each filled: dimmed, at its average fill price.
+//  Fills of orders entered in TWS (which IB reports without an order id) in the same symbol, side and
+//  second show as one row.
+//  Filled orders and round trips name what placed them: the hotkey's price (Mid, Last, Bid, Ask),
 //  Mkt, ⌥-click, or SL / TP.
 //  A working order's row has a thin bar along its bottom that fills to the right as the order fills.
 //  Below them, behind a draggable divider, two tabs: today's round trips with their profit or loss,
@@ -22,14 +24,12 @@ import SwiftUI
 struct OrdersPanel: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
-    // Widths of the Orders and Filled columns as shares of the panel; Positions takes the rest.
-    @AppStorage("ordersColumn") private var ordersShare: Double = 1 / 3
-    @AppStorage("filledColumn") private var filledShare: Double = 1 / 3
-    /// Positions, Orders and Filled on top of each other instead of side by side.
+    /// Width of the Orders column as a share of the panel; Positions takes the rest.
+    @AppStorage("ordersWidth") private var ordersShare: Double = 1 / 2
+    /// Positions on top of Orders instead of side by side.
     @AppStorage("ordersStacked") private var stacked = false
-    // Heights of the Positions and Orders rows as shares of the stack; Filled takes the rest.
+    /// Height of the Positions row as a share of the stack; Orders takes the rest.
     @AppStorage("positionsRow") private var positionsRowShare: Double = 1 / 3
-    @AppStorage("ordersRow") private var ordersRowShare: Double = 1 / 3
     /// Height of the three columns as a share of the panel; round trips take the rest.
     @AppStorage("roundTripsSplit") private var columnsShare: Double = 0.5
     @AppStorage("bottomTab") private var bottomTab: BottomTab = .roundTrips
@@ -70,70 +70,43 @@ struct OrdersPanel: View {
 
     private var sideBySideColumns: some View {
         GeometryReader { geo in
-            let total = max(geo.size.width - 2, Self.minColumnWidth * 3)   // minus the two 1pt dividers
+            let total = max(geo.size.width - 1, Self.minColumnWidth * 2)   // minus the 1pt divider
             let minW = Self.minColumnWidth
-            let ordersW = min(max(total * ordersShare, minW), total - minW * 2)
-            let filledW = min(max(total * filledShare, minW), total - ordersW - minW)
+            let ordersW = min(max(total * ordersShare, minW), total - minW)
             HStack(spacing: 0) {
                 ordersColumn
                     .frame(width: ordersW)
                     .clipped()
-                // Each divider trades width with its neighbour; the column on the far side stays put.
                 ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: ordersW,
-                             range: minW...(ordersW + filledW - minW),
-                             onChange: { w in
-                                 ordersShare = w / total
-                                 filledShare = (ordersW + filledW - w) / total
-                             },
-                             onReset: resetColumns)
-                filledColumn
-                    .frame(width: filledW)
-                    .clipped()
-                ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: filledW,
-                             range: minW...(total - ordersW - minW),
-                             onChange: { filledShare = $0 / total },
-                             onReset: resetColumns)
+                             range: minW...(total - minW),
+                             onChange: { ordersShare = $0 / total },
+                             onReset: { ordersShare = 1 / 2 })
                 positionsColumn
                     .clipped()
             }
         }
     }
 
-    /// Positions over Orders over Filled.
+    /// Positions over Orders.
     private var stackedColumns: some View {
         GeometryReader { geo in
-            let total = max(geo.size.height - 2, Self.minSectionHeight * 3)   // minus the two 1pt dividers
+            let total = max(geo.size.height - 1, Self.minSectionHeight * 2)   // minus the 1pt divider
             let minH = Self.minSectionHeight
-            let positionsH = min(max(total * positionsRowShare, minH), total - minH * 2)
-            let ordersH = min(max(total * ordersRowShare, minH), total - positionsH - minH)
+            let positionsH = min(max(total * positionsRowShare, minH), total - minH)
             VStack(spacing: 0) {
                 positionsColumn
                     .frame(height: positionsH)
-                // Each divider trades height with its neighbour; the row on the far side stays put.
                 ResizeHandle(resizes: .vertical, style: .line, thickness: 1, current: positionsH,
-                             range: minH...(positionsH + ordersH - minH),
-                             onChange: { h in
-                                 positionsRowShare = h / total
-                                 ordersRowShare = (positionsH + ordersH - h) / total
-                             },
-                             onReset: resetRows)
+                             range: minH...(total - minH),
+                             onChange: { positionsRowShare = $0 / total },
+                             onReset: { positionsRowShare = 1 / 3 })
                 ordersColumn
-                    .frame(height: ordersH)
-                ResizeHandle(resizes: .vertical, style: .line, thickness: 1, current: ordersH,
-                             range: minH...(total - positionsH - minH),
-                             onChange: { ordersRowShare = $0 / total },
-                             onReset: resetRows)
-                filledColumn
             }
         }
     }
 
     private var ordersColumn: some View {
-        column("Orders", count: activeOrders.count, onEmptyClick: deselectChart, onHeaderClick: toggleStacked) { activeRows }
-    }
-
-    private var filledColumn: some View {
-        column("Filled", count: groupedFills.count, onHeaderClick: toggleStacked) { filledRows }
+        column("Orders", count: activeOrders.count, onEmptyClick: deselectChart, onHeaderClick: toggleStacked) { orderRows }
     }
 
     private var positionsColumn: some View {
@@ -144,18 +117,8 @@ struct OrdersPanel: View {
         stacked.toggle()
     }
 
-    private func resetRows() {
-        positionsRowShare = 1 / 3
-        ordersRowShare = 1 / 3
-    }
-
     private func deselectChart() {
         workspace.isChartSelected = false
-    }
-
-    private func resetColumns() {
-        ordersShare = 1 / 3
-        filledShare = 1 / 3
     }
 
     /// One always-visible column: a compact header and its own scrolling rows. `onEmptyClick` is
@@ -207,40 +170,106 @@ struct OrdersPanel: View {
         broker.orders.values.filter(\.isActive).sorted { $0.updated > $1.updated }
     }
 
-    @ViewBuilder private var activeRows: some View {
-        if activeOrders.isEmpty { empty("No working orders") }
-        ForEach(activeOrders) { o in
-            // Value in NOK of the shares still to fill, at the order's price (the last price for market orders).
-            let price = o.limitPrice ?? o.auxPrice ?? broker.quote(o.symbol)?.last
-            let valueNOK = price.flatMap { p in broker.usdNok.map { (o.quantity - o.filled) * p * $0 } }
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    symbolButton(o.symbol, onDoubleClick: { workspace.focusOrder(o.symbol, broker: broker) })
-                    Spacer(minLength: 2)
-                    Text(o.status).foregroundStyle(.secondary).font(.system(size: 10))
-                    Button {
-                        broker.cancelOrder(o.id, why: "Orders panel ✕")
-                    } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Cancel order")
-                    .disabled(o.id <= 0)
-                }
-                HStack(spacing: 4) {
-                    if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(o.action == "BUY")) }
-                    // Shares still to fill; the bar below shows how much has filled.
-                    Text("\(Fmt.shares(o.quantity - o.filled)) \(o.priceSummary)")
-                    Spacer(minLength: 0)
-                }
-                .font(.system(size: 10).monospacedDigit())
+    /// A row of the Orders column: a working order, or what a done order filled.
+    private enum OrderEntry: Identifiable {
+        case working(OrderRow)
+        case filled(FillGroup)
+
+        var id: String {
+            switch self {
+            case .working(let o): "order \(o.id)"
+            case .filled(let g): g.id
             }
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2) { workspace.focusOrder(o.symbol, broker: broker) }
-            .help("Double-click to show \(o.symbol)'s chart")
-            .rowStyle()
-            .overlay(alignment: .bottom) { fillBar(o) }
         }
+
+        var time: Date {
+            switch self {
+            case .working(let o): o.updated
+            case .filled(let g): g.fill.time
+            }
+        }
+    }
+
+    /// Working orders and filled ones, newest first.
+    private var orderEntries: [OrderEntry] {
+        let working = activeOrders
+        let filled = fillGroups(excluding: Set(working.map(\.id)))
+        return (working.map(OrderEntry.working) + filled.map(OrderEntry.filled)).sorted { $0.time > $1.time }
+    }
+
+    @ViewBuilder private var orderRows: some View {
+        let entries = orderEntries
+        if entries.isEmpty { empty("No orders today") }
+        ForEach(entries) { entry in
+            switch entry {
+            case .working(let o): workingRow(o)
+            case .filled(let g): filledRow(g)
+            }
+        }
+    }
+
+    private func workingRow(_ o: OrderRow) -> some View {
+        // Value in NOK of the shares still to fill, at the order's price (the last price for market orders).
+        let price = o.limitPrice ?? o.auxPrice ?? broker.quote(o.symbol)?.last
+        let valueNOK = price.flatMap { p in broker.usdNok.map { (o.quantity - o.filled) * p * $0 } }
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                symbolButton(o.symbol, onDoubleClick: { workspace.focusOrder(o.symbol, broker: broker) })
+                Spacer(minLength: 2)
+                Text(o.status).foregroundStyle(.secondary).font(.system(size: 10))
+                Button {
+                    broker.cancelOrder(o.id, why: "Orders panel ✕")
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .help("Cancel order")
+                .disabled(o.id <= 0)
+            }
+            HStack(spacing: 4) {
+                if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(o.action == "BUY")) }
+                // Shares still to fill; the bar below shows how much has filled.
+                Text("\(Fmt.shares(o.quantity - o.filled)) \(o.priceSummary)")
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 10).monospacedDigit())
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { workspace.focusOrder(o.symbol, broker: broker) }
+        .help("Double-click to show \(o.symbol)'s chart")
+        .rowStyle()
+        .overlay(alignment: .bottom) { fillBar(o) }
+    }
+
+    /// A done order laid out like a working one, dimmed, with its fill time and average fill price.
+    private func filledRow(_ g: FillGroup) -> some View {
+        let f = g.fill
+        let valueNOK = broker.usdNok.map { f.shares * f.price * $0 }
+        let dim = 0.45
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                symbolButton(f.symbol, onDoubleClick: { workspace.focusOrder(f.symbol, broker: broker) })
+                Spacer(minLength: 2)
+                if let source = broker.sourceLabel(g.orderIds) { Text(source) }
+                Text(f.time, format: .dateTime.hour().minute().second())
+            }
+            .foregroundStyle(.secondary)
+            .opacity(dim)
+            HStack(spacing: 4) {
+                Group {
+                    if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(f.side == "BOT")) }
+                    Text("\(Fmt.shares(f.shares)) \(g.order?.priceSummary ?? "")")
+                }
+                .opacity(dim)
+                Text("@ \(Fmt.price(f.price))").fontWeight(.semibold)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 10).monospacedDigit())
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { workspace.focusOrder(f.symbol, broker: broker) }
+        .help("Double-click to show \(f.symbol)'s chart")
+        .rowStyle()
     }
 
     /// Filled share of the order, growing to the right; a scaled shape, so updates cost no layout.
@@ -256,52 +285,42 @@ struct OrdersPanel: View {
             .allowsHitTesting(false)
     }
 
-    /// A row of fills in one symbol, side and second, with the orders they came from.
+    /// What filled of one done order (or, for orders entered in TWS, of fills in one symbol, side and
+    /// second), at the volume-weighted average price, timed at the last fill.
     private struct FillGroup: Identifiable {
         var fill: Fill
         var orderIds: [Int]
+        /// The order the fills came from, when known.
+        var order: OrderRow?
         var id: String { fill.id }
     }
 
-    /// The day's fills, newest first, with fills in the same symbol, side and second added together
-    /// at their volume-weighted average price.
-    private var groupedFills: [FillGroup] {
-        struct Key: Hashable { var symbol: String; var side: String; var second: Int }
+    /// The day's fills by order, leaving out those of `working` orders, which show as still working.
+    /// A done order whose fills haven't arrived yet shows what its status reports (not TWS orders,
+    /// whose fills can't be told apart by order).
+    private func fillGroups(excluding working: Set<Int>) -> [FillGroup] {
+        enum Key: Hashable { case order(Int), moment(symbol: String, side: String, second: Int) }
         var groups: [Key: FillGroup] = [:]
-        for f in broker.fills.values.sorted(by: { ($0.time, $0.id) < ($1.time, $1.id) }) {
-            let key = Key(symbol: f.symbol, side: f.side, second: Int(f.time.timeIntervalSince1970.rounded(.down)))
-            guard var g = groups[key] else { groups[key] = FillGroup(fill: f, orderIds: [f.orderId]); continue }
+        for f in broker.fills.values.sorted(by: { ($0.time, $0.id) < ($1.time, $1.id) }) where !working.contains(f.orderId) {
+            let key: Key = f.orderId != 0 ? .order(f.orderId)
+                : .moment(symbol: f.symbol, side: f.side, second: Int(f.time.timeIntervalSince1970.rounded(.down)))
+            guard var g = groups[key] else {
+                groups[key] = FillGroup(fill: f, orderIds: [f.orderId], order: f.orderId != 0 ? broker.orders[f.orderId] : nil)
+                continue
+            }
             let shares = g.fill.shares + f.shares
             if shares > 0 { g.fill.price = (g.fill.price * g.fill.shares + f.price * f.shares) / shares }
             g.fill.shares = shares
+            g.fill.time = f.time
             if !g.orderIds.contains(f.orderId) { g.orderIds.append(f.orderId) }
             groups[key] = g
         }
-        return groups.values.sorted { ($0.fill.time, $0.fill.id) > ($1.fill.time, $1.fill.id) }
-    }
-
-    @ViewBuilder private var filledRows: some View {
-        let fills = groupedFills
-        if fills.isEmpty { empty("No fills today") }
-        ForEach(fills) { group in
-            let f = group.fill
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    symbolButton(f.symbol, color: sideColor(f.side == "BOT"))
-                    Spacer(minLength: 2)
-                    Text(f.time, format: .dateTime.hour().minute().second()).foregroundStyle(.secondary)
-                }
-                HStack(spacing: 4) {
-                    Text("\(Text(Fmt.shares(f.shares)).foregroundStyle(sideColor(f.side == "BOT"))) - \(Fmt.price(f.price))")
-                    Spacer(minLength: 2)
-                    if let source = broker.sourceLabel(group.orderIds) {
-                        Text(source).foregroundStyle(.secondary)
-                    }
-                }
-                .font(.system(size: 10).monospacedDigit())
-            }
-            .rowStyle()
+        for o in broker.orders.values where o.id > 0 && !o.isActive && o.filled > 0 && groups[.order(o.id)] == nil {
+            let fill = Fill(id: "order \(o.id)", orderId: o.id, symbol: o.symbol, side: o.action == "BUY" ? "BOT" : "SLD",
+                            shares: o.filled, price: o.avgFillPrice, time: o.updated)
+            groups[.order(o.id)] = FillGroup(fill: fill, orderIds: [o.id], order: o)
         }
+        return Array(groups.values)
     }
 
     @ViewBuilder private var positionRows: some View {
