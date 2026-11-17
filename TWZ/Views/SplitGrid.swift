@@ -185,9 +185,8 @@ struct GridSliders: View {
                 .font(.system(size: 10))
                 .foregroundStyle(Color.secondary.opacity(0.7))
             // Rounds to whole bars itself, for the same reason as Zoom.
-            Slider(value: Binding(get: { rightSpace }, set: { rightSpace = $0.rounded() }),
-                   in: RightSpace.range)
-                .controlSize(.mini)
+            MiniSlider(value: Binding(get: { rightSpace }, set: { rightSpace = $0.rounded() }),
+                       range: RightSpace.range)
                 .frame(width: 60)
             Text("\(Int(rightSpace))")
                 .font(.system(size: 10).monospacedDigit())
@@ -202,11 +201,9 @@ struct GridSliders: View {
             Text("Zoom")
                 .font(.system(size: 10))
                 .foregroundStyle(Color.secondary.opacity(0.7))
-            // Runs zoomed out → in, i.e. from the most bars to the fewest. Rounds to 10s itself: a
-            // `step` would draw a tick mark per step, packed into a solid line under the slider.
-            Slider(value: Binding(get: { -zoom }, set: { zoom = -($0 / 10).rounded() * 10 }),
-                   in: -ChartModel.maxVisibleBars...(-30))
-                .controlSize(.mini)
+            // Runs zoomed out → in, i.e. from the most bars to the fewest, in 10s.
+            MiniSlider(value: Binding(get: { -zoom }, set: { zoom = -($0 / 10).rounded() * 10 }),
+                       range: -ChartModel.maxVisibleBars...(-30))
                 .frame(width: 90)
             Text("\(Int(zoom))")
                 .font(.system(size: 10).monospacedDigit())
@@ -221,15 +218,15 @@ struct GridSliders: View {
             Text(label)
                 .font(.system(size: 10))
                 .foregroundStyle(Color.secondary.opacity(0.7))
-            Slider(
+            MiniSlider(
                 value: Binding(get: { Double(value) }, set: { new in
-                    set(Int(new.rounded()))
+                    let rounded = Int(new.rounded())
+                    guard rounded != value else { return }
+                    set(rounded)
                     scheduleSettle()
                 }),
-                in: Double(range.lowerBound)...Double(range.upperBound),
-                step: 1
+                range: Double(range.lowerBound)...Double(range.upperBound)
             )
-            .controlSize(.mini)
             .frame(width: 60)
             Text("\(value)")
                 .font(.system(size: 10).monospacedDigit())
@@ -238,7 +235,7 @@ struct GridSliders: View {
         }
     }
 
-    /// Restarts the wait on every slider move; once it runs out, the grid takes the sliders' size.
+    /// Restarts the wait on every slider move to a new size; once it runs out, the grid takes the sliders' size.
     private func scheduleSettle() {
         settleTask?.cancel()
         settleTask = Task {
@@ -249,5 +246,48 @@ struct GridSliders: View {
             pendingColumns = nil
             pendingRows = nil
         }
+    }
+}
+
+/// A flat slider in the grays of the chips beside it: a thin track, filled up to a small knob that
+/// grows a little while hovered or dragged. Clicking the track jumps there; the binding rounds.
+struct MiniSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+
+    @State private var isHovering = false
+    @State private var isDragging = false
+
+    private static let knobSize: CGFloat = 8
+
+    var body: some View {
+        GeometryReader { geo in
+            let travel = max(1, geo.size.width - Self.knobSize)
+            let span = range.upperBound - range.lowerBound
+            let fraction = span > 0 ? (min(max(value, range.lowerBound), range.upperBound) - range.lowerBound) / span : 0
+            let knobX = Self.knobSize / 2 + travel * fraction
+            let active = isHovering || isDragging
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.12)).frame(height: 2)
+                Capsule().fill(Color.secondary.opacity(active ? 0.9 : 0.7)).frame(width: knobX, height: 2)
+                Circle()
+                    .fill(active ? Color.primary.opacity(0.85) : Color.secondary)
+                    .frame(width: active ? Self.knobSize + 2 : Self.knobSize, height: active ? Self.knobSize + 2 : Self.knobSize)
+                    .position(x: knobX, y: geo.size.height / 2)
+            }
+            .contentShape(Rectangle())
+            .onHover { isHovering = $0 }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        isDragging = true
+                        let f = min(max((drag.location.x - Self.knobSize / 2) / travel, 0), 1)
+                        value = range.lowerBound + f * span
+                    }
+                    .onEnded { _ in isDragging = false }
+            )
+            .animation(.easeOut(duration: 0.1), value: active)
+        }
+        .frame(height: 14)
     }
 }
