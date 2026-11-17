@@ -209,10 +209,14 @@ struct OrdersPanel: View {
     @ViewBuilder private var activeRows: some View {
         if activeOrders.isEmpty { empty("No working orders") }
         ForEach(activeOrders) { o in
+            // Value in NOK of the shares still to fill, at the order's price (the last price for market orders).
+            let price = o.limitPrice ?? o.auxPrice ?? broker.quote(o.symbol)?.last
+            let valueNOK = price.flatMap { p in broker.usdNok.map { (o.quantity - o.filled) * p * $0 } }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
-                    symbolButton(o.symbol, color: sideColor(o.action == "BUY"))
+                    symbolButton(o.symbol)
                     Spacer(minLength: 2)
+                    Text(o.status).foregroundStyle(.secondary).font(.system(size: 10))
                     Button {
                         broker.cancelOrder(o.id, why: "Orders panel ✕")
                     } label: {
@@ -223,12 +227,10 @@ struct OrdersPanel: View {
                     .disabled(o.id <= 0)
                 }
                 HStack(spacing: 4) {
+                    if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(o.action == "BUY")) }
                     // Shares still to fill; the bar below shows how much has filled.
-                    Text(Fmt.shares(o.quantity - o.filled))
-                        .foregroundStyle(sideColor(o.action == "BUY"))
-                    Text(o.priceSummary)
-                    Spacer(minLength: 2)
-                    Text(o.status).foregroundStyle(.secondary)
+                    Text("\(Fmt.shares(o.quantity - o.filled)) \(o.priceSummary)")
+                    Spacer(minLength: 0)
                 }
                 .font(.system(size: 10).monospacedDigit())
             }
@@ -304,23 +306,21 @@ struct OrdersPanel: View {
         ForEach(positions) { p in
             let last = broker.quote(p.symbol)?.last
             let pnl = last.map { ($0 - p.avgCost) * p.quantity }
-            // Market value in NOK (at cost until there's a quote), under the P/L.
+            // Market value in NOK (at cost until there's a quote), under the symbol.
             let valueNOK = broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * $0 }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     // Double-click is told apart from the symbol's single click (loading it into the selected chart).
-                    Text(p.symbol).fontWeight(.semibold).foregroundStyle(sideColor(p.quantity > 0))
+                    Text(p.symbol).fontWeight(.semibold)
                         .onTapGesture(count: 2) { workspace.focusPosition(p.symbol, broker: broker) }
                         .onTapGesture { workspace.loadIntoSelectedChart(p.symbol, broker: broker) }
                     Spacer(minLength: 2)
                     Text(Fmt.money(pnl, signed: true)).foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
                 }
                 HStack(spacing: 4) {
-                    Text("\(Text(Fmt.shares(p.quantity)).foregroundStyle(sideColor(p.quantity > 0))) - \(Fmt.price(p.avgCost))")
-                    if let valueNOK {
-                        Spacer(minLength: 2)
-                        Text(Fmt.amount(valueNOK)).foregroundStyle(.secondary)
-                    }
+                    if let valueNOK { Text(Fmt.nok(valueNOK)) }
+                    Text("\(Fmt.shares(p.quantity)) - \(Fmt.price(p.avgCost))")
+                    Spacer(minLength: 0)
                 }
                 .font(.system(size: 10).monospacedDigit())
             }
@@ -375,12 +375,11 @@ struct OrdersPanel: View {
         }
     }
 
-    /// "Round trips 3  Borrow AAPL Shortable 1.2M": the bottom section's tabs, the open one in bold.
+    /// "3  Borrow AAPL Shortable 1.2M": the bottom section's tabs, the open one in bold.
     /// The selected chart's shortable status and shares to lend show on the Borrow tab either way.
     private func tabs(roundTripCount: Int) -> some View {
         HStack(spacing: 10) {
             tab(.roundTrips) {
-                Text("Round trips")
                 Text("\(roundTripCount)").foregroundStyle(.secondary)
             }
             tab(.borrow) {
