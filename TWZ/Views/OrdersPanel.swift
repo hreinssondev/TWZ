@@ -13,7 +13,8 @@
 //  and Borrow, what shorting the selected chart's stock takes (see BorrowTab).
 //  Clicking empty space in the Orders or Positions column deselects the chart, so no hotkey or
 //  order shortcut has a symbol to act on until a chart is clicked again.
-//  Double-clicking a position selects the chart showing its stock, or loads it into the grid's last chart.
+//  Double-clicking a position selects the chart showing its stock, or loads it into the grid's last chart;
+//  double-clicking an order selects the chart showing its stock, or loads it into the selected chart.
 //
 
 import SwiftUI
@@ -214,7 +215,7 @@ struct OrdersPanel: View {
             let valueNOK = price.flatMap { p in broker.usdNok.map { (o.quantity - o.filled) * p * $0 } }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
-                    symbolButton(o.symbol)
+                    symbolButton(o.symbol, onDoubleClick: { workspace.focusOrder(o.symbol, broker: broker) })
                     Spacer(minLength: 2)
                     Text(o.status).foregroundStyle(.secondary).font(.system(size: 10))
                     Button {
@@ -234,6 +235,9 @@ struct OrdersPanel: View {
                 }
                 .font(.system(size: 10).monospacedDigit())
             }
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { workspace.focusOrder(o.symbol, broker: broker) }
+            .help("Double-click to show \(o.symbol)'s chart")
             .rowStyle()
             .overlay(alignment: .bottom) { fillBar(o) }
         }
@@ -422,9 +426,18 @@ struct OrdersPanel: View {
         isBuy ? .green : .red
     }
 
-    private func symbolButton(_ symbol: String, color: Color = .primary) -> some View {
-        Text(symbol).fontWeight(.semibold).foregroundStyle(color)
-            .onTapGesture { workspace.loadIntoSelectedChart(symbol, broker: broker) }
+    /// A symbol that loads into the selected chart on click; with `onDoubleClick`, a double-click is
+    /// told apart from that.
+    @ViewBuilder
+    private func symbolButton(_ symbol: String, color: Color = .primary, onDoubleClick: (() -> Void)? = nil) -> some View {
+        let text = Text(symbol).fontWeight(.semibold).foregroundStyle(color)
+        if let onDoubleClick {
+            text
+                .onTapGesture(count: 2, perform: onDoubleClick)
+                .onTapGesture { workspace.loadIntoSelectedChart(symbol, broker: broker) }
+        } else {
+            text.onTapGesture { workspace.loadIntoSelectedChart(symbol, broker: broker) }
+        }
     }
 
     private func empty(_ text: String) -> some View {

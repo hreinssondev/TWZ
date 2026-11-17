@@ -16,12 +16,24 @@ extension Workspace {
     /// order), or with none, loads the stock into the grid's last chart and selects that.
     func focusPosition(_ symbol: String, broker: Broker) {
         let s = symbol.uppercased()
-        if let id = mainCells.first(where: { chart(id: $0)?.symbol == s }) {
-            selectedChartID = id
-        } else if let id = mainCells.last, let last = chart(id: id) {
+        if selectChart(showing: s) { return }
+        if let id = mainCells.last, let last = chart(id: id) {
             loadByHand(s, into: last, broker: broker)
             selectedChartID = id
         }
+    }
+
+    /// Double-clicking an order: selects the grid's chart showing its stock (the first, in reading
+    /// order), or with none, loads the stock into the selected chart.
+    func focusOrder(_ symbol: String, broker: Broker) {
+        if !selectChart(showing: symbol.uppercased()) { loadIntoSelectedChart(symbol, broker: broker) }
+    }
+
+    /// Selects the grid's first chart showing `symbol`; false when none does.
+    private func selectChart(showing symbol: String) -> Bool {
+        guard let id = mainCells.first(where: { chart(id: $0)?.symbol == symbol }) else { return false }
+        selectedChartID = id
+        return true
     }
 
     /// Loads a symbol picked by hand: the main-window chart keeps it and its cell instead of following
