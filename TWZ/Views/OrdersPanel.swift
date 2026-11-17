@@ -135,8 +135,10 @@ struct OrdersPanel: View {
         }, trailing: trailing, onEmptyClick: onEmptyClick, onHeaderClick: onHeaderClick, rows: rows)
     }
 
-    /// A column whose header starts with `title` (the bottom section's tabs).
+    /// A column whose header starts with `title` (the bottom section's tabs, whose header is dimmed
+    /// like its round trips: `dimsHeader`).
     private func column<Title: View, Rows: View>(@ViewBuilder title: () -> Title, trailing: Text? = nil,
+                                                 dimsHeader: Bool = false,
                                                  onEmptyClick: (() -> Void)? = nil, onHeaderClick: (() -> Void)? = nil,
                                                  @ViewBuilder rows: () -> Rows) -> some View {
         let content = rows()
@@ -147,6 +149,7 @@ struct OrdersPanel: View {
                 if let trailing { trailing }
             }
             .font(.system(size: 10))
+            .opacity(dimsHeader ? Self.doneOpacity : 1)
             .padding(.horizontal, 6)
             .frame(height: 16)
             .background(Color.primary.opacity(0.05))
@@ -360,7 +363,7 @@ struct OrdersPanel: View {
         let closed = trips.filter { !$0.isOpen }.compactMap { $0.pnl(last: nil) }
         let realized = closed.isEmpty ? nil : closed.reduce(0, +)
         return column(title: { tabs(roundTripCount: trips.count) },
-                      trailing: realized.map { pnlText($0).fontWeight(.semibold) }) {
+                      trailing: realized.map { pnlText($0).fontWeight(.semibold) }, dimsHeader: true) {
             if trips.isEmpty { empty("No trades today") }
             ForEach(trips) { t in
                 let pnl = t.pnl(last: broker.quote(t.symbol)?.last)
@@ -392,7 +395,8 @@ struct OrdersPanel: View {
     }
 
     private var borrow: some View {
-        column(title: { tabs(roundTripCount: RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions).count) }) {
+        column(title: { tabs(roundTripCount: RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions).count) },
+               dimsHeader: true) {
             BorrowTab()
         }
     }
