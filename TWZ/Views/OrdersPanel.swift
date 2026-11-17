@@ -366,7 +366,7 @@ struct OrdersPanel: View {
                 let pnl = t.pnl(last: broker.quote(t.symbol)?.last)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
-                        symbolButton(t.symbol, color: sideColor(t.isLong))
+                        symbolButton(t.symbol)
                         if let sources = tripSources(t) { Text(sources).foregroundStyle(.secondary) }
                         if t.isOpen { Text("open").foregroundStyle(.secondary) }
                         Spacer(minLength: 2)
@@ -376,12 +376,7 @@ struct OrdersPanel: View {
                         let prices = "\(t.entryPrice.map { Fmt.price($0) } ?? "earlier") → \(t.exitPrice.map { Fmt.price($0) } ?? "…")"
                         // The position's dollar value at the entry price (the exit's for shares held from before today).
                         let value = (t.entryPrice ?? t.exitPrice).map { "$" + Int((t.entryShares * $0).rounded()).formatted() }
-                        let shares = Text(Fmt.shares(t.entryShares)).foregroundStyle(sideColor(t.isLong))
-                        if let value {
-                            Text("\(shares) \(Text(value).foregroundStyle(.white)) - \(prices)")
-                        } else {
-                            Text("\(shares) - \(prices)")
-                        }
+                        Text(value.map { "\($0) - \(prices)" } ?? prices)
                         Spacer(minLength: 2)
                         Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
                     }
