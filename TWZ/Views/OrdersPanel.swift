@@ -3,7 +3,8 @@
 //  TWZ
 //
 //  Orders, Filled and Positions side by side as three always-visible columns,
-//  with draggable dividers between them. Rows are two lines so they fit the narrow columns.
+//  with draggable dividers between them; clicking one of their headers stacks them instead, Positions
+//  on top, then Orders, then Filled (clicking again puts them side by side). Rows are two lines so they fit the narrow columns.
 //  Fills in the same symbol, side and second show as one row at their average price.
 //  Fills and round trips name what placed their orders: the hotkey's price (Mid, Last, Bid, Ask),
 //  Mkt, ⌥-click, or SL / TP.
@@ -23,6 +24,11 @@ struct OrdersPanel: View {
     // Widths of the Orders and Filled columns as shares of the panel; Positions takes the rest.
     @AppStorage("ordersColumn") private var ordersShare: Double = 1 / 3
     @AppStorage("filledColumn") private var filledShare: Double = 1 / 3
+    /// Positions, Orders and Filled on top of each other instead of side by side.
+    @AppStorage("ordersStacked") private var stacked = false
+    // Heights of the Positions and Orders rows as shares of the stack; Filled takes the rest.
+    @AppStorage("positionsRow") private var positionsRowShare: Double = 1 / 3
+    @AppStorage("ordersRow") private var ordersRowShare: Double = 1 / 3
     /// Height of the three columns as a share of the panel; round trips take the rest.
     @AppStorage("roundTripsSplit") private var columnsShare: Double = 0.5
     @AppStorage("bottomTab") private var bottomTab: BottomTab = .roundTrips
@@ -57,14 +63,18 @@ struct OrdersPanel: View {
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
     }
 
-    private var columns: some View {
+    @ViewBuilder private var columns: some View {
+        if stacked { stackedColumns } else { sideBySideColumns }
+    }
+
+    private var sideBySideColumns: some View {
         GeometryReader { geo in
             let total = max(geo.size.width - 2, Self.minColumnWidth * 3)   // minus the two 1pt dividers
             let minW = Self.minColumnWidth
             let ordersW = min(max(total * ordersShare, minW), total - minW * 2)
             let filledW = min(max(total * filledShare, minW), total - ordersW - minW)
             HStack(spacing: 0) {
-                column("Orders", count: activeOrders.count, onEmptyClick: deselectChart) { activeRows }
+                ordersColumn
                     .frame(width: ordersW)
                     .clipped()
                 // Each divider trades width with its neighbour; the column on the far side stays put.
@@ -75,17 +85,67 @@ struct OrdersPanel: View {
                                  filledShare = (ordersW + filledW - w) / total
                              },
                              onReset: resetColumns)
-                column("Filled", count: groupedFills.count) { filledRows }
+                filledColumn
                     .frame(width: filledW)
                     .clipped()
                 ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: filledW,
                              range: minW...(total - ordersW - minW),
                              onChange: { filledShare = $0 / total },
                              onReset: resetColumns)
-                column("Positions", count: broker.positions.count, onEmptyClick: deselectChart) { positionRows }
+                positionsColumn
                     .clipped()
             }
         }
+    }
+
+    /// Positions over Orders over Filled.
+    private var stackedColumns: some View {
+        GeometryReader { geo in
+            let total = max(geo.size.height - 2, Self.minSectionHeight * 3)   // minus the two 1pt dividers
+            let minH = Self.minSectionHeight
+            let positionsH = min(max(total * positionsRowShare, minH), total - minH * 2)
+            let ordersH = min(max(total * ordersRowShare, minH), total - positionsH - minH)
+            VStack(spacing: 0) {
+                positionsColumn
+                    .frame(height: positionsH)
+                // Each divider trades height with its neighbour; the row on the far side stays put.
+                ResizeHandle(resizes: .vertical, style: .line, thickness: 1, current: positionsH,
+                             range: minH...(positionsH + ordersH - minH),
+                             onChange: { h in
+                                 positionsRowShare = h / total
+                                 ordersRowShare = (positionsH + ordersH - h) / total
+                             },
+                             onReset: resetRows)
+                ordersColumn
+                    .frame(height: ordersH)
+                ResizeHandle(resizes: .vertical, style: .line, thickness: 1, current: ordersH,
+                             range: minH...(total - positionsH - minH),
+                             onChange: { ordersRowShare = $0 / total },
+                             onReset: resetRows)
+                filledColumn
+            }
+        }
+    }
+
+    private var ordersColumn: some View {
+        column("Orders", count: activeOrders.count, onEmptyClick: deselectChart, onHeaderClick: toggleStacked) { activeRows }
+    }
+
+    private var filledColumn: some View {
+        column("Filled", count: groupedFills.count, onHeaderClick: toggleStacked) { filledRows }
+    }
+
+    private var positionsColumn: some View {
+        column("Positions", count: broker.positions.count, onEmptyClick: deselectChart, onHeaderClick: toggleStacked) { positionRows }
+    }
+
+    private func toggleStacked() {
+        stacked.toggle()
+    }
+
+    private func resetRows() {
+        positionsRowShare = 1 / 3
+        ordersRowShare = 1 / 3
     }
 
     private func deselectChart() {
@@ -98,19 +158,20 @@ struct OrdersPanel: View {
     }
 
     /// One always-visible column: a compact header and its own scrolling rows. `onEmptyClick` is
-    /// called for clicks on the column's empty space (not on its rows' text or buttons).
+    /// called for clicks on the column's empty space (not on its rows' text or buttons), `onHeaderClick`
+    /// for clicks on its header.
     private func column<Rows: View>(_ title: String, count: Int, trailing: Text? = nil,
-                                    onEmptyClick: (() -> Void)? = nil,
+                                    onEmptyClick: (() -> Void)? = nil, onHeaderClick: (() -> Void)? = nil,
                                     @ViewBuilder rows: () -> Rows) -> some View {
         column(title: {
             Text(title).fontWeight(.semibold)
             Text("\(count)").foregroundStyle(.secondary)
-        }, trailing: trailing, onEmptyClick: onEmptyClick, rows: rows)
+        }, trailing: trailing, onEmptyClick: onEmptyClick, onHeaderClick: onHeaderClick, rows: rows)
     }
 
     /// A column whose header starts with `title` (the bottom section's tabs).
     private func column<Title: View, Rows: View>(@ViewBuilder title: () -> Title, trailing: Text? = nil,
-                                                 onEmptyClick: (() -> Void)? = nil,
+                                                 onEmptyClick: (() -> Void)? = nil, onHeaderClick: (() -> Void)? = nil,
                                                  @ViewBuilder rows: () -> Rows) -> some View {
         let content = rows()
         return VStack(spacing: 0) {
@@ -123,6 +184,9 @@ struct OrdersPanel: View {
             .padding(.horizontal, 6)
             .frame(height: 16)
             .background(Color.primary.opacity(0.05))
+            .contentShape(Rectangle())
+            .onTapGesture { onHeaderClick?() }
+            .help(onHeaderClick == nil ? "" : (stacked ? "Click to put side by side" : "Click to stack"))
             GeometryReader { geo in
                 ScrollView {
                     LazyVStack(spacing: 0) { content }
