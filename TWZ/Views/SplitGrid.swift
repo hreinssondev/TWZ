@@ -249,8 +249,8 @@ struct GridSliders: View {
     }
 }
 
-/// A flat slider in the grays of the chips beside it: a thin track, filled up to a small knob that
-/// grows a little while hovered or dragged. Clicking the track jumps there; the binding rounds.
+/// A bare slider in the grays of the chips beside it: a hairline track and a short tick for the
+/// value, a shade brighter while hovered or dragged. Clicking the track jumps there; the binding rounds.
 struct MiniSlider: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
@@ -258,22 +258,20 @@ struct MiniSlider: View {
     @State private var isHovering = false
     @State private var isDragging = false
 
-    private static let knobSize: CGFloat = 8
+    private static let tickWidth: CGFloat = 2
 
     var body: some View {
         GeometryReader { geo in
-            let travel = max(1, geo.size.width - Self.knobSize)
+            let travel = max(1, geo.size.width - Self.tickWidth)
             let span = range.upperBound - range.lowerBound
             let fraction = span > 0 ? (min(max(value, range.lowerBound), range.upperBound) - range.lowerBound) / span : 0
-            let knobX = Self.knobSize / 2 + travel * fraction
-            let active = isHovering || isDragging
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.12)).frame(height: 2)
-                Capsule().fill(Color.secondary.opacity(active ? 0.9 : 0.7)).frame(width: knobX, height: 2)
-                Circle()
-                    .fill(active ? Color.primary.opacity(0.85) : Color.secondary)
-                    .frame(width: active ? Self.knobSize + 2 : Self.knobSize, height: active ? Self.knobSize + 2 : Self.knobSize)
-                    .position(x: knobX, y: geo.size.height / 2)
+            let tickX = Self.tickWidth / 2 + travel * fraction
+            ZStack {
+                Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 1)
+                Capsule()
+                    .fill(isHovering || isDragging ? Color.primary : Color.secondary.opacity(0.7))
+                    .frame(width: Self.tickWidth, height: 8)
+                    .position(x: tickX, y: geo.size.height / 2)
             }
             .contentShape(Rectangle())
             .onHover { isHovering = $0 }
@@ -281,12 +279,11 @@ struct MiniSlider: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { drag in
                         isDragging = true
-                        let f = min(max((drag.location.x - Self.knobSize / 2) / travel, 0), 1)
+                        let f = min(max((drag.location.x - Self.tickWidth / 2) / travel, 0), 1)
                         value = range.lowerBound + f * span
                     }
                     .onEnded { _ in isDragging = false }
             )
-            .animation(.easeOut(duration: 0.1), value: active)
         }
         .frame(height: 14)
     }
