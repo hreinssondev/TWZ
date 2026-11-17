@@ -73,7 +73,6 @@ struct CandleChart: View {
     private var lastPrice: Double? { broker.quote(chart.symbol)?.last }
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
     @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
-    @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.hoverKey) private var hoverHex = ""
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @AppStorage(LineDashes.lastPriceKey) private var lastPriceDashed = LineDashes.defaultLastPrice
@@ -506,15 +505,17 @@ struct CandleChart: View {
             ctx.stroke(cross, with: .color(hoverColor.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: hoverDashed ? [3, 3] : []))
             if priceRect.contains(hover) {
                 let hoverPrice = v.price(at: hover.y)
-                // Holding ⌥ turns the price tag the ⌥-click order color: an alt-click buys there.
+                // Holding ⌥ turns the price tag white: an alt-click buys there.
                 // Holding ⌃ turns it red or green: a ⌃-click places a stop loss or take profit there.
                 var tagColor = hoverColor
+                var textColor = Color.white
                 if controlHeld, let color = controlClickColor?(hoverPrice) {
                     tagColor = color
                 } else if optionHeld, onAltClick != nil {
-                    tagColor = LineColors.resolve(altClickHex, default: LineColors.defaultAltClick)
+                    tagColor = .white
+                    textColor = .black
                 }
-                drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor)
+                drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor, textColor: textColor)
                 if let pnl = hoverPnL?(hoverPrice) {
                     drawPnLTag(in: &ctx, pnl: pnl, y: hover.y, plot: plot)
                 }
@@ -659,9 +660,9 @@ struct CandleChart: View {
     /// `opacity` fades only the box, not its white text; at the opacity slider's minimum there's no box.
     /// `inside` puts the box in the chart, just left of the price axis, instead of on it.
     private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
-                         opacity: Double = 1, inside: Bool = false) {
+                         textColor: Color = .white, opacity: Double = 1, inside: Bool = false) {
         let boxed = !PriceAxis.hidesLastPriceBox(opacity)
-        let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
+        let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(textColor))
         let textSize = resolved.measure(in: CGSize(width: 300, height: 40))
         let rect = inside
             ? CGRect(x: plot.maxX - textSize.width - 10, y: y - tagHeight / 2, width: textSize.width + 8, height: tagHeight)
