@@ -29,7 +29,7 @@ struct OrdersPanel: View {
 
     private enum BottomTab: String { case roundTrips, borrow }
 
-    private static let minColumnWidth: CGFloat = 90
+    private static let minColumnWidth: CGFloat = 60
     private static let minSectionHeight: CGFloat = 40
 
     var body: some View {
@@ -66,6 +66,7 @@ struct OrdersPanel: View {
             HStack(spacing: 0) {
                 column("Orders", count: activeOrders.count, onEmptyClick: deselectChart) { activeRows }
                     .frame(width: ordersW)
+                    .clipped()
                 // Each divider trades width with its neighbour; the column on the far side stays put.
                 ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: ordersW,
                              range: minW...(ordersW + filledW - minW),
@@ -76,11 +77,13 @@ struct OrdersPanel: View {
                              onReset: resetColumns)
                 column("Filled", count: groupedFills.count) { filledRows }
                     .frame(width: filledW)
+                    .clipped()
                 ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: filledW,
                              range: minW...(total - ordersW - minW),
                              onChange: { filledShare = $0 / total },
                              onReset: resetColumns)
                 column("Positions", count: broker.positions.count, onEmptyClick: deselectChart) { positionRows }
+                    .clipped()
             }
         }
     }

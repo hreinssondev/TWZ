@@ -16,7 +16,8 @@
 //  the chart grid, whose charts follow the top gainers (see `ChartGrid`); a ● where four charts meet
 //  drags that column and row line together. The button beside a list's filters makes lists A and B
 //  one list across their space (Top Gainers by default; it keeps its own scanner choice), or splits
-//  them again, and moves the right column as far right as that allows. The hotkey buttons keep a
+//  them again, and moves the right column as far right as their columns fit in full (dragged further,
+//  lists clip their price columns, and each list's column header edges drag those widths). The hotkey buttons keep a
 //  fixed size while there's
 //  room (the free space around them changes); dragged shorter, they and the amount box shrink,
 //  and dragged on down the hotkey row collapses, giving the charts the space (drag up to bring it back).
@@ -37,11 +38,12 @@ struct ContentView: View {
     private static let gap: CGFloat = 6
     private static let minTopHeight: CGFloat = 240
     private static let minChartsWidth: CGFloat = 520
-    /// The price columns take 188; the rest leaves room for a symbol.
-    private static let minListWidth: CGFloat = 240
-    /// The right column's narrowest with one list, which has room for symbols there; also what the
-    /// Orders / Filled / Positions columns below need.
-    private static let minSingleListSide: CGFloat = 386
+    /// A list this narrow shows its symbols and clips the price columns on the right.
+    private static let minListWidth: CGFloat = 100
+    /// Where the one-list / two-lists button puts the right column: as narrow as it goes with every
+    /// list column and Orders / Filled / Positions column in full. Dragging goes further, to `minListWidth`.
+    private static let snapListWidth: CGFloat = 240
+    private static let snapSingleListSide: CGFloat = 386
     private static let minListsHeight: CGFloat = 160
     private static let minOrdersHeight: CGFloat = 80
 
@@ -58,7 +60,7 @@ struct ContentView: View {
                 let maxBottom = max(minBottom, inner.height - gap - Self.minTopHeight)
                 let rowHeight = bottomHeight <= 0 ? 0 : clamp(bottomHeight, minBottom...maxBottom)
 
-                let minSide = Self.minSideWidth(singleList: singleList)
+                let minSide = Self.minListWidth * 2 + gap
                 let maxSide = max(minSide, inner.width - gap - Self.minChartsWidth)
                 let sideWidth = clamp(storedSideWidth > 0 ? storedSideWidth : (inner.width - gap) / 3, minSide...maxSide)
 
@@ -116,12 +118,12 @@ struct ContentView: View {
         .ignoresSafeArea(.container, edges: .top)
         .frame(minWidth: 1200, minHeight: 760)
         // Switching between one list and two moves the right column as far right as it goes for that.
-        .onChange(of: singleList) { _, single in storedSideWidth = Self.minSideWidth(singleList: single) }
+        .onChange(of: singleList) { _, single in storedSideWidth = Self.snapSideWidth(singleList: single) }
     }
 
-    /// The right column's narrowest: two lists need room for their symbols, one list less.
-    private static func minSideWidth(singleList: Bool) -> CGFloat {
-        singleList ? minSingleListSide : minListWidth * 2 + gap
+    /// Where switching between one list and two puts the right column.
+    private static func snapSideWidth(singleList: Bool) -> CGFloat {
+        singleList ? snapSingleListSide : snapListWidth * 2 + gap
     }
 
     private func clamp(_ value: Double, _ range: ClosedRange<CGFloat>) -> CGFloat {

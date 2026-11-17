@@ -4,7 +4,8 @@
 //
 //  Live IB scanner list (gainers, losers, after-hours gainers, most active by
 //  dollar volume), with each symbol's % change over the last 5 minutes and a green dot after the
-//  symbols traded today. Clicking a row loads it into the selected chart, which keeps it until the
+//  symbols traded today. The price columns' widths drag from their header's left edge (double-click
+//  resets) and are kept per list; a list narrower than its columns clips them on the right. Clicking a row loads it into the selected chart, which keeps it until the
 //  account bar's Reset (see `ChartGrid`). Prices refresh every
 //  2 seconds rather than every tick, which keeps the UI free for the charts.
 //
@@ -21,6 +22,14 @@ struct ListPanel: View {
     /// filters switches.
     @AppStorage(ListPanel.singleKey) private var isSingle = false
     @State private var showFilter = false
+    @AppStorage private var lastWidth: Double
+    @AppStorage private var changeWidth: Double
+    @AppStorage private var recentWidth: Double
+
+    private static let defaultWidths = (last: 58.0, change: 52.0, recent: 50.0)
+    private static let columnWidthRange: ClosedRange<CGFloat> = 20...160
+    /// Room for a symbol before the price columns are pushed out of the list.
+    private static let minSymbolWidth: CGFloat = 44
 
     static let singleKey = "singleList"
     /// Row values as of the last refresh, by symbol.
@@ -39,6 +48,9 @@ struct ListPanel: View {
     init(panelId: String, defaultScanner: ScannerKind) {
         self.panelId = panelId
         _scanner = AppStorage(wrappedValue: defaultScanner, "scanner.\(panelId)")
+        _lastWidth = AppStorage(wrappedValue: Self.defaultWidths.last, "listColumn.last.\(panelId)")
+        _changeWidth = AppStorage(wrappedValue: Self.defaultWidths.change, "listColumn.change.\(panelId)")
+        _recentWidth = AppStorage(wrappedValue: Self.defaultWidths.recent, "listColumn.recent.\(panelId)")
     }
 
     private var scanSpec: ScanSpec {
@@ -145,16 +157,30 @@ struct ListPanel: View {
 
     private var columnHeader: some View {
         HStack(spacing: 4) {
-            Text("Symbol").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Last").frame(width: 58, alignment: .trailing)
-            Text(scanner == .afterHours ? "AH %" : "%Chg").frame(width: 52, alignment: .trailing)
-            Text("5m %").frame(width: 50, alignment: .trailing)
+            Text("Symbol").frame(minWidth: Self.minSymbolWidth, maxWidth: .infinity, alignment: .leading)
+            Text("Last").frame(width: lastWidth, alignment: .trailing)
+                .overlay(alignment: .leading) { columnHandle($lastWidth, default: Self.defaultWidths.last) }
+            Text(scanner == .afterHours ? "AH %" : "%Chg").frame(width: changeWidth, alignment: .trailing)
+                .overlay(alignment: .leading) { columnHandle($changeWidth, default: Self.defaultWidths.change) }
+            Text("5m %").frame(width: recentWidth, alignment: .trailing)
                 .help("Change over the last 5 minutes (dimmed until 5 minutes of prices have been seen)")
+                .overlay(alignment: .leading) { columnHandle($recentWidth, default: Self.defaultWidths.recent) }
         }
+        .lineLimit(1)
         .font(.system(size: 10, weight: .medium))
         .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
         .padding(.horizontal, 8)
         .padding(.bottom, 3)
+    }
+
+    /// A divider in the gap before a price column; dragging it left widens the column.
+    private func columnHandle(_ width: Binding<Double>, default defaultWidth: Double) -> some View {
+        ResizeHandle(resizes: .horizontal, style: .line, thickness: 1, current: width.wrappedValue,
+                     range: Self.columnWidthRange, inverted: true,
+                     onChange: { width.wrappedValue = $0 }, onReset: { width.wrappedValue = defaultWidth })
+            .offset(x: -2.5)
     }
 
     private var scanStatus: some View {
@@ -202,18 +228,21 @@ struct ListPanel: View {
                         .help("Traded today")
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Text(Fmt.price(values?.last)).frame(width: 58, alignment: .trailing)
+            .frame(minWidth: Self.minSymbolWidth, maxWidth: .infinity, alignment: .leading)
+            Text(Fmt.price(values?.last)).frame(width: lastWidth, alignment: .trailing)
             Text(Fmt.percent(change))
                 .foregroundStyle(Self.changeColor(change))
-                .frame(width: 52, alignment: .trailing)
+                .frame(width: changeWidth, alignment: .trailing)
             Text(Fmt.percent(values?.recent))
                 .foregroundStyle(Self.changeColor(values?.recent))
                 .opacity(values?.recentIsPartial == true ? 0.5 : 1)
-                .frame(width: 50, alignment: .trailing)
+                .frame(width: recentWidth, alignment: .trailing)
         }
         .font(.system(size: 11).monospacedDigit())
         .lineLimit(1)
+        // Narrower than its columns, the list keeps the symbol and clips on the right.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background(isCharted ? Color.accentColor.opacity(0.18) : Color.clear)
