@@ -21,6 +21,8 @@
 //  fixed size while there's
 //  room (the free space around them changes); dragged shorter, they and the amount box shrink,
 //  and dragged on down the hotkey row collapses, giving the charts the space (drag up to bring it back).
+//  Collapsed, it shows at its smallest over the bottom of the charts while the pointer is at the
+//  window's bottom edge below them, or on the row itself.
 //
 
 import SwiftUI
@@ -34,6 +36,9 @@ struct ContentView: View {
     @AppStorage("listSplit") private var listSplit: Double = 0.5          // left list's share of the lists
     @AppStorage(ListPanel.singleKey) private var singleList = false
     @AppStorage("ordersHeight") private var ordersHeight: Double = 190
+    /// The collapsed hotkey row is showing over the charts (see `peekHotkeys`).
+    @State private var hotkeysPeek = false
+    @State private var hotkeysPeekHide: Task<Void, Never>?
 
     private static let gap: CGFloat = 6
     private static let minTopHeight: CGFloat = 240
@@ -75,9 +80,26 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
                         ChartGrid(gap: gap)
-                            // The hotkey row shows messages; collapsed, they float over the charts.
+                            // The hotkey row shows messages; collapsed, they float over the charts, and
+                            // the row itself shows there while peeking. It stays laid out while hidden,
+                            // so an editor or popover opened from it stays open.
                             .overlay(alignment: .bottom) {
-                                if rowHeight <= 0 { FloatingMessages().padding(.horizontal, 6).padding(.bottom, 8) }
+                                if rowHeight <= 0 {
+                                    ZStack(alignment: .bottom) {
+                                        if !hotkeysPeek { FloatingMessages().padding(.horizontal, 6).padding(.bottom, 8) }
+                                        HotkeyPanel()
+                                            .frame(height: minBottom)
+                                            .background(RoundedRectangle(cornerRadius: 6)
+                                                .fill(Color(nsColor: .windowBackgroundColor))
+                                                .shadow(color: .black.opacity(0.35), radius: 8))
+                                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.12)))
+                                            .onHover(perform: peekHotkeys)
+                                            .opacity(hotkeysPeek ? 1 : 0)
+                                            .offset(y: hotkeysPeek ? 0 : 8)
+                                            .allowsHitTesting(hotkeysPeek)
+                                            .animation(.easeOut(duration: 0.15), value: hotkeysPeek)
+                                    }
+                                }
                             }
                         ResizeHandle(resizes: .vertical, thickness: gap, current: rowHeight,
                                      range: minBottom...maxBottom, inverted: true, collapsible: true,
@@ -112,6 +134,11 @@ struct ContentView: View {
                     .frame(width: sideWidth)
                 }
                 .padding(gap)
+                // The window's bottom edge below the charts (the row's drag handle and the margin under it).
+                .overlay(alignment: .bottomLeading) {
+                    HoverTracker(onHover: peekHotkeys)
+                        .frame(width: inner.width - sideWidth, height: gap * 2)
+                }
             }
         }
         // The title bar is hidden; the account bar takes its place, next to the window controls.
@@ -121,6 +148,28 @@ struct ContentView: View {
         .onChange(of: singleList) { _, single in storedSideWidth = Self.snapSideWidth(singleList: single) }
     }
 
+    /// Shows the collapsed hotkey row while the pointer is at the bottom edge or on the row; hides it a
+    /// moment after the pointer leaves both, so moving from one to the other doesn't flicker, and not
+    /// while a popover or sheet (the hotkey customizer or editor) is open over the window.
+    private func peekHotkeys(_ hovering: Bool) {
+        hotkeysPeekHide?.cancel()
+        if hovering {
+            hotkeysPeek = true
+        } else {
+            hotkeysPeekHide = Task {
+                repeat {
+                    try? await Task.sleep(for: .milliseconds(300))
+                } while !Task.isCancelled && Self.hasDialogOpen
+                if !Task.isCancelled { hotkeysPeek = false }
+            }
+        }
+    }
+
+    private static var hasDialogOpen: Bool {
+        guard let window = NSApp.mainWindow else { return false }
+        return window.attachedSheet != nil || !(window.childWindows ?? []).isEmpty
+    }
+
     /// Where switching between one list and two puts the right column.
     private static func snapSideWidth(singleList: Bool) -> CGFloat {
         singleList ? snapSingleListSide : snapListWidth * 2 + gap
@@ -128,5 +177,37 @@ struct ContentView: View {
 
     private func clamp(_ value: Double, _ range: ClosedRange<CGFloat>) -> CGFloat {
         min(range.upperBound, max(range.lowerBound, value))
+    }
+}
+
+/// Reports the pointer entering and leaving its area without taking any clicks, so what's under it
+/// (a drag handle) still works.
+private struct HoverTracker: NSViewRepresentable {
+    let onHover: (Bool) -> Void
+
+    func makeNSView(context: Context) -> Tracker { Tracker(onHover: onHover) }
+    func updateNSView(_ view: Tracker, context: Context) { view.onHover = onHover }
+
+    final class Tracker: NSView {
+        var onHover: (Bool) -> Void
+
+        init(onHover: @escaping (Bool) -> Void) {
+            self.onHover = onHover
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                           owner: self))
+        }
+
+        override func mouseEntered(with event: NSEvent) { onHover(true) }
+        override func mouseExited(with event: NSEvent) { onHover(false) }
     }
 }
