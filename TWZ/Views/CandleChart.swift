@@ -865,7 +865,8 @@ private struct ScrollCatcher: NSViewRepresentable {
             }
             if event.isDirectionInvertedFromDevice { dy = -dy }
             if event.modifierFlags.contains(.command) {
-                if dy != 0 { onPriceScale?(dy) }
+                // A ⌘-swipe on the trackpad scales the opposite way to the ⌘-wheel.
+                if dy != 0 { onPriceScale?(event.hasPreciseScrollingDeltas ? -dy : dy) }
                 return
             }
             onScroll?(dx, dy, location)
