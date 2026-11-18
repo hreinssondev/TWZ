@@ -4,7 +4,7 @@
 //
 //  Records a hotkey's or the Charts window's keyboard shortcut: click, then press the keys. Esc
 //  cancels, Delete clears. Shortcuts the app or macOS already uses, or another hotkey or the Charts
-//  window has, are refused with the reason.
+//  window has, are refused with the reason; one recorded before the app took it is flagged.
 //
 
 import AppKit
@@ -45,7 +45,7 @@ struct ShortcutRecorder: View {
                         .help("Remove the shortcut")
                     }
                 }
-                if let problem {
+                if let problem = problem ?? shortcut?.reservedFor.map({ "\($0), so this one doesn't fire. Record another." }) {
                     Text(problem).font(.caption).foregroundStyle(.red)
                 }
             }
