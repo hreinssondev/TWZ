@@ -17,6 +17,7 @@ struct ListPanel: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     @Environment(\.sideColors) private var sideColors
+    @AppStorage(Dimmed.opacityKey) private var dimmedOpacity = Dimmed.defaultOpacity
 
     let panelId: String
     @AppStorage private var scanner: ScannerKind
@@ -251,7 +252,7 @@ struct ListPanel: View {
                 .frame(width: changeWidth, alignment: .trailing)
             Text(Fmt.percent(values?.recent))
                 .foregroundStyle(changeColor(values?.recent))
-                .opacity(values?.recentIsPartial == true ? 0.5 : 1)
+                .opacity(values?.recentIsPartial == true ? dimmedOpacity : 1)
                 .frame(width: recentWidth, alignment: .trailing)
         }
         .font(.system(size: 11).monospacedDigit())

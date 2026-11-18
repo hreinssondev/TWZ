@@ -360,6 +360,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.showGridKey) private var showGrid = false
     @AppStorage(VolumeBars.opacityKey) private var volumeOpacity = VolumeBars.defaultOpacity
     @AppStorage(SideColors.sourceKey) private var sideSource: SideColors.Source = .candles
+    @AppStorage(Dimmed.opacityKey) private var dimmedOpacity = Dimmed.defaultOpacity
     @AppStorage(SideColors.customUpKey) private var sideUp = ""
     @AppStorage(SideColors.customDownKey) private var sideDown = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
@@ -420,6 +421,19 @@ private struct AppearanceSettings: View {
                     .disabled(sideUp.isEmpty && sideDown.isEmpty)
                 }
                 Text("Lists, Orders / Positions / Round trips, P/L, the position badge and tint, fill bars, trade arrows and buy / sell lines. Own colors start at the candle colors until picked.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Panels") {
+                LabeledContent("Dimmed rows") {
+                    HStack {
+                        Slider(value: $dimmedOpacity, in: Dimmed.opacityRange, step: 0.05)
+                        Text("\(Int((dimmedOpacity * 100).rounded()))%")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+                Text("How strongly filled orders, round trips and a list's partial recent change show: lower is fainter, 100% not dimmed.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

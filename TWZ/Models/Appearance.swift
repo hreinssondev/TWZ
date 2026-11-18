@@ -97,7 +97,7 @@ enum AppearanceDefaults {
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
         LineColors.showLastTradeLinesKey, LineColors.showGridKey, VolumeBars.opacityKey,
-        SideColors.sourceKey, SideColors.customUpKey, SideColors.customDownKey,
+        SideColors.sourceKey, SideColors.customUpKey, SideColors.customDownKey, Dimmed.opacityKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
@@ -217,6 +217,14 @@ enum HoverPnLSize: String, CaseIterable, Identifiable {
         let percent = UserDefaults.standard.object(forKey: percentKey) as? Double ?? defaultPercent
         return min(100, max(1, percent)) / 100
     }
+}
+
+/// How faint the right-hand panels draw what's done or partial: filled orders, round trips and their
+/// header, a list's recent change while its window isn't full yet.
+enum Dimmed {
+    static let opacityKey = "dimmedOpacity"
+    static let defaultOpacity = 0.45
+    static let opacityRange = 0.1...1.0
 }
 
 /// The volume bars along the bottom of each chart, in the candles' colors at this opacity (0 hides them).

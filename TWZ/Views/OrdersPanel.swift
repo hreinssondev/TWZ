@@ -46,8 +46,8 @@ struct OrdersPanel: View {
 
     private static let minColumnWidth: CGFloat = 60
     private static let minSectionHeight: CGFloat = 40
-    /// Done orders and round trips are dimmed this much.
-    private static let doneOpacity = 0.45
+    /// Done orders and round trips are dimmed this much (Settings › Appearance).
+    @AppStorage(Dimmed.opacityKey) private var doneOpacity = Dimmed.defaultOpacity
     /// NOK values and share counts from five digits up are grouped by thousands ("10 000"), shorter
     /// ones not ("9999").
     private static let groupedFrom = 10_000
@@ -160,7 +160,7 @@ struct OrdersPanel: View {
                 if let trailing { trailing }
             }
             .font(.system(size: 10))
-            .opacity(dimsHeader ? Self.doneOpacity : 1)
+            .opacity(dimsHeader ? doneOpacity : 1)
             .padding(.horizontal, 6)
             .frame(height: 16)
             .background(Color.primary.opacity(0.05))
@@ -284,7 +284,7 @@ struct OrdersPanel: View {
     private func filledRow(_ g: FillGroup, tripOrders: Int?) -> some View {
         let f = g.fill
         let valueNOK = (f.usdNok ?? broker.usdNok).map { f.shares * f.price * $0 }
-        let dim = Self.doneOpacity
+        let dim = doneOpacity
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
                 symbolButton(f.symbol, onDoubleClick: { showFills(g) })
@@ -460,7 +460,7 @@ struct OrdersPanel: View {
                     }
                     .font(.system(size: 10).monospacedDigit())
                 }
-                .opacity(Self.doneOpacity)
+                .opacity(doneOpacity)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { workspace.showTrip(t, broker: broker) }
                 .onTapGesture { tripsShowingDetails.formSymmetricDifference([t.id]) }
