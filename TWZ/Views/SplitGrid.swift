@@ -149,6 +149,9 @@ struct SplitStore {
 struct GridSliders: View {
     /// How long the sliders must be left alone before the grid takes their size and loads.
     private static let settleDelay: Duration = .seconds(2)
+    /// Zoom and Space share a width; Cols and Rows are narrower.
+    private static let sliderWidth: CGFloat = 76
+    private static let sizeSliderWidth: CGFloat = 44
 
     @Binding var columns: Int
     @Binding var rows: Int
@@ -184,7 +187,7 @@ struct GridSliders: View {
         MiniSlider(label: "Space", valueText: "\(Int(rightSpace))",
                    value: Binding(get: { rightSpace }, set: { rightSpace = $0.rounded() }),
                    range: RightSpace.range)
-            .frame(width: 64)
+            .frame(width: Self.sliderWidth)
             .help("Empty bars between the latest candle and the price axis, on every chart")
     }
 
@@ -193,7 +196,7 @@ struct GridSliders: View {
         MiniSlider(label: "Zoom", valueText: "\(Int(zoom))",
                    value: Binding(get: { -zoom }, set: { zoom = -($0 / 10).rounded() * 10 }),
                    range: -ChartModel.maxVisibleBars...(-30))
-            .frame(width: 84)
+            .frame(width: Self.sliderWidth)
             .help(zoomHelp)
     }
 
@@ -208,7 +211,7 @@ struct GridSliders: View {
             }),
             range: Double(range.lowerBound)...Double(range.upperBound)
         )
-        .frame(width: 44)
+        .frame(width: Self.sizeSliderWidth)
     }
 
     /// Restarts the wait on every slider move to a new size; once it runs out, the grid takes the sliders' size.

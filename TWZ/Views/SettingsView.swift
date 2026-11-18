@@ -3,8 +3,9 @@
 //  TWZ
 //
 //  Settings sheet: Connection (IB Gateway host/port/client, applied on reconnect),
-//  Trading (what clicking a hotkey button does, and the keyboard shortcuts)
-//  and Appearance (candle and chart line colors, applied immediately).
+//  Trading (what clicking a hotkey button does, and the keyboard shortcuts),
+//  Appearance (candle and chart line colors, applied immediately) and Layouts (the main window's
+//  layout saved under a name, loaded back; see `Layouts`).
 //
 
 import SwiftUI
@@ -17,6 +18,7 @@ struct SettingsView: View {
         case connection = "Connection"
         case trading = "Trading"
         case appearance = "Appearance"
+        case layouts = "Layouts"
         var id: String { rawValue }
 
         var icon: String {
@@ -24,6 +26,7 @@ struct SettingsView: View {
             case .connection: "network"
             case .trading: "keyboard"
             case .appearance: "paintpalette"
+            case .layouts: "rectangle.3.group"
             }
         }
     }
@@ -56,6 +59,7 @@ struct SettingsView: View {
             case .connection: ConnectionSettings()
             case .trading: TradingSettings()
             case .appearance: AppearanceSettings()
+            case .layouts: LayoutSettings()
             }
         }
         .frame(width: 460, height: 440)
@@ -211,6 +215,87 @@ private struct TradingSettings: View {
     }
 }
 
+// MARK: - Layouts
+
+private struct LayoutSettings: View {
+    @Environment(Workspace.self) private var workspace
+    @Environment(\.dismiss) private var dismiss
+    @State private var newName = ""
+    @State private var replacing: SavedLayout?
+    @State private var deleting: SavedLayout?
+
+    var body: some View {
+        @Bindable var workspace = workspace
+        Form {
+            Section {
+                HStack {
+                    TextField("Name", text: $newName, prompt: Text("Layout \(workspace.layouts.count + 1)"))
+                        .onSubmit(saveNew)
+                    Button("Save", action: saveNew)
+                }
+            } header: {
+                Text("Save the current layout")
+            } footer: {
+                Text("Panel sizes, one list or two and their columns, the chart grid's size, lines, zoom and space, and every Appearance setting (colors, line styles, indicators). Loading one leaves the charts' stocks and timeframes and the lists' scanners as they are.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Saved layouts") {
+                if workspace.layouts.isEmpty {
+                    Text("None yet").foregroundStyle(.secondary)
+                }
+                ForEach($workspace.layouts) { $layout in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 1) {
+                            // The layout's name, editable in place (no "Name" label beside it).
+                            TextField("Name", text: $layout.name)
+                                .textFieldStyle(.plain)
+                                .labelsHidden()
+                                .fontWeight(.medium)
+                            Text(layout.saved, format: .dateTime.day().month().hour().minute())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Load") {
+                            workspace.loadLayout(layout)
+                            dismiss()
+                        }
+                        Button("Update") { replacing = layout }
+                            .help("Replace with the current layout")
+                        Button(role: .destructive) { deleting = layout } label: { Image(systemName: "trash") }
+                            .buttonStyle(.borderless)
+                            .help("Delete")
+                    }
+                    .controlSize(.small)
+                }
+                .onMove { workspace.layouts.move(fromOffsets: $0, toOffset: $1) }
+            }
+        }
+        .formStyle(.grouped)
+        .confirmationDialog("Replace “\(replacing?.name ?? "")” with the current layout?",
+                            isPresented: Binding(get: { replacing != nil }, set: { if !$0 { replacing = nil } })) {
+            Button("Replace") {
+                if let replacing { workspace.saveLayout(name: replacing.name, replacing: replacing.id) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog("Delete “\(deleting?.name ?? "")”?",
+                            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Delete", role: .destructive) {
+                workspace.layouts.removeAll { $0.id == deleting?.id }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func saveNew() {
+        let name = newName.trimmingCharacters(in: .whitespaces)
+        workspace.saveLayout(name: name.isEmpty ? "Layout \(workspace.layouts.count + 1)" : name)
+        newName = ""
+    }
+}
+
 // MARK: - Appearance
 
 private struct AppearanceSettings: View {
@@ -227,6 +312,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
+    @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
@@ -335,6 +421,17 @@ private struct AppearanceSettings: View {
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
                     }
+                }
+            }
+            Section("Top bar") {
+                Picker("Position", selection: $barPosition) {
+                    ForEach(AccountBarPosition.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                if barPosition == .bottom {
+                    Text("At the bottom, the window's close / minimize / zoom buttons are hidden; ⌘W, ⌘M and ⌃⌘F still work.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
             Section("Chart header") {

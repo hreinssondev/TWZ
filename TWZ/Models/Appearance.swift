@@ -43,7 +43,7 @@ enum AppearanceDefaults {
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
-        SelectedOutline.widthKey, TimeframePickerStyle.storageKey,
+        SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
     ] + LineDashes.keys
@@ -97,6 +97,16 @@ enum TimeframePickerStyle: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static let storageKey = "timeframePickerStyle"
+}
+
+/// Where the account bar sits: at the top, in the title bar beside the window buttons (default), or at
+/// the very bottom of the window, with the window buttons hidden (⌘W, ⌘M and ⌃⌘F still work).
+enum AccountBarPosition: String, CaseIterable, Identifiable {
+    case top = "Top"
+    case bottom = "Bottom"
+    var id: String { rawValue }
+
+    static let storageKey = "accountBarPosition"
 }
 
 /// Thickness of the accent outline around the selected chart.

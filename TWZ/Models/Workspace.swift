@@ -105,9 +105,28 @@ final class Workspace {
     /// instead of following the gainers, until Reset (see `ChartGrid`). Saved with their stock
     /// (see `mainGridPins`).
     var manualChartIDs: Set<Int> = []
+    /// Round trips double-clicked in the Round trips tab, by symbol: their fills' arrows and entry / exit
+    /// lines show on the symbol's charts until the row, or one of those charts, is double-clicked.
+    var shownTrips: [String: String] = [:]
     /// Counts the account bar's Resets: every main-window chart follows the gainers again, on the
     /// top bar's timeframe.
     var gainerResets = 0
+    /// The list the main-window charts follow in place of the top gainers, from a list's load button,
+    /// until Reset (nil: the gainers). Saved.
+    var gridScan: ScanSpec? {
+        didSet { defaults.set(gridScan.flatMap { try? JSONEncoder().encode($0) }, forKey: MainGrid.scanKey) }
+    }
+    /// Saved layouts, in the order saved (see `Layouts`).
+    var layouts: [SavedLayout] {
+        didSet { defaults.set(try? JSONEncoder().encode(layouts), forKey: Layouts.storageKey) }
+    }
+    /// The Settings sheet is open (shown from the main window, so it stays open while the account bar
+    /// moves between top and bottom).
+    var showsSettings = false
+    /// Counts layouts loaded, so views holding layout state of their own (the grid's lines) reload it.
+    var layoutLoads = 0
+    /// Settings a layout load just changed whose change handler should let it be once (see `loadLayout`).
+    @ObservationIgnored var layoutSkips: Set<String> = []
 
     var selectedChart: ChartModel { chart(id: selectedChartID) ?? mainCharts[0] }
 
@@ -166,6 +185,11 @@ final class Workspace {
         }
 
         fastChartIDs = Set(defaults.array(forKey: "fastChartIDs") as? [Int] ?? Array(0..<4))
+
+        layouts = defaults.data(forKey: Layouts.storageKey)
+            .flatMap { try? JSONDecoder().decode([SavedLayout].self, from: $0) } ?? []
+
+        gridScan = defaults.data(forKey: MainGrid.scanKey).flatMap { try? JSONDecoder().decode(ScanSpec.self, from: $0) }
 
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }

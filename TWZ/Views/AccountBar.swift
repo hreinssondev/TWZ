@@ -8,11 +8,11 @@ import SwiftUI
 struct AccountBar: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
-    @State private var showSettings = false
     @AppStorage(MainGrid.columnsKey) private var gridColumns = 2
     @AppStorage(MainGrid.rowsKey) private var gridRows = 2
     @AppStorage(MainGrid.zoomKey) private var gridZoom: Double = ChartModel.initialVisibleBars
     @AppStorage(MainGrid.timeframeKey) private var gridTimeframe: Timeframe = .m1
+    @AppStorage(AccountBarPosition.storageKey) private var position: AccountBarPosition = .top
     /// Distance from the window's top edge to the center of the close/minimize/zoom buttons.
     @State private var controlsCenterY: CGFloat = 14
 
@@ -28,10 +28,12 @@ struct AccountBar: View {
                 .background(Capsule().fill(broker.isLivePort ? Color.red : Color.blue))
 
             // Account values are in the base currency (NOK), shown as bare numbers.
-            stat("Equity", Fmt.amount(broker.netLiquidation))
-            stat("P/L Today", Fmt.amount(broker.dailyPnL, signed: true), color: color(broker.dailyPnL))
-            stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true), color: color(broker.unrealizedPnL))
-            stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
+            HStack(spacing: 12) {
+                stat("Equity", Fmt.amount(broker.netLiquidation))
+                stat("P/L Today", Fmt.amount(broker.dailyPnL, signed: true))
+                stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true))
+                stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
+            }
 
             // The chart grid's size, its charts' zoom and timeframe (see `ChartGrid`).
             GridSliders(columns: $gridColumns, rows: $gridRows, zoom: $gridZoom,
@@ -54,7 +56,7 @@ struct AccountBar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Every chart shows the top gainers in order again, on the timeframe beside it and at the Zoom slider's zoom; charts set by hand let go of their stock")
+                .help("Every chart shows the top gainers in order again (also after loading a list), on the timeframe beside it and at the Zoom slider's zoom; charts set by hand let go of their stock")
             }
 
             Spacer()
@@ -71,20 +73,20 @@ struct AccountBar: View {
             .controlSize(.small)
 
             Button {
-                showSettings = true
+                workspace.showsSettings = true
             } label: {
                 Image(systemName: "gearshape")
             }
             .buttonStyle(.borderless)
             .help("Settings")
         }
-        .padding(.leading, Self.trafficLightsWidth)
+        // At the top, beside the window controls and centered on them, so the stats line up with them;
+        // at the bottom (controls hidden), from the window's edge.
+        .padding(.leading, position == .top ? Self.trafficLightsWidth : 12)
         .padding(.trailing, 12)
-        // Centered on the window controls, so the stats line up with them.
-        .frame(height: max(28, controlsCenterY * 2))
+        .frame(height: position == .top ? max(28, controlsCenterY * 2) : 28)
         .background(.bar)
         .background(WindowControlsProbe { controlsCenterY = $0 })
-        .sheet(isPresented: $showSettings) { SettingsView() }
     }
 
     private var statusColor: Color {
@@ -95,16 +97,15 @@ struct AccountBar: View {
         }
     }
 
-    private func color(_ v: Double?) -> Color {
-        guard let v, v != 0 else { return .primary }
-        return v > 0 ? .green : .red
-    }
-
-    private func stat(_ title: String, _ value: String, color: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(title).font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
-            Text(value).font(.system(size: 13, weight: .semibold).monospacedDigit()).foregroundStyle(color)
+    /// One line of plain text, small like the bar's buttons: the title dimmed, the value a little
+    /// brighter; a point lower, in line with the buttons' text.
+    private func stat(_ title: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title).foregroundStyle(Color.secondary.opacity(0.7))
+            Text(value).foregroundStyle(Color.primary.opacity(0.8))
         }
+        .font(.system(size: 10).monospacedDigit())
+        .offset(y: 1)
     }
 }
 

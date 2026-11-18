@@ -2,7 +2,8 @@
 //  ContentView.swift
 //  TWZ
 //
-//  ┌──── ●●● account bar (in the title bar) ──────┐
+//  ┌──── ●●● account bar (in the title bar) ──────┐   (or at the very bottom, without ●●●:
+//                                                     Settings › Appearance › Top bar)
 //  │  chart 1  │  chart 2  ┃  list A  ┃  list B  │
 //  │ ──────────●────────── ┃          ┃          │
 //  │  chart 3  │  chart 4  ┃          ┃          │
@@ -39,6 +40,7 @@ struct ContentView: View {
     /// The collapsed hotkey row is showing over the charts (see `peekHotkeys`).
     @State private var hotkeysPeek = false
     @State private var hotkeysPeekHide: Task<Void, Never>?
+    @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top
 
     private static let gap: CGFloat = 6
     private static let minTopHeight: CGFloat = 240
@@ -58,9 +60,10 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AccountBar()
-                .task { await broker.ssrList.keepLoaded() }
-            Divider()
+            if barPosition == .top {
+                accountBar
+                Divider()
+            }
             GeometryReader { geo in
                 let gap = Self.gap
                 let inner = CGSize(width: geo.size.width - gap * 2, height: geo.size.height - gap * 2)
@@ -146,12 +149,28 @@ struct ContentView: View {
                                                   ? minBottom + Self.peekReleaseMargin : Self.peekTriggerHeight))
                 }
             }
+            if barPosition == .bottom {
+                Divider()
+                accountBar
+            }
         }
-        // The title bar is hidden; the account bar takes its place, next to the window controls.
+        // The title bar is hidden; the account bar takes its place, next to the window controls (or
+        // with the bar at the bottom, the controls are hidden and the panels go up to the top edge).
         .ignoresSafeArea(.container, edges: .top)
+        .background(WindowButtonsHider(hidden: barPosition == .bottom))
+        .sheet(isPresented: Bindable(workspace).showsSettings) { SettingsView() }
         .frame(minWidth: 1200, minHeight: 760)
         // Switching between one list and two moves the right column as far right as it goes for that.
-        .onChange(of: singleList) { _, single in storedSideWidth = Self.snapSideWidth(singleList: single) }
+        // A loaded layout keeps its own width.
+        .onChange(of: singleList) { _, single in
+            if workspace.layoutSkips.remove(ListPanel.singleKey) != nil { return }
+            storedSideWidth = Self.snapSideWidth(singleList: single)
+        }
+    }
+
+    private var accountBar: some View {
+        AccountBar()
+            .task { await broker.ssrList.keepLoaded() }
     }
 
     /// Shows the collapsed hotkey row while the pointer is near the bottom edge or around the row; hides
@@ -183,6 +202,22 @@ struct ContentView: View {
 
     private func clamp(_ value: Double, _ range: ClosedRange<CGFloat>) -> CGFloat {
         min(range.upperBound, max(range.lowerBound, value))
+    }
+}
+
+/// Hides or shows the window's close / minimize / zoom buttons.
+private struct WindowButtonsHider: NSViewRepresentable {
+    let hidden: Bool
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        // The window isn't there yet on the first pass.
+        DispatchQueue.main.async {
+            for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+                view.window?.standardWindowButton(button)?.isHidden = hidden
+            }
+        }
     }
 }
 

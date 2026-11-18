@@ -389,6 +389,9 @@ struct OrdersPanel: View {
                     .font(.system(size: 10).monospacedDigit())
                 }
                 .opacity(Self.doneOpacity)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) { workspace.showTrip(t, broker: broker) }
+                .help("Double-click to show the trade on \(t.symbol)'s chart")
                 .rowStyle()
             }
         }

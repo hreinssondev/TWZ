@@ -4,8 +4,8 @@
 //
 //  Live IB scanner list (gainers, losers, after-hours gainers, most active by
 //  dollar volume), with each symbol's % change over the last 5 minutes and a green dot after the
-//  symbols traded today. The load button beside the filters puts the list's symbols into the chart
-//  grid, in the list's order, until the account bar's Reset (see `ChartGrid`). The price columns' widths drag from their header's left edge (double-click
+//  symbols traded today. The load button beside the filters makes the chart grid follow the list, in
+//  its order and as it changes, in place of the gainers until the account bar's Reset (see `ChartGrid`). The price columns' widths drag from their header's left edge (double-click
 //  resets) and are kept per list; a list narrower than its columns clips them on the right. Clicking a row loads it into the selected chart, which keeps it until the
 //  account bar's Reset (see `ChartGrid`). Prices refresh every
 //  2 seconds rather than every tick, which keeps the UI free for the charts.
@@ -100,7 +100,7 @@ struct ListPanel: View {
                 .help(isSingle ? "Split into two lists" : "One list across both")
 
                 Button {
-                    workspace.loadList(symbols, timeframe: gridTimeframe, broker: broker)
+                    workspace.loadList(symbols, scan: scanSpec, timeframe: gridTimeframe, broker: broker)
                 } label: {
                     Image(systemName: "arrow.down")
                         .font(.system(size: 10))
@@ -110,7 +110,7 @@ struct ListPanel: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .disabled(symbols.isEmpty)
-                .help("Load this list into the chart grid, top first (until Reset)")
+                .help("The chart grid follows this list, top first, as it changes (until Reset)")
             }
             .padding(6)
 

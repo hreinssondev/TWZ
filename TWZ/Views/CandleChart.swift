@@ -13,7 +13,8 @@
 //  Indicators: SMA 9 and SMA 21 on every chart, plus VWAP (from 04:00 ET) on intraday charts;
 //  each can be turned off, and their thickness set, in Settings › Appearance.
 //  Trades (off by default): the day's fills in the symbol, a green ▲ under each buy and a red ▼
-//  over each sell, tip at the fill price, on the bar the fill came in.
+//  over each sell, tip at the fill price, on the bar the fill came in; a round trip double-clicked in
+//  the Round trips tab shows its fills' arrows either way.
 //  Hovering the price area shows, left of the price tag, the P/L at the hovered price (see `hoverPnL`).
 //  ⌃-clicking with no position open places a what-if buy at that price (see `WhatIf`), and
 //  ⌃-clicking its line removes it.
@@ -27,6 +28,8 @@ struct PriceLine {
     var color: Color
     var label: String
     var dashed = true
+    /// Small dots, finer than the dashes (a round trip shown from the Round trips tab).
+    var dotted = false
     /// The order the line belongs to; double-clicking the line cancels it. An order's price box sits in
     /// the chart, just left of the axis, above the last price line, so the axis boxes never cover it.
     var orderId: Int?
@@ -37,6 +40,8 @@ struct PriceLine {
     var axisText: String?
     /// A single click on the line cancels it too (the ⌃-click lines: stop loss, take profit, what-if).
     var cancelsOnClick = false
+    /// How much of the order has filled (0–1): a thin bar just above its price box.
+    var fillProgress: Double?
 }
 
 /// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
@@ -66,6 +71,10 @@ struct CandleChart: View {
     var onCancelOrder: ((Int) -> Void)?
     /// Any left click on the chart, modified or not (it still pans, zooms or places orders as usual).
     var onClick: (() -> Void)?
+    /// Double-click anywhere but an order line (it still resets the view).
+    var onDoubleClick: (() -> Void)?
+    /// Fills drawn as arrows even with Trades off (a round trip shown from the Round trips tab).
+    var shownFillIds: Set<String> = []
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
 
@@ -121,6 +130,7 @@ struct CandleChart: View {
                     onCancelOrder?(id)
                 } else {
                     resetView()
+                    onDoubleClick?()
                 }
             }
             .onTapGesture { location in
@@ -473,7 +483,7 @@ struct CandleChart: View {
         plotCtx.fill(downBodies, with: .color(down))
 
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
-        if showTrades { drawTrades(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y) }
+        if showTrades || !shownFillIds.isEmpty { drawTrades(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y) }
 
         // Position / order lines; orders and the ones that move aside for the last price (avg cost) go
         // on top of it.
@@ -484,9 +494,11 @@ struct CandleChart: View {
         func draw(_ line: PriceLine) {
             let lineY = y(line.price)
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
+            // Dashed order lines get the small dots.
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed,
+                     dotted: line.dotted || (isOrder(line) && line.dashed),
                      tag: line.axisText ?? (line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))"),
-                     tagInside: covered || isOrder(line), lineStart: isOrder(line) ? orderLineStart : nil)
+                     tagInside: covered || isOrder(line), lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress)
         }
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)
@@ -566,7 +578,7 @@ struct CandleChart: View {
     /// The day's fills in this chart's symbol, on the visible bars.
     private func drawTrades(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int,
                             x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
-        let fills = broker.fills.values.filter { $0.symbol == chart.symbol }
+        let fills = broker.fills.values.filter { $0.symbol == chart.symbol && (showTrades || shownFillIds.contains($0.id)) }
         guard !fills.isEmpty else { return }
         var groups: [String: (bar: Int, isBuy: Bool, shares: Double, cost: Double)] = [:]
         for fill in fills {
@@ -646,22 +658,24 @@ struct CandleChart: View {
         return values
     }
 
-    private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, tag: String,
-                          tagOpacity: Double = 1, tagInside: Bool = false, showsLine: Bool = true, lineStart: CGFloat? = nil) {
+    private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, dotted: Bool = false, tag: String,
+                          tagOpacity: Double = 1, tagInside: Bool = false, showsLine: Bool = true, lineStart: CGFloat? = nil, progress: Double? = nil) {
         if showsLine {
             var path = Path()
             path.move(to: CGPoint(x: lineStart ?? plot.minX, y: y))
             path.addLine(to: CGPoint(x: plot.maxX, y: y))
-            ctx.stroke(path, with: .color(color.opacity(0.8)), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
+            ctx.stroke(path, with: .color(color.opacity(0.8)),
+                       style: StrokeStyle(lineWidth: 1, dash: dotted ? [1, 2] : dashed ? [4, 3] : []))
         }
-        drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside)
+        drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside, progress: progress)
     }
 
     /// `opacity` fades only the box, not its text; at the opacity slider's minimum there's no box.
     /// The text is white, or black on a light box (white ⌥-click lines, say).
     /// `inside` puts the box in the chart, just left of the price axis, instead of on it.
+    /// `progress` (0–1) draws a thin bar as wide as the box just above it, filled that far.
     private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
-                         opacity: Double = 1, inside: Bool = false) {
+                         opacity: Double = 1, inside: Bool = false, progress: Double? = nil) {
         let boxed = !PriceAxis.hidesLastPriceBox(opacity)
         let textColor: Color = boxed && opacity >= 0.5 && color.isLight ? .black : .white
         let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(textColor))
@@ -671,6 +685,12 @@ struct CandleChart: View {
             : CGRect(x: plot.maxX + 1, y: y - tagHeight / 2, width: max(axisWidth - 2, textSize.width + 8), height: tagHeight)
         if boxed { ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color.opacity(opacity))) }
         ctx.draw(resolved, at: CGPoint(x: rect.minX + 4, y: y), anchor: .leading)
+        if let progress {
+            let track = CGRect(x: rect.minX, y: rect.minY - 4, width: rect.width, height: 3)
+            ctx.fill(Path(roundedRect: track, cornerRadius: 1.5), with: .color(color.opacity(0.3)))
+            let filled = CGRect(x: track.minX, y: track.minY, width: track.width * min(1, max(0, progress)), height: track.height)
+            ctx.fill(Path(roundedRect: filled, cornerRadius: 1.5), with: .color(color))
+        }
     }
 
     /// The P/L at the hovered price, in a green (gain) or red (loss) tag just left of the price axis.

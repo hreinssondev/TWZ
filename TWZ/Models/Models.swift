@@ -64,6 +64,9 @@ nonisolated struct OrderRow: Identifiable, Equatable {
     /// USD/NOK when the order was placed (or first seen), so its NOK value doesn't move with the rate.
     var usdNok: Double?
 
+    /// Share of the order filled so far, 0–1.
+    var fillProgress: Double { quantity > 0 ? min(1, filled / quantity) : 0 }
+
     var isActive: Bool {
         ["PendingSubmit", "PreSubmitted", "Submitted", "ApiPending", "PendingCancel"].contains(status)
     }
@@ -99,6 +102,8 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
     /// Orders whose fills opened / closed the trip, in fill order.
     var entryOrderIds: [Int] = []
     var exitOrderIds: [Int] = []
+    /// The fills that make up the trip (a fill that flips the position is in both trips).
+    var fillIds: [String] = []
 
     var isOpen: Bool { abs(openShares) > 1e-9 }
     var entryShares: Double { (isLong ? buyShares : sellShares) + abs(carried) }
@@ -142,6 +147,7 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
                     // Up to the whole fill adds to the trip; a fill against it closes at most what's held.
                     let opening = qty == 0 || (qty > 0) == (remaining > 0)
                     let step = opening ? remaining : (remaining > 0 ? min(remaining, -qty) : max(remaining, -qty))
+                    if !trip!.fillIds.contains(fill.id) { trip!.fillIds.append(fill.id) }
                     if (step > 0) == trip!.isLong {
                         if !trip!.entryOrderIds.contains(fill.orderId) { trip!.entryOrderIds.append(fill.orderId) }
                     } else if !trip!.exitOrderIds.contains(fill.orderId) {
@@ -449,7 +455,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
 
 // MARK: - Scanners
 
-nonisolated enum ScannerKind: String, CaseIterable, Identifiable {
+nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
     case gainers = "Top Gainers"
     case losers = "Top Losers"
     case afterHours = "AH Gainers"
@@ -483,7 +489,7 @@ nonisolated struct ScannerFilter: Codable, Equatable {
     var minVolume: Int? = 100_000
 }
 
-nonisolated struct ScanSpec: Equatable {
+nonisolated struct ScanSpec: Codable, Equatable {
     var kind: ScannerKind
     var filter: ScannerFilter
     var rows = ScannerKind.rowCount
