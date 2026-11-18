@@ -706,8 +706,9 @@ struct CandleChart: View {
     /// `opacity` fades only the box, not its text; at the opacity slider's minimum there's no box.
     /// The text is white, or black on a light box (white ⌥-click lines, say).
     /// `inside` puts the box in the chart, just left of the price axis (or of `insideRight`), instead of on it.
-    /// `progress` (0–1) draws a thin bar as wide as the box just above it, filled that far, in
-    /// `progressColor` (the box's color without one).
+    /// `progress` (0–1, an order's fill) draws a thin bar as wide as the box just above it, filled that
+    /// far, in `progressColor` (the box's color without one); the box itself starts black, outlined in
+    /// its color, and fills with it from the left as far, its text white on the black part.
     @discardableResult
     private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
                          opacity: Double = 1, inside: Bool = false, insideRight: CGFloat? = nil, progress: Double? = nil,
@@ -719,8 +720,26 @@ struct CandleChart: View {
         let rect = inside
             ? CGRect(x: (insideRight ?? plot.maxX - 2) - textSize.width - 8, y: y - tagHeight / 2, width: textSize.width + 8, height: tagHeight)
             : CGRect(x: plot.maxX + 1, y: y - tagHeight / 2, width: max(axisWidth - 2, textSize.width + 8), height: tagHeight)
-        if boxed { ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color.opacity(opacity))) }
-        ctx.draw(resolved, at: CGPoint(x: rect.minX + 4, y: y), anchor: .leading)
+        let textAt = CGPoint(x: rect.minX + 4, y: y)
+        if boxed, let progress {
+            let box = Path(roundedRect: rect, cornerRadius: 3)
+            let split = rect.minX + rect.width * min(1, max(0, progress))
+            let filled = CGRect(x: rect.minX, y: rect.minY, width: split - rect.minX, height: rect.height)
+            let unfilled = CGRect(x: split, y: rect.minY, width: rect.maxX - split, height: rect.height)
+            ctx.fill(box, with: .color(Color.black.opacity(opacity)))
+            var lit = ctx
+            lit.clip(to: Path(filled))
+            lit.fill(box, with: .color(color.opacity(opacity)))
+            lit.draw(resolved, at: textAt, anchor: .leading)
+            var dark = ctx
+            dark.clip(to: Path(unfilled))
+            dark.draw(ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.white)), at: textAt, anchor: .leading)
+            ctx.stroke(Path(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 3), with: .color(color.opacity(opacity)), lineWidth: 1)
+        } else {
+            if boxed { ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color.opacity(opacity))) }
+            ctx.draw(resolved, at: textAt, anchor: .leading)
+        }
         if let progress {
             let track = CGRect(x: rect.minX, y: rect.minY - 4, width: rect.width, height: 3)
             let barColor = progressColor ?? color
