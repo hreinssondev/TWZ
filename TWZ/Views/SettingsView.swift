@@ -556,7 +556,7 @@ private struct AppearanceSettings: View {
         .formStyle(.grouped)
     }
 
-    /// Color swatch, solid / dashed switch, and a Reset button while a custom color is set (empty hex = default).
+    /// Color swatch, solid / dashes / dots switch, and a Reset button while a custom color is set (empty hex = default).
     private func lineColorRow(_ title: String, key: String, hex: Binding<String>, default fallback: Color,
                               dashedKey: String, dashedDefault: Bool) -> some View {
         HStack {
@@ -603,17 +603,31 @@ private struct PresetRow: View {
 }
 
 /// Solid / dashed switch for the chart line whose style is stored under `key`.
+/// Solid, dashes or small dots, stored as the line's dashed key and its dots key beside it.
 private struct LineStylePicker: View {
     @AppStorage private var dashed: Bool
+    @AppStorage private var dots: Bool
+
+    private enum Style { case solid, dashes, dots }
 
     init(key: String, default dashedDefault: Bool) {
         _dashed = AppStorage(wrappedValue: dashedDefault, key)
+        _dots = AppStorage(wrappedValue: LineDashes.defaultDots(key), LineDashes.dotsKey(key))
+    }
+
+    private var style: Binding<Style> {
+        Binding(get: { !dashed ? .solid : dots ? .dots : .dashes },
+                set: { style in
+                    dashed = style != .solid
+                    if style != .solid { dots = style == .dots }
+                })
     }
 
     var body: some View {
-        Picker("", selection: $dashed) {
-            Text("Solid").tag(false)
-            Text("Dashed").tag(true)
+        Picker("", selection: style) {
+            Text("Solid").tag(Style.solid)
+            Text("Dashes").tag(Style.dashes)
+            Text("Dots").tag(Style.dots)
         }
         .pickerStyle(.segmented)
         .labelsHidden()

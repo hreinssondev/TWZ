@@ -310,6 +310,12 @@ struct TradingChart: View {
     @AppStorage(LineDashes.takeProfitKey) private var takeProfitDashed = LineDashes.defaultTakeProfit
     @AppStorage(LineDashes.ordersKey) private var ordersDashed = LineDashes.defaultOrders
     @AppStorage(LineDashes.lastTradeKey) private var lastTradeDashed = LineDashes.defaultLastTrade
+    @AppStorage(LineDashes.dotsKey(LineDashes.avgCostKey)) private var avgCostDots = LineDashes.defaultDots(LineDashes.avgCostKey)
+    @AppStorage(LineDashes.dotsKey(LineDashes.altClickKey)) private var altClickDots = LineDashes.defaultDots(LineDashes.altClickKey)
+    @AppStorage(LineDashes.dotsKey(LineDashes.stopLossKey)) private var stopLossDots = LineDashes.defaultDots(LineDashes.stopLossKey)
+    @AppStorage(LineDashes.dotsKey(LineDashes.takeProfitKey)) private var takeProfitDots = LineDashes.defaultDots(LineDashes.takeProfitKey)
+    @AppStorage(LineDashes.dotsKey(LineDashes.ordersKey)) private var ordersDots = LineDashes.defaultDots(LineDashes.ordersKey)
+    @AppStorage(LineDashes.dotsKey(LineDashes.lastTradeKey)) private var lastTradeDots = LineDashes.defaultDots(LineDashes.lastTradeKey)
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
     @AppStorage(HoverPnLSize.storageKey) private var hoverSizing: HoverPnLSize = .buyingPower
     @AppStorage(HoverPnLSize.amountKey) private var hoverAmountNOK = HoverPnLSize.defaultAmount
@@ -487,7 +493,7 @@ struct TradingChart: View {
             : LineColors.resolve(takeProfitHex, default: LineColors.defaultTakeProfit)
     }
 
-    /// Line colors and solid / dashed come from Settings.
+    /// Line colors and solid / dashes / dots come from Settings.
     private var priceLines: [PriceLine] {
         var lines: [PriceLine] = []
         if let trip = shownTrip {
@@ -509,21 +515,22 @@ struct TradingChart: View {
                 lines.append(PriceLine(price: price, color: sideColors.of(isBuy), label: isBuy ? "Buy" : "Sell", dotted: true))
             }
         } else if let trip = closedTrip, showLastTradeLines || flashingExitTrip == trip.id {
-            // Just exited: red small dots at the average exit, from the latest candle to the axis as order
-            // lines are, and green at the average entry (unknown for shares held from before today).
+            // Just exited: red at the average exit, from the latest candle to the axis as order lines are,
+            // and green at the average entry (unknown for shares held from before today).
             // With Settings' last trade lines off, only the exit line, for its first 7 s.
             if let exit = trip.exitPrice {
-                lines.append(PriceLine(price: exit, color: sideColors.down, label: "", drawnLikeOrder: true))
+                lines.append(PriceLine(price: exit, color: sideColors.down, label: "", dashed: lastTradeDashed,
+                                       dotted: lastTradeDashed && lastTradeDots, drawnLikeOrder: true))
             }
             if showLastTradeLines, trip.carried == 0, let entry = trip.entryPrice {
-                lines.append(PriceLine(price: entry, color: sideColors.up, label: "Avg", dashed: lastTradeDashed))
+                lines.append(PriceLine(price: entry, color: sideColors.up, label: "Avg", dashed: lastTradeDashed,
+                                       dotted: lastTradeDashed && lastTradeDots))
             }
         }
         if let p = broker.positions[chart.symbol] {
-            // Avg cost: number only on the axis (just left of it when the last price box would cover it);
-            // set to dashed in Settings, drawn in the small dots.
+            // Avg cost: number only on the axis (just left of it when the last price box would cover it).
             lines.append(PriceLine(price: p.avgCost, color: LineColors.resolve(avgCostHex, default: LineColors.defaultAvgCost),
-                                   label: "", dashed: avgCostDashed, dotted: avgCostDashed, movesAsideForLastPrice: true))
+                                   label: "", dashed: avgCostDashed, dotted: avgCostDashed && avgCostDots, movesAsideForLastPrice: true))
         }
         if let whatIf = workspace.whatIfs[chart.symbol] {
             // ⌃-clicked with no position: a line at the pretend buy's price, the price on the axis (just
@@ -542,7 +549,8 @@ struct TradingChart: View {
                 let isStop = p.kind == .stopLoss
                 if let price = isStop ? o.auxPrice : o.limitPrice {
                     lines.append(PriceLine(price: price, color: protectiveColor(p.kind),
-                                           label: "", dashed: isStop ? stopLossDashed : takeProfitDashed, orderId: o.id,
+                                           label: "", dashed: isStop ? stopLossDashed : takeProfitDashed,
+                                           dotted: isStop ? stopLossDashed && stopLossDots : takeProfitDashed && takeProfitDots, orderId: o.id,
                                            cancelsOnClick: true, fillProgress: o.fillProgress))
                 }
                 continue
@@ -552,19 +560,21 @@ struct TradingChart: View {
                 // price in its box.
                 if let price = o.auxPrice ?? o.limitPrice {
                     lines.append(PriceLine(price: price, color: LineColors.resolve(altClickHex, default: LineColors.defaultAltClick),
-                                           label: "", dashed: altClickDashed, orderId: o.id, fillProgress: o.fillProgress))
+                                           label: "", dashed: altClickDashed, dotted: altClickDashed && altClickDots, orderId: o.id,
+                                           fillProgress: o.fillProgress))
                 }
                 continue
             }
             // Other orders: the side, no share count, in the box.
             if let lmt = o.limitPrice {
                 lines.append(PriceLine(price: lmt, color: LineColors.resolve(ordersHex, default: LineColors.defaultOrders),
-                                       label: side, dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress))
+                                       label: side, dashed: ordersDashed, dotted: ordersDashed && ordersDots, orderId: o.id,
+                                       fillProgress: o.fillProgress))
             }
             // Stop / trigger price (TRAIL's aux is a distance, not a price).
             if let aux = o.auxPrice, !o.orderType.hasPrefix("TRAIL"), o.orderType != "REL" {
                 lines.append(PriceLine(price: aux, color: .purple, label: "\(o.orderType) \(side)",
-                                       dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress))
+                                       dashed: ordersDashed, dotted: ordersDashed && ordersDots, orderId: o.id, fillProgress: o.fillProgress))
             }
         }
         return lines

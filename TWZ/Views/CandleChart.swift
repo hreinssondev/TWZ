@@ -30,7 +30,7 @@ struct PriceLine {
     var color: Color
     var label: String
     var dashed = true
-    /// Small dots, finer than the dashes (a round trip shown from the Round trips tab).
+    /// Small dots, finer than the dashes (a round trip shown from the Round trips tab, or Settings' Dots).
     var dotted = false
     /// The order the line belongs to; double-clicking the line cancels it. An order's price box sits in
     /// the chart, just left of the axis, above the last price line, so the axis boxes never cover it.
@@ -38,8 +38,8 @@ struct PriceLine {
     /// Drawn above the last price line, and its price box moves into the chart, just left of the axis,
     /// where the last price box would cover it.
     var movesAsideForLastPrice = false
-    /// Drawn as an order line is (from the latest candle to the axis, small dots, the price box in the
-    /// chart beside the axis, above the last price line) without being one: the last trade's exit.
+    /// Drawn as an order line is (from the latest candle to the axis, the price box in the chart
+    /// beside the axis, above the last price line) without being one: the last trade's exit.
     var drawnLikeOrder = false
     /// A second box beside the price one, in the chart just left of the axis (or left of the price box
     /// when that has moved into the chart): the what-if line's NOK value.
@@ -103,6 +103,8 @@ struct CandleChart: View {
     @AppStorage(LineColors.showGridKey) private var showGrid = false
     @AppStorage(VolumeBars.opacityKey) private var volumeOpacity = VolumeBars.defaultOpacity
     @AppStorage(LineDashes.hoverKey) private var hoverDashed = LineDashes.defaultHover
+    @AppStorage(LineDashes.dotsKey(LineDashes.lastPriceKey)) private var lastPriceDots = LineDashes.defaultDots(LineDashes.lastPriceKey)
+    @AppStorage(LineDashes.dotsKey(LineDashes.hoverKey)) private var hoverDots = LineDashes.defaultDots(LineDashes.hoverKey)
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
@@ -514,9 +516,7 @@ struct CandleChart: View {
         func draw(_ line: PriceLine) {
             let lineY = y(line.price)
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
-            // Dashed order lines get the small dots.
-            drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed,
-                     dotted: line.dotted || (isOrder(line) && line.dashed),
+            drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed, dotted: line.dotted,
                      tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))",
                      tagInside: covered || isOrder(line), chartTag: line.chartText,
                      lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress)
@@ -528,6 +528,7 @@ struct CandleChart: View {
         if let last {
             drawLine(in: &ctx, y: y(last), plot: plot,
                      color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: lastPriceDashed,
+                     dotted: lastPriceDashed && lastPriceDots,
                      tag: Fmt.price(last), tagOpacity: lastPriceOpacity, showsLine: showLastPriceLine)
         }
         visibleLines.filter { $0.movesAsideForLastPrice || isOrder($0) }.forEach(draw)
@@ -541,7 +542,7 @@ struct CandleChart: View {
             let modifierTint: Color? = optionHeld && onAltClick != nil ? altClickTint
                 : commandHeld && onCommandClick != nil ? commandClickTint : nil
             let lineTint = tintsHoverLine ? modifierTint : nil
-            ctx.stroke(cross, with: .color(lineTint ?? hoverColor.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: hoverDashed ? [3, 3] : []))
+            ctx.stroke(cross, with: .color(lineTint ?? hoverColor.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: hoverDashed ? (hoverDots ? [1, 2] : [3, 3]) : []))
             if priceRect.contains(hover) {
                 let hoverPrice = v.price(at: hover.y)
                 // Holding ⌃ turns it red or green: a ⌃-click places a stop loss or take profit there.

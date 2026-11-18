@@ -101,7 +101,7 @@ enum AppearanceDefaults {
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
-    ] + LineDashes.keys
+    ] + LineDashes.keys + LineDashes.dotsKeys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.
     static func reset() {
@@ -302,6 +302,14 @@ enum LineDashes {
     static let defaultTakeProfit = false
     static let defaultOrders = true
     static let defaultLastTrade = true
+
+    /// Whether a dashed line is drawn in small dots rather than longer dashes, stored beside its
+    /// dashed key; unset, the line's default below.
+    static func dotsKey(_ dashedKey: String) -> String { dashedKey + "Dots" }
+    static var dotsKeys: [String] { keys.map(dotsKey) }
+    static func defaultDots(_ dashedKey: String) -> Bool {
+        [avgCostKey, altClickKey, stopLossKey, takeProfitKey, ordersKey, lastTradeKey].contains(dashedKey)
+    }
 }
 
 /// Preset colors a hotkey button can use instead of its action's default.
