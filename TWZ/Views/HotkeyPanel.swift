@@ -119,7 +119,11 @@ private extension Hotkey {
     /// e.g. "Mid 1000$", "Ask 100", "MKT 500" or "Ask 80% BP"; other actions keep their label.
     var compactLabel: String {
         guard action.needsSize else { return label }
-        let price = orderType == .market ? "MKT" : priceReference.label(isBuy: action == .buy)
+        let price = switch orderType {
+        case .market: "MKT"
+        case .midprice: "MidPx"
+        case .limit: priceReference.label(isBuy: action == .buy)
+        }
         let size = amount.formatted(.number.grouping(.never).precision(.fractionLength(0...2)))
         return "\(price) \(size)\(sizing.suffix)"
     }
@@ -129,8 +133,12 @@ private extension Hotkey {
         guard action.placesOrder else { return action.rawValue }
         let buy = action == .buy
         let sign = buy ? "+" : "−"
-        var text = orderType == .market ? "MKT" : "LMT \(priceReference.label(isBuy: buy))"
-        if orderType == .limit, offset != 0 {
+        var text = switch orderType {
+        case .market: "MKT"
+        case .midprice: "MIDPRICE"
+        case .limit: "LMT \(priceReference.label(isBuy: buy))"
+        }
+        if orderType != .market, offset != 0 {
             let signed = offset > 0 ? sign : (buy ? "−" : "+")
             text += " \(signed)\(abs(offset).formatted(.number.precision(.fractionLength(2))))"
         }
@@ -514,6 +522,18 @@ private struct HotkeyFields: View {
         LabelInputs(action: hotkey.action, sizing: hotkey.sizing, amount: hotkey.amount)
     }
 
+    /// What the chosen order type sends, under the order fields.
+    private var orderNote: String {
+        switch hotkey.orderType {
+        case .market:
+            "Regular hours: market order. Pre-market / after hours: limit 0.5% through the ask (buys) or bid (sells). Overnight / closed: limit at the bid (buys) or ask (sells)."
+        case .midprice:
+            "Regular hours: IBKR's MIDPRICE order (DAY), which follows the midpoint as the quote moves and never pays more than the ask + offset (buys) or sells below the bid − offset. Pre-market, after hours and overnight: a limit at the mid + offset (buys) or − offset (sells)."
+        case .limit:
+            "Buys: price + offset · Sells: price − offset. A positive offset fills more easily; a negative one waits for a better price."
+        }
+    }
+
     @ViewBuilder private var orderSection: some View {
         Section("Order") {
             Picker("Order type", selection: $hotkey.orderType) {
@@ -526,6 +546,8 @@ private struct HotkeyFields: View {
                         Text(ref == .cross ? "Bid/Ask (ask for buys, bid for sells)" : ref.rawValue).tag(ref)
                     }
                 }
+            }
+            if hotkey.orderType != .market {
                 TextField("Offset ($)", value: $hotkey.offset, format: .number.precision(.fractionLength(2...4)))
             }
             Picker("Time in force", selection: $hotkey.tif) {
@@ -535,9 +557,7 @@ private struct HotkeyFields: View {
             if hotkey.orderType == .limit {
                 Toggle("Allow outside regular hours", isOn: $hotkey.outsideRth)
             }
-            Text(hotkey.orderType == .market
-                 ? "Regular hours: market order. Pre-market / after hours: limit 0.5% through the ask (buys) or bid (sells). Overnight / closed: limit at the bid (buys) or ask (sells)."
-                 : "Buys: price + offset · Sells: price − offset. A positive offset fills more easily; a negative one waits for a better price.")
+            Text(orderNote)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

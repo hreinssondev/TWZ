@@ -43,6 +43,7 @@ enum AppearanceDefaults {
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
+        LineColors.showLastTradeLinesKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
@@ -134,6 +135,15 @@ enum AltClickOrders {
     static let enabledKey = "altClickOrdersEnabled"
 }
 
+/// Settings › Trading: with this on, ⌥-click on a chart buys and ⌘-click sells a fixed dollar amount
+/// at the clicked price, in place of the selected hotkey's / NOK ⌥-click order; holding ⌥ tints the
+/// hover line and its price tag green, holding ⌘ red. Off by default.
+enum DollarClickOrders {
+    static let enabledKey = "dollarClickOrdersEnabled"
+    static let amountKey = "dollarClickOrdersAmount"
+    static let defaultAmount = 3000.0
+}
+
 /// The price axis: label size, how closely labels are packed, and the last price box's opacity.
 enum PriceAxis {
     static let fontSizeKey = "axisPriceFontSize"
@@ -164,6 +174,9 @@ enum LineColors {
     static let ordersKey = "orderLineColor"
     /// Off hides the last price line itself; its price box on the axis stays.
     static let showLastPriceLineKey = "showLastPriceLine"
+    /// Off: of the Exit / Avg lines a chart shows once its symbol's round trip closes, just the exit
+    /// line, for 7 s.
+    static let showLastTradeLinesKey = "showLastTradeLines"
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
     static let defaultAltClick = Color.white

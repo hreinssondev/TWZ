@@ -108,6 +108,10 @@ final class Workspace {
     /// Round trips double-clicked in the Round trips tab, by symbol: their fills' arrows and entry / exit
     /// lines show on the symbol's charts until the row, or one of those charts, is double-clicked.
     var shownTrips: [String: String] = [:]
+    /// Filled orders double-clicked in the Orders list, by symbol: their fills (exec ids), whose arrows
+    /// and average fill price show on the symbol's charts in place of a shown round trip, until the
+    /// row, or one of those charts, is double-clicked.
+    var shownOrderFills: [String: Set<String>] = [:]
     /// Counts the account bar's Resets: every main-window chart follows the gainers again, on the
     /// top bar's timeframe.
     var gainerResets = 0

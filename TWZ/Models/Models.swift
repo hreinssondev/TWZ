@@ -82,6 +82,11 @@ nonisolated struct Fill: Identifiable, Equatable {
     var time: Date
     /// USD/NOK when the fill came in, so its NOK value doesn't move with the rate.
     var usdNok: Double?
+    /// Commissions and fees IB charged for the fill, in dollars, once its commission report is in.
+    var commission: Double?
+    /// The venue it filled on, and IB's lastLiquidity: 1 added, 2 removed, 3 routed out, 0 unknown.
+    var exchange = ""
+    var liquidity = 0
 }
 
 /// One trade in a symbol, from flat back to flat, built from the day's fills.
@@ -104,18 +109,35 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
     var exitOrderIds: [Int] = []
     /// The fills that make up the trip (a fill that flips the position is in both trips).
     var fillIds: [String] = []
+    /// Commissions and fees IB reported for those fills, in dollars (a fill that flips the position
+    /// split between the trips by shares); fills whose report isn't in yet add nothing.
+    var commissions = 0.0
+    /// The same on IBKR Pro Tiered, from `TieredCommissions` (fills without an estimate add nothing).
+    var tieredCommissions = 0.0
+    /// The orders that opened or added to the trip, and those closing it, in fill order, an order split
+    /// into several fills once (keys from `orderKey`).
+    var entryOrders: [String] = []
+    var exitOrders: [String] = []
 
     var isOpen: Bool { abs(openShares) > 1e-9 }
+    /// Orders that opened or added to the trip, long or short, not those closing it.
+    var orderCount: Int { entryOrders.count }
     var entryShares: Double { (isLong ? buyShares : sellShares) + abs(carried) }
     var entryPrice: Double? { Self.average(isLong ? buyValue : sellValue, isLong ? buyShares : sellShares) }
     var exitPrice: Double? { Self.average(isLong ? sellValue : buyValue, isLong ? sellShares : buyShares) }
 
-    /// Closed: proceeds minus cost (before commissions). Open: also values the shares still held at `last`.
+    /// Closed: proceeds minus cost, commissions and fees. Open: also values the shares still held at `last`.
     /// nil when part of the trip was opened before today, or an open trip has no last price.
     func pnl(last: Double?) -> Double? {
         guard carried == 0 else { return nil }
-        guard isOpen else { return sellValue - buyValue }
-        return last.map { sellValue - buyValue + openShares * $0 }
+        guard isOpen else { return sellValue - buyValue - commissions }
+        return last.map { sellValue - buyValue + openShares * $0 - commissions }
+    }
+
+    /// The order a fill came from: its id, or for orders entered in TWS (which IB reports without one)
+    /// its side and second, as the Orders panel groups them.
+    static func orderKey(_ fill: Fill) -> String {
+        fill.orderId != 0 ? "\(fill.orderId)" : "\(fill.side) \(Int(fill.time.timeIntervalSince1970.rounded(.down)))"
     }
 
     private static func average(_ value: Double, _ shares: Double) -> Double? {
@@ -124,7 +146,7 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
 
     /// Round trips, newest activity first. `positions` give each symbol's current holding, so shares
     /// held before the first fill (net of today's fills) are known.
-    static func build(fills: [Fill], positions: [String: Position]) -> [RoundTrip] {
+    static func build(fills: [Fill], positions: [String: Position], tiered: [String: Double] = [:]) -> [RoundTrip] {
         var trips: [RoundTrip] = []
         for (symbol, symbolFills) in Dictionary(grouping: fills, by: \.symbol) {
             let sorted = symbolFills.sorted { ($0.time, $0.id) < ($1.time, $1.id) }
@@ -148,10 +170,15 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
                     let opening = qty == 0 || (qty > 0) == (remaining > 0)
                     let step = opening ? remaining : (remaining > 0 ? min(remaining, -qty) : max(remaining, -qty))
                     if !trip!.fillIds.contains(fill.id) { trip!.fillIds.append(fill.id) }
+                    if let commission = fill.commission, fill.shares > 0 { trip!.commissions += commission * abs(step) / fill.shares }
+                    if let estimate = tiered[fill.id], fill.shares > 0 { trip!.tieredCommissions += estimate * abs(step) / fill.shares }
+                    let order = orderKey(fill)
                     if (step > 0) == trip!.isLong {
                         if !trip!.entryOrderIds.contains(fill.orderId) { trip!.entryOrderIds.append(fill.orderId) }
-                    } else if !trip!.exitOrderIds.contains(fill.orderId) {
-                        trip!.exitOrderIds.append(fill.orderId)
+                        if !trip!.entryOrders.contains(order) { trip!.entryOrders.append(order) }
+                    } else {
+                        if !trip!.exitOrderIds.contains(fill.orderId) { trip!.exitOrderIds.append(fill.orderId) }
+                        if !trip!.exitOrders.contains(order) { trip!.exitOrders.append(order) }
                     }
                     if step > 0 {
                         trip!.buyShares += step
@@ -247,6 +274,9 @@ nonisolated enum PriceReference: String, Codable, CaseIterable, Identifiable {
 nonisolated enum OrderType: String, Codable, CaseIterable, Identifiable {
     case market = "Market"
     case limit = "Limit"
+    /// IBKR's MIDPRICE order in regular hours: it follows the midpoint as the quote moves, never past
+    /// the ask (buys) / bid (sells) ± offset. Outside regular hours, a limit at the mid ± offset.
+    case midprice = "Midprice"
     var id: String { rawValue }
 }
 
@@ -387,7 +417,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         // Older versions stored other IB order types here (Stop, Trailing Stop, …); those become Limit.
         let storedType = (try? c.decodeIfPresent(String.self, forKey: .orderType))
             ?? (try? c.decodeIfPresent(String.self, forKey: .priceType))
-        orderType = storedType == "Market" ? .market : .limit
+        orderType = storedType == "Market" ? .market : storedType == "Midprice" ? .midprice : .limit
         priceReference = (try? c.decodeIfPresent(PriceReference.self, forKey: .priceReference)) ?? .cross
         offset = try c.decodeIfPresent(Double.self, forKey: .offset) ?? 0.02
         tif = (try? c.decodeIfPresent(TimeInForce.self, forKey: .tif)) ?? .day
@@ -590,9 +620,12 @@ nonisolated enum Fmt {
         return (v < 0 ? "-" : "") + s
     }
 
-    /// Whole kroner, e.g. "12346".
-    static func nok(_ v: Double) -> String {
-        String(Int(v.rounded()))
+    /// Whole kroner, e.g. "12346" (or "+12346" signed), grouped by thousands ("12 346") from
+    /// `groupedFrom` kroner up.
+    static func nok(_ v: Double, signed: Bool = false, groupedFrom: Int = .max) -> String {
+        let kr = Int(v.rounded())
+        let sign = kr < 0 ? "-" : signed ? "+" : ""
+        return sign + (abs(kr) >= groupedFrom ? abs(kr).formatted(.number.locale(Locale(identifier: "nb_NO"))) : String(abs(kr)))
     }
 
     static func price(_ v: Double?) -> String {
@@ -612,8 +645,9 @@ nonisolated enum Fmt {
         return (v >= 0 ? "+" : "") + v.formatted(.number.precision(.fractionLength(2))) + "%"
     }
 
-    static func shares(_ v: Double) -> String {
-        v.formatted(.number.precision(.fractionLength(0...2)))
+    /// Grouped by thousands from `groupedFrom` shares up.
+    static func shares(_ v: Double, groupedFrom: Int = 0) -> String {
+        v.formatted(.number.precision(.fractionLength(0...2)).grouping(abs(v) < Double(groupedFrom) ? .never : .automatic))
     }
 }
 

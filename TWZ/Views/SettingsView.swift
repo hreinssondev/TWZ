@@ -165,6 +165,8 @@ private struct ConnectionSettings: View {
 private struct TradingSettings: View {
     @Environment(Workspace.self) private var workspace
     @AppStorage(HotkeyClickMode.storageKey) private var clickMode: HotkeyClickMode = .select
+    @AppStorage(DollarClickOrders.enabledKey) private var dollarClicks = false
+    @AppStorage(DollarClickOrders.amountKey) private var dollarClickAmount = DollarClickOrders.defaultAmount
 
     private let shortcuts: [(String, String)] = [
         ("⌘⇧↩", "Send the selected hotkey"),
@@ -186,6 +188,21 @@ private struct TradingSettings: View {
                 Text(clickMode == .send
                      ? "Fires as the mouse goes down. The clicked button is also selected, so ⌘⇧↩ sends it again."
                      : "Click picks the hotkey; ⌘⇧↩ sends it for the selected chart's symbol.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("⌥ / ⌘-click on a chart") {
+                Toggle("⌥-click buys, ⌘-click sells a dollar amount", isOn: $dollarClicks)
+                LabeledContent("Amount (USD)") {
+                    TextField("", value: $dollarClickAmount, format: .number.precision(.fractionLength(0)))
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                }
+                .disabled(!dollarClicks)
+                Text(dollarClicks
+                     ? "A DAY order at the clicked price, in place of the selected hotkey's ⌥-click order: a limit where it fills at that price or better, a stop-limit on the other side. Holding ⌥ turns the hover line and its price green, ⌘ red. The top bar's Alt-Click switches both off."
+                     : "Off: ⌥-click places the selected hotkey's order at the clicked price (or a NOK buy), and ⌘-click does nothing.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -311,6 +328,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.takeProfitKey) private var takeProfitHex = ""
     @AppStorage(LineColors.ordersKey) private var ordersHex = ""
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
+    @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top
@@ -376,9 +394,13 @@ private struct AppearanceSettings: View {
                 lineColorRow("Take profit (⌃-click)", key: LineColors.takeProfitKey, hex: $takeProfitHex,
                              default: LineColors.defaultTakeProfit,
                              dashedKey: LineDashes.takeProfitKey, dashedDefault: LineDashes.defaultTakeProfit)
-                LabeledContent("Last trade (Exit / Avg)") {
+                LabeledContent("Last trade (Avg)") {
                     LineStylePicker(key: LineDashes.lastTradeKey, default: LineDashes.defaultLastTrade)
                 }
+                Toggle("Show last trade lines after a round trip closes", isOn: $showLastTradeLines)
+                Text("On: the exit and Avg lines stay until you click the chart or place an order. Off: just the exit line, for 7 seconds or until a click.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Indicators") {
                 Toggle("VWAP (intraday charts)", isOn: $showVWAP)

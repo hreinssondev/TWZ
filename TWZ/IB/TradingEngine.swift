@@ -43,6 +43,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var positions: [String: Position] = [:] { didSet { changed(.positions) } }
     private var orders: [Int: OrderRow] = [:] { didSet { changed(.orders) } }
     private var fills: [String: Fill] = [:] { didSet { changed(.fills) } }
+    /// Each fill's commissions and fees in dollars, by execId (a report can come before its fill).
+    private var commissions: [String: Double] = [:]
     private var quotes: [String: Quote] = [:] { didSet { changed(.quotes) } }
     /// IB's shortable tick per symbol: above 2.5 easy to borrow, above 1.5 hard to borrow, else not shortable.
     private var shortability: [String: Double] = [:] { didSet { changed(.shortability) } }
@@ -419,6 +421,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         positions.removeAll()
         orders.removeAll()
         fills.removeAll()
+        commissions.removeAll()
     }
 
     private func handle(_ event: IBSocket.Event) {
@@ -980,6 +983,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// A `whatIf` order is never placed: IB answers with the margin it would take (see `previewMargin`).
     private func placeOrder(symbol: String, action: String, quantity: Double, limit: Double?, stop: Double? = nil,
                             tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART",
+                            orderType typeOverride: String? = nil,
                             ocaGroup: String = "", modifying: Int? = nil, whatIf: Bool = false, why: String) -> Int? {
         guard apiReady, let next = nextOrderId else {
             lastMessage = "Not connected"
@@ -1013,7 +1017,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             forgetTags(orderId)
         }
 
-        let orderType = stop != nil && limit != nil ? "STP LMT" : (limit == nil ? "MKT" : "LMT")
+        // A short sale chasing the bid under SSR goes in as a plain limit.
+        let orderType = (chases ? nil : typeOverride) ?? (stop != nil && limit != nil ? "STP LMT" : (limit == nil ? "MKT" : "LMT"))
         let triggerMethod = stop != nil ? 2 : 0                           // 2 = last trade
         var f: [Any] = [3, orderId]
         f += contract(symbol, exchange: exchange)
@@ -1271,7 +1276,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// A hotkey order's source label: "Mkt", or the quote its limit is priced off ("Mid", "Last", "Ask", …).
     private static func source(_ hotkey: Hotkey, isBuy: Bool) -> String {
-        hotkey.orderType == .market ? "Mkt" : hotkey.priceReference.label(isBuy: isBuy)
+        switch hotkey.orderType {
+        case .market: "Mkt"
+        case .midprice: MarketSession.phase() == .regular ? "MidPx" : "Mid"
+        case .limit: hotkey.priceReference.label(isBuy: isBuy)
+        }
     }
 
     /// Remembers what placed an order (kept across launches for the latest 500 orders).
@@ -1352,6 +1361,28 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         placeChartOrder(symbol: symbol, action: "BUY", quantity: quantity, plan: plan, tif: .day,
                         outsideRth: true, summary: "\(label) (\(OrderAmount.format(nok)) NOK)")
+    }
+
+    /// ⌥- / ⌘-click with Settings › Trading's dollar clicks on: a DAY buy / sell of `dollars` worth of
+    /// `symbol` at the clicked price; a limit on the side that fills there or better, a stop-limit on
+    /// the other, as for `buyNOK`.
+    func placeDollars(_ dollars: Double, action: String, symbol rawSymbol: String, at clickedPrice: Double) {
+        let symbol = rawSymbol.uppercased()
+        guard chartOrderReady(symbol) else { return }
+        let plan = chartOrder(symbol: symbol, action: action, clicked: clickedPrice)
+        if case .unavailable(let reason) = plan {
+            lastMessage = "\(reason), so the order wasn't sent"
+            return
+        }
+        guard let limit = plan.price, limit > 0 else { return }
+        let quantity = (dollars / limit).rounded(.down)
+        let amount = "$" + Int(dollars.rounded()).formatted()
+        guard quantity >= 1, let label = plan.label(action, shares: quantity) else {
+            lastMessage = "\(amount) is less than one share of \(symbol) at \(Fmt.price(limit))"
+            return
+        }
+        placeChartOrder(symbol: symbol, action: action, quantity: quantity, plan: plan, tif: .day,
+                        outsideRth: true, summary: "\(label) (\(amount))")
     }
 
     /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price instead
@@ -1786,9 +1817,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         for o in replaced { cancelOrder(o.id, why: "replaced by a new \(symbol) order (\(why))") }
         let overnight = price.exchange == "OVERNIGHT"
         ssrRaise = nil
+        // MIDPRICE is a DAY order.
+        let midprice = price.orderType == "MIDPRICE"
         guard let id = placeOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit,
-                                  stop: price.stop, tif: overnight ? .day : tif, outsideRth: price.outsideRth,
-                                  exchange: price.exchange, why: why) else { return nil }
+                                  stop: price.stop, tif: overnight || midprice ? .day : tif, outsideRth: price.outsideRth,
+                                  exchange: price.exchange, orderType: price.orderType, why: why) else { return nil }
         recordSource(source, for: id)
         var notes = summary.map { [$0] } ?? []
         if let ssrRaise { notes.append(ssrRaise) }
@@ -1848,11 +1881,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         var fallback: String?
         /// Stop trigger for a stop-limit order.
         var stop: Double?
+        /// IB order type in place of the one `limit` / `stop` imply ("MIDPRICE", whose limit is a cap).
+        var orderType: String?
     }
 
     /// Market, by session: regular hours → MKT; pre-market / after hours → limit 0.5% through the
     /// ask (buys) or bid (sells); overnight / closed → limit at the bid (buys) or ask (sells).
     /// Limit: the chosen reference, plus the offset for buys or minus it for sells.
+    /// Midprice: regular hours → IBKR's MIDPRICE, capped at the ask (buys) or bid (sells) ± offset;
+    /// otherwise a limit at the mid ± offset.
     /// During IBKR's overnight session limit orders go to the OVERNIGHT venue so they can fill.
     private func orderPrice(symbol: String, action: String, hotkey: Hotkey) -> HotkeyPrice? {
         let isBuy = action == "BUY"
@@ -1875,6 +1912,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case (.market, _):
             guard let ref = quote(symbol, isBuy ? .bid : .ask, isBuy: isBuy) else { return missing() }
             price = HotkeyPrice(limit: tick(ref.price), outsideRth: true, fallback: ref.fallback)
+        case (.midprice, .regular):
+            guard let ref = quote(symbol, .cross, isBuy: isBuy) else { return missing() }
+            price = HotkeyPrice(limit: tick(ref.price + sign * hotkey.offset), outsideRth: false,
+                                fallback: ref.fallback, orderType: "MIDPRICE")
+        case (.midprice, _):
+            guard let ref = quote(symbol, .mid, isBuy: isBuy) else { return missing() }
+            price = HotkeyPrice(limit: tick(ref.price + sign * hotkey.offset), outsideRth: true, fallback: ref.fallback)
         case (.limit, _):
             guard let ref = quote(symbol, hotkey.priceReference, isBuy: isBuy) else { return missing() }
             price = HotkeyPrice(limit: tick(ref.price + sign * hotkey.offset), outsideRth: hotkey.outsideRth,
@@ -1907,6 +1951,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             log("CONNECTED client \(clientId), next order id \(f.str(2))")
             checkReady()
         case 11: execDetails(f)
+        case 59: commissionReport(f)
         case 15:
             account = f.str(2).split(separator: ",").first.map(String.init) ?? ""
             checkReady()
@@ -2046,12 +2091,36 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             shares: f.double(19),
             price: f.double(20),
             time: Self.parseExecTime(f.str(15)) ?? Date(),
-            usdNok: fills[id]?.usdNok ?? usdNok
+            usdNok: fills[id]?.usdNok ?? usdNok,
+            commission: commissions[id],
+            exchange: f.str(17),
+            liquidity: f.int(30)                                        // lastLiquidity
         )
         if fills[fill.id] == nil {
             log("FILL #\(fill.orderId) \(fill.side) \(Fmt.shares(fill.shares)) \(fill.symbol) @ \(Fmt.price(fill.price)) exec \(fill.id)")
         }
         fills[fill.id] = fill
+    }
+
+    /// What IB charged for a fill, commissions and fees together, sent after each fill (and with
+    /// today's fills on connecting). Kept in dollars, like the fill's price.
+    private func commissionReport(_ f: [String]) {
+        // version, execId, commissionAndFees, currency, realizedPNL, yield, yieldRedemptionDate
+        let execId = f.str(2), amount = f.double(3)
+        guard !execId.isEmpty, abs(amount) < 1e300 else { return }   // Double.greatestFiniteMagnitude: not known yet
+        let usd: Double
+        switch f.str(4) {
+        case "USD": usd = amount
+        case "NOK":
+            guard let rate = fills[execId]?.usdNok ?? usdNok, rate > 0 else { return }
+            usd = amount / rate
+        default:
+            log("COMMISSION exec \(execId): \(f.str(3)) \(f.str(4)) not counted (not USD or NOK)")
+            return
+        }
+        if commissions[execId] != usd { log("COMMISSION exec \(execId): \(f.str(3)) \(f.str(4))") }
+        commissions[execId] = usd
+        if fills[execId] != nil { fills[execId]?.commission = usd }
     }
 
     private func errorMessage(_ f: [String]) {

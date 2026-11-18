@@ -15,6 +15,8 @@
 //  Trades (off by default): the day's fills in the symbol, a green ▲ under each buy and a red ▼
 //  over each sell, tip at the fill price, on the bar the fill came in; a round trip double-clicked in
 //  the Round trips tab shows its fills' arrows either way.
+//  With Settings › Trading's dollar ⌥ / ⌘-click on, ⌥-click buys and ⌘-click sells a fixed dollar
+//  amount at the clicked price, the hover line and price tag green / red while the key is held.
 //  Hovering the price area shows, left of the price tag, the P/L at the hovered price (see `hoverPnL`).
 //  ⌃-clicking with no position open places a what-if buy at that price (see `WhatIf`), and
 //  ⌃-clicking its line removes it.
@@ -36,13 +38,18 @@ struct PriceLine {
     /// Drawn above the last price line, and its price box moves into the chart, just left of the axis,
     /// where the last price box would cover it.
     var movesAsideForLastPrice = false
+    /// Drawn as an order line is (from the latest candle to the axis, small dots, the price box in the
+    /// chart beside the axis, above the last price line) without being one: the last trade's exit.
+    var drawnLikeOrder = false
     /// A second box beside the price one, in the chart just left of the axis (or left of the price box
     /// when that has moved into the chart): the what-if line's NOK value.
     var chartText: String?
     /// A single click on the line cancels it too (the ⌃-click lines: stop loss, take profit, what-if).
     var cancelsOnClick = false
-    /// How much of the order has filled (0–1): a thin bar just above its price box.
+    /// How much of the order has filled (0–1): a thin bar just above its price box, green for a buy,
+    /// red for a sell.
     var fillProgress: Double?
+    var fillIsBuy = true
 }
 
 /// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
@@ -58,6 +65,13 @@ struct CandleChart: View {
     var lines: [PriceLine] = []
     /// ⌥-click in the price area: called with the price under the cursor.
     var onAltClick: ((Double) -> Void)?
+    /// ⌘-click in the price area: called with the price under the cursor.
+    var onCommandClick: ((Double) -> Void)?
+    /// Price tag color while ⌥ / ⌘ is held (with a handler for that click).
+    var altClickTint: Color = .white
+    var commandClickTint: Color = .red
+    /// The hover line takes the ⌥ / ⌘ tint too, not just its price tag.
+    var tintsHoverLine = false
     /// ⌃-click in the price area: called with the price under the cursor.
     var onControlClick: ((Double) -> Void)?
     /// ⌃-click on an order line: called with its order id first; returning true skips `onControlClick`.
@@ -101,6 +115,7 @@ struct CandleChart: View {
     @State private var dragStart: (scroll: Double, shift: Double)?
     @State private var optionHeld = false
     @State private var controlHeld = false
+    @State private var commandHeld = false
 
     /// Widens with the axis text so larger prices still fit.
     private var axisWidth: CGFloat { max(58, (axisFontSize * 5.8).rounded()) }
@@ -121,6 +136,7 @@ struct CandleChart: View {
                     onHover?()
                     optionHeld = NSEvent.modifierFlags.contains(.option)
                     controlHeld = NSEvent.modifierFlags.contains(.control)
+                    commandHeld = NSEvent.modifierFlags.contains(.command)
                 } else {
                     hover = nil
                 }
@@ -152,7 +168,7 @@ struct CandleChart: View {
                        let id = orderLine(near: location, size: geo.size), onControlClickLine(id) {
                         return true
                     }
-                    guard let handler = flags == .control ? onControlClick : onAltClick,
+                    guard let handler = flags == .control ? onControlClick : flags == .command ? onCommandClick : onAltClick,
                           let price = price(at: location, size: geo.size) else { return false }
                     handler(price)
                     return true
@@ -160,6 +176,7 @@ struct CandleChart: View {
                 onModifierKeys: { flags in
                     optionHeld = flags.contains(.option)
                     controlHeld = flags.contains(.control)
+                    commandHeld = flags.contains(.command)
                 },
                 onRightClick: resetView
             ))
@@ -489,7 +506,7 @@ struct CandleChart: View {
         // Position / order lines; orders and the ones that move aside for the last price (avg cost) go
         // on top of it.
         let last = (lastPrice ?? bars.last?.close).flatMap { $0 > lo && $0 < hi ? $0 : nil }
-        func isOrder(_ line: PriceLine) -> Bool { line.orderId != nil && !line.movesAsideForLastPrice }
+        func isOrder(_ line: PriceLine) -> Bool { line.drawnLikeOrder || (line.orderId != nil && !line.movesAsideForLastPrice) }
         // Order lines run from the latest candle to the axis, not across the whole chart.
         let orderLineStart = min(max(x(bars.count - 1), plot.minX), plot.maxX)
         func draw(_ line: PriceLine) {
@@ -500,7 +517,8 @@ struct CandleChart: View {
                      dotted: line.dotted || (isOrder(line) && line.dashed),
                      tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))",
                      tagInside: covered || isOrder(line), chartTag: line.chartText,
-                     lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress)
+                     lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress,
+                     progressColor: line.fillIsBuy ? .green : .red)
         }
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)
@@ -518,16 +536,19 @@ struct CandleChart: View {
             var cross = Path()
             cross.move(to: CGPoint(x: plot.minX, y: hover.y)); cross.addLine(to: CGPoint(x: plot.maxX, y: hover.y))
             let hoverColor = LineColors.resolve(hoverHex, default: LineColors.defaultHover)
-            ctx.stroke(cross, with: .color(hoverColor.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: hoverDashed ? [3, 3] : []))
+            // Holding ⌥ / ⌘ tints the price tag (and with `tintsHoverLine` the line): a click places there.
+            let modifierTint: Color? = optionHeld && onAltClick != nil ? altClickTint
+                : commandHeld && onCommandClick != nil ? commandClickTint : nil
+            let lineTint = tintsHoverLine ? modifierTint : nil
+            ctx.stroke(cross, with: .color(lineTint ?? hoverColor.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: hoverDashed ? [3, 3] : []))
             if priceRect.contains(hover) {
                 let hoverPrice = v.price(at: hover.y)
-                // Holding ⌥ turns the price tag white: an alt-click buys there.
                 // Holding ⌃ turns it red or green: a ⌃-click places a stop loss or take profit there.
                 var tagColor = hoverColor
                 if controlHeld, let color = controlClickColor?(hoverPrice) {
                     tagColor = color
-                } else if optionHeld, onAltClick != nil {
-                    tagColor = .white
+                } else if let modifierTint {
+                    tagColor = modifierTint
                 }
                 drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor)
                 if let pnl = hoverPnL?(hoverPrice) {
@@ -663,7 +684,7 @@ struct CandleChart: View {
     /// `chartTag` is a second box in the chart, just left of the axis or of the tag when it's inside.
     private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, dotted: Bool = false, tag: String,
                           tagOpacity: Double = 1, tagInside: Bool = false, chartTag: String? = nil, showsLine: Bool = true,
-                          lineStart: CGFloat? = nil, progress: Double? = nil) {
+                          lineStart: CGFloat? = nil, progress: Double? = nil, progressColor: Color? = nil) {
         if showsLine {
             var path = Path()
             path.move(to: CGPoint(x: lineStart ?? plot.minX, y: y))
@@ -671,7 +692,8 @@ struct CandleChart: View {
             ctx.stroke(path, with: .color(color.opacity(0.8)),
                        style: StrokeStyle(lineWidth: 1, dash: dotted ? [1, 2] : dashed ? [4, 3] : []))
         }
-        let box = drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside, progress: progress)
+        let box = drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside, progress: progress,
+                          progressColor: progressColor)
         if let chartTag {
             drawTag(in: &ctx, text: chartTag, y: y, plot: plot, color: color, inside: true, insideRight: tagInside ? box.minX - 2 : nil)
         }
@@ -680,10 +702,12 @@ struct CandleChart: View {
     /// `opacity` fades only the box, not its text; at the opacity slider's minimum there's no box.
     /// The text is white, or black on a light box (white ⌥-click lines, say).
     /// `inside` puts the box in the chart, just left of the price axis (or of `insideRight`), instead of on it.
-    /// `progress` (0–1) draws a thin bar as wide as the box just above it, filled that far.
+    /// `progress` (0–1) draws a thin bar as wide as the box just above it, filled that far, in
+    /// `progressColor` (the box's color without one).
     @discardableResult
     private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
-                         opacity: Double = 1, inside: Bool = false, insideRight: CGFloat? = nil, progress: Double? = nil) -> CGRect {
+                         opacity: Double = 1, inside: Bool = false, insideRight: CGFloat? = nil, progress: Double? = nil,
+                         progressColor: Color? = nil) -> CGRect {
         let boxed = !PriceAxis.hidesLastPriceBox(opacity)
         let textColor: Color = boxed && opacity >= 0.5 && color.isLight ? .black : .white
         let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(textColor))
@@ -695,16 +719,19 @@ struct CandleChart: View {
         ctx.draw(resolved, at: CGPoint(x: rect.minX + 4, y: y), anchor: .leading)
         if let progress {
             let track = CGRect(x: rect.minX, y: rect.minY - 4, width: rect.width, height: 3)
-            ctx.fill(Path(roundedRect: track, cornerRadius: 1.5), with: .color(color.opacity(0.3)))
+            let barColor = progressColor ?? color
+            ctx.fill(Path(roundedRect: track, cornerRadius: 1.5), with: .color(barColor.opacity(0.3)))
             let filled = CGRect(x: track.minX, y: track.minY, width: track.width * min(1, max(0, progress)), height: track.height)
-            ctx.fill(Path(roundedRect: filled, cornerRadius: 1.5), with: .color(color))
+            ctx.fill(Path(roundedRect: filled, cornerRadius: 1.5), with: .color(barColor))
         }
         return rect
     }
 
-    /// The P/L at the hovered price, in a green (gain) or red (loss) tag just left of the price axis.
+    /// The P/L at the hovered price, in a green (gain) or red (loss) tag just left of the price axis:
+    /// whole NOK at USD.NOK (dollars and cents without a rate).
     private func drawPnLTag(in ctx: inout GraphicsContext, pnl: Double, y: CGFloat, plot: CGRect) {
-        let resolved = ctx.resolve(Text(Fmt.money(pnl, signed: true))
+        let text = broker.usdNok.map { Fmt.nok(pnl * $0, signed: true, groupedFrom: 0) } ?? Fmt.amount(pnl, signed: true)
+        let resolved = ctx.resolve(Text(text)
             .font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
         let width = resolved.measure(in: CGSize(width: 300, height: 40)).width + 8
         let rect = CGRect(x: plot.maxX - width - 2, y: y - tagHeight / 2, width: width, height: tagHeight)
@@ -831,7 +858,7 @@ private struct ScrollCatcher: NSViewRepresentable {
                 case .leftMouseDown:
                     self.onClick?()
                     let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
-                    guard flags == .option || flags == .control, let onModifiedClick = self.onModifiedClick,
+                    guard flags == .option || flags == .control || flags == .command, let onModifiedClick = self.onModifiedClick,
                           onModifiedClick(location, flags) else { return event }
                 default:
                     self.handleScroll(event, at: location)

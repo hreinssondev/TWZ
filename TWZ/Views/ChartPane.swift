@@ -20,36 +20,46 @@ extension Workspace {
         isChartSelected = true
     }
 
-    /// Double-clicking a position: selects the grid's chart showing its stock (the first, in reading
-    /// order), or with none, loads the stock into the grid's last chart and selects that.
+    /// Double-clicking a position: selects its stock's chart (see `showChart`).
     func focusPosition(_ symbol: String, broker: Broker) {
-        let s = symbol.uppercased()
-        if selectChart(showing: s) { return }
-        if let id = mainCells.last, let last = chart(id: id) {
-            loadByHand(s, into: last, broker: broker)
-            selectedChartID = id
-        }
+        showChart(symbol.uppercased(), broker: broker)
     }
 
-    /// Double-clicking an order: selects the grid's chart showing its stock (the first, in reading
-    /// order), or with none, loads the stock into the selected chart.
+    /// Double-clicking an order: selects its stock's chart (see `showChart`).
     func focusOrder(_ symbol: String, broker: Broker) {
-        if !selectChart(showing: symbol.uppercased()) { loadIntoSelectedChart(symbol, broker: broker) }
+        showChart(symbol.uppercased(), broker: broker)
     }
 
-    /// Double-clicking a round trip: shows its arrows and entry / exit lines on the grid's chart showing
-    /// its stock (the first, in reading order), or with none, loads the stock into the grid's last chart
-    /// not set by hand (or the last chart, if all are) and selects it. Double-clicking it again, or the
-    /// chart, hides them.
+    /// Double-clicking a round trip: shows its arrows and entry / exit lines on its stock's chart (see
+    /// `showChart`). Double-clicking it again, or the chart, hides them.
     func showTrip(_ trip: RoundTrip, broker: Broker) {
         if shownTrips[trip.symbol] == trip.id {
             shownTrips[trip.symbol] = nil
             return
         }
         shownTrips[trip.symbol] = trip.id
-        if selectChart(showing: trip.symbol) { return }
-        if let id = mainCells.last(where: { !manualChartIDs.contains($0) }) ?? mainCells.last, let chart = chart(id: id) {
-            loadByHand(trip.symbol, into: chart, broker: broker)
+        shownOrderFills[trip.symbol] = nil
+        showChart(trip.symbol, broker: broker)
+    }
+
+    /// Double-clicking a filled order: shows its fills' arrows and a line at their average price, as
+    /// `showTrip` does for a round trip. Double-clicking it again, or the chart, hides them.
+    func showFills(_ fillIds: Set<String>, symbol: String, broker: Broker) {
+        if shownOrderFills[symbol] == fillIds {
+            shownOrderFills[symbol] = nil
+            return
+        }
+        shownOrderFills[symbol] = fillIds
+        shownTrips[symbol] = nil
+        showChart(symbol, broker: broker)
+    }
+
+    /// Selects the grid's chart showing `symbol` (the first, in reading order), or with none, loads it
+    /// into the grid's 6th chart in reading order (the last, in a smaller grid) and selects that.
+    private func showChart(_ symbol: String, broker: Broker) {
+        if selectChart(showing: symbol) { return }
+        if let id = mainCells.count >= 6 ? mainCells[5] : mainCells.last, let chart = chart(id: id) {
+            loadByHand(symbol, into: chart, broker: broker)
             selectedChartID = id
         }
     }
@@ -166,11 +176,26 @@ struct ChartPane: View {
                     symbolFocused = false
                 }
 
+            // "2 LONG 23 322 +452": the orders that opened or added to the open round trip (an order in
+            // several fills counts once), the market value in NOK (at cost until there's a quote), and the
+            // P/L in NOK once there's a quote; without a USD.NOK rate, shares and the P/L in dollars.
             if let p = broker.positions[chart.symbol] {
-                Text("\(p.quantity > 0 ? "LONG" : "SHORT") \(Fmt.shares(abs(p.quantity)))")
-                    .font(.system(size: 10, weight: .semibold))
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(Capsule().fill((p.quantity > 0 ? Color.green : Color.red).opacity(0.25)))
+                let fills = broker.fills.values.filter { $0.symbol == chart.symbol }
+                let orders = RoundTrip.build(fills: fills, positions: broker.positions).first(where: \.isOpen)?.orderCount ?? 0
+                let last = broker.quote(p.symbol)?.last
+                let valueNOK = broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * $0 }
+                let pnl = last.map { ($0 - p.avgCost) * p.quantity }
+                HStack(spacing: 4) {
+                    Text("\(orders > 0 ? "\(orders) " : "")\(p.quantity > 0 ? "LONG" : "SHORT") \(valueNOK.map { Fmt.nok($0, groupedFrom: 0) } ?? Fmt.shares(abs(p.quantity)))")
+                    if let pnl {
+                        Text(broker.usdNok.map { Fmt.nok(pnl * $0, signed: true, groupedFrom: 0) } ?? Fmt.amount(pnl, signed: true))
+                            .foregroundStyle(pnl >= 0 ? .green : .red)
+                    }
+                }
+                .help("\(orders > 0 ? "\(orders) order\(orders == 1 ? "" : "s") opened or added to it, " : "")\(Fmt.shares(abs(p.quantity))) shares")
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(Capsule().fill((p.quantity > 0 ? Color.green : Color.red).opacity(0.25)))
             }
 
             // Tick-by-tick: a fast chart (⌘↩, filled ⚡) streams its trades; the selected chart its
@@ -270,6 +295,8 @@ struct TradingChart: View {
 
     @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
     @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
+    @AppStorage(DollarClickOrders.enabledKey) private var dollarClicks = false
+    @AppStorage(DollarClickOrders.amountKey) private var dollarClickAmount = DollarClickOrders.defaultAmount
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
@@ -281,8 +308,12 @@ struct TradingChart: View {
     @AppStorage(LineDashes.takeProfitKey) private var takeProfitDashed = LineDashes.defaultTakeProfit
     @AppStorage(LineDashes.ordersKey) private var ordersDashed = LineDashes.defaultOrders
     @AppStorage(LineDashes.lastTradeKey) private var lastTradeDashed = LineDashes.defaultLastTrade
+    @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
     /// The closed round trip whose exit lines were cleared by a click or a new order.
     @State private var dismissedTrip: String?
+    /// With Settings' last trade lines off: the round trip whose exit line shows for its first 7 s.
+    @State private var flashingExitTrip: String?
+    private static let exitFlashSeconds = 7.0
 
     var body: some View {
         CandleChart(
@@ -292,12 +323,22 @@ struct TradingChart: View {
             // buy box is), a buy for its NOK amount.
             onAltClick: allowsAltClick && altClickOrders ? { price in
                 onTrade()
-                if let hotkey = workspace.selectedHotkey {
+                if dollarClicks {
+                    broker.placeDollars(dollarClickAmount, action: "BUY", symbol: chart.symbol, at: price)
+                } else if let hotkey = workspace.selectedHotkey {
                     broker.run(hotkey, symbol: chart.symbol, at: price)
                 } else {
                     broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
                 }
             } : nil,
+            // Dollar clicks: ⌘-click sells the same amount ⌥-click buys.
+            onCommandClick: allowsAltClick && altClickOrders && dollarClicks ? { price in
+                onTrade()
+                broker.placeDollars(dollarClickAmount, action: "SELL", symbol: chart.symbol, at: price)
+            } : nil,
+            altClickTint: dollarClicks ? .green : .white,
+            commandClickTint: .red,
+            tintsHoverLine: dollarClicks,
             onControlClick: { price in
                 guard !chart.symbol.isEmpty else { return }
                 onTrade()
@@ -341,33 +382,54 @@ struct TradingChart: View {
             },
             onClick: { dismissedTrip = closedTrip?.id ?? dismissedTrip },
             // Hides the round trip shown from the Round trips tab.
-            onDoubleClick: { workspace.shownTrips[chart.symbol] = nil },
-            shownFillIds: Set(shownTrip?.fillIds ?? [])
+            onDoubleClick: {
+                workspace.shownTrips[chart.symbol] = nil
+                workspace.shownOrderFills[chart.symbol] = nil
+            },
+            shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? [])
         )
+        // With the last trade lines off, a round trip that just closed (in the last 30 s, so not one
+        // from before the chart showed the symbol) shows its exit line for 7 s.
+        .onChange(of: closedTrip?.id) { _, id in
+            guard !showLastTradeLines, let id, let trip = closedTrip, Date().timeIntervalSince(trip.lastFill) < 30 else { return }
+            flashingExitTrip = id
+            Task {
+                try? await Task.sleep(for: .seconds(Self.exitFlashSeconds))
+                if flashingExitTrip == id { flashingExitTrip = nil }
+            }
+        }
         // A new order in the symbol clears the last trade's exit lines.
         .onChange(of: symbolOrders) { old, new in
             if old.symbol == new.symbol, !new.ids.isSubset(of: old.ids) {
                 dismissedTrip = closedTrip?.id ?? dismissedTrip
             }
         }
-        // A trip shown from the Round trips tab scrolls into view, once the chart has bars.
-        .onChange(of: TripReveal(tripId: shownTrip?.id, hasBars: !chart.bars.isEmpty), initial: true) {
-            if let shownTrip { reveal(shownTrip) }
+        // A trip shown from the Round trips tab, or an order's fills from the Orders list, scrolls into
+        // view once the chart has bars.
+        .onChange(of: TripReveal(tripId: shownTrip?.id, orderFillIds: workspace.shownOrderFills[chart.symbol],
+                                 hasBars: !chart.bars.isEmpty), initial: true) {
+            if let shownTrip {
+                reveal(from: shownTrip.start, to: shownTrip.lastFill)
+            } else if let first = shownOrderFills.map(\.time).min(), let last = shownOrderFills.map(\.time).max() {
+                reveal(from: first, to: last)
+            }
         }
     }
 
     private struct TripReveal: Equatable {
         var tripId: String?
+        var orderFillIds: Set<String>?
         var hasBars: Bool
     }
 
-    /// Scrolls just enough to bring the trip's first and last fills on screen (the first if both don't fit).
-    private func reveal(_ trip: RoundTrip) {
+    /// Scrolls just enough to bring the first and last fills, at `start` and `end`, on screen (the first
+    /// if both don't fit).
+    private func reveal(from start: Date, to end: Date) {
         let bars = chart.bars
         guard !bars.isEmpty else { return }
         let seconds = chart.timeframe.barSeconds
-        let first = CandleChart.barIndex(of: trip.start, in: bars, barSeconds: seconds) ?? 0
-        let last = CandleChart.barIndex(of: trip.lastFill, in: bars, barSeconds: seconds) ?? bars.count - 1
+        let first = CandleChart.barIndex(of: start, in: bars, barSeconds: seconds) ?? 0
+        let last = CandleChart.barIndex(of: end, in: bars, barSeconds: seconds) ?? bars.count - 1
         let margin = 3.0
         let right = Double(bars.count) - chart.scrollBack
         if Double(last) + 1 + margin > right {
@@ -393,6 +455,12 @@ struct TradingChart: View {
         guard let id = workspace.shownTrips[chart.symbol] else { return nil }
         let fills = broker.fills.values.filter { $0.symbol == chart.symbol }
         return RoundTrip.build(fills: fills, positions: broker.positions).first { $0.id == id }
+    }
+
+    /// The fills of the order double-clicked in the Orders list, if it's in this chart's symbol.
+    private var shownOrderFills: [Fill] {
+        guard let ids = workspace.shownOrderFills[chart.symbol] else { return [] }
+        return broker.fills.values.filter { ids.contains($0.id) }
     }
 
     /// The symbol's latest round trip once it's closed, until a click on the chart or a new order.
@@ -426,13 +494,23 @@ struct TradingChart: View {
             if let exit = trip.exitPrice {
                 lines.append(PriceLine(price: exit, color: .red, label: "Exit", dotted: true))
             }
-        } else if let trip = closedTrip {
-            // Just exited: red at the average exit, green at the average entry (unknown for shares held
-            // from before today).
-            if let exit = trip.exitPrice {
-                lines.append(PriceLine(price: exit, color: .red, label: "Exit", dashed: lastTradeDashed))
+        } else if let fill = shownOrderFills.first {
+            // Shown from the Orders list: small dots at the order's average fill price, green for a buy,
+            // red for a sell.
+            let shares = shownOrderFills.reduce(0) { $0 + $1.shares }
+            if shares > 0 {
+                let price = shownOrderFills.reduce(0) { $0 + $1.price * $1.shares } / shares
+                let isBuy = fill.side == "BOT"
+                lines.append(PriceLine(price: price, color: isBuy ? .green : .red, label: isBuy ? "Buy" : "Sell", dotted: true))
             }
-            if trip.carried == 0, let entry = trip.entryPrice {
+        } else if let trip = closedTrip, showLastTradeLines || flashingExitTrip == trip.id {
+            // Just exited: red small dots at the average exit, from the latest candle to the axis as order
+            // lines are, and green at the average entry (unknown for shares held from before today).
+            // With Settings' last trade lines off, only the exit line, for its first 7 s.
+            if let exit = trip.exitPrice {
+                lines.append(PriceLine(price: exit, color: .red, label: "", drawnLikeOrder: true))
+            }
+            if showLastTradeLines, trip.carried == 0, let entry = trip.entryPrice {
                 lines.append(PriceLine(price: entry, color: .green, label: "Avg", dashed: lastTradeDashed))
             }
         }
@@ -459,7 +537,7 @@ struct TradingChart: View {
                 if let price = isStop ? o.auxPrice : o.limitPrice {
                     lines.append(PriceLine(price: price, color: protectiveColor(p.kind),
                                            label: "", dashed: isStop ? stopLossDashed : takeProfitDashed, orderId: o.id,
-                                           cancelsOnClick: true, fillProgress: o.fillProgress))
+                                           cancelsOnClick: true, fillProgress: o.fillProgress, fillIsBuy: o.action == "BUY"))
                 }
                 continue
             }
@@ -468,19 +546,19 @@ struct TradingChart: View {
                 // price in its box.
                 if let price = o.auxPrice ?? o.limitPrice {
                     lines.append(PriceLine(price: price, color: LineColors.resolve(altClickHex, default: LineColors.defaultAltClick),
-                                           label: "", dashed: altClickDashed, orderId: o.id, fillProgress: o.fillProgress))
+                                           label: "", dashed: altClickDashed, orderId: o.id, fillProgress: o.fillProgress, fillIsBuy: o.action == "BUY"))
                 }
                 continue
             }
             // Other orders: the side, no share count, in the box.
             if let lmt = o.limitPrice {
                 lines.append(PriceLine(price: lmt, color: LineColors.resolve(ordersHex, default: LineColors.defaultOrders),
-                                       label: side, dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress))
+                                       label: side, dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress, fillIsBuy: o.action == "BUY"))
             }
             // Stop / trigger price (TRAIL's aux is a distance, not a price).
             if let aux = o.auxPrice, !o.orderType.hasPrefix("TRAIL"), o.orderType != "REL" {
                 lines.append(PriceLine(price: aux, color: .purple, label: "\(o.orderType) \(side)",
-                                       dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress))
+                                       dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress, fillIsBuy: o.action == "BUY"))
             }
         }
         return lines

@@ -10,6 +10,10 @@
 //  second show as one row.
 //  Filled orders and round trips name what placed them: the hotkey's price (Mid, Last, Bid, Ask),
 //  Mkt, ⌥-click, or SL / TP.
+//  A number after the symbol counts the orders that opened or added to its round trip, long or short, not
+//  the closing ones (an order in several fills once): a position's open trip, each round trip. An order's
+//  number is its own place in its trip: the 1st, 2nd, 3rd order opening or adding to it, or the 1st, 2nd
+//  closing it, once it has fills.
 //  A working order's row has a thin bar along its bottom that fills to the right as the order fills.
 //  Below them, behind a draggable divider, two tabs: today's round trips with their profit or loss (dimmed),
 //  and Borrow, what shorting the selected chart's stock takes (see BorrowTab).
@@ -33,6 +37,9 @@ struct OrdersPanel: View {
     /// Height of the three columns as a share of the panel; round trips take the rest.
     @AppStorage("roundTripsSplit") private var columnsShare: Double = 0.5
     @AppStorage("bottomTab") private var bottomTab: BottomTab = .roundTrips
+    /// Round trips clicked to show how their orders were placed ("Mid → Bid"), their entry and exit
+    /// prices and their start time, by trip id.
+    @State private var tripsShowingDetails: Set<String> = []
 
     private enum BottomTab: String { case roundTrips, borrow }
 
@@ -40,6 +47,9 @@ struct OrdersPanel: View {
     private static let minSectionHeight: CGFloat = 40
     /// Done orders and round trips are dimmed this much.
     private static let doneOpacity = 0.45
+    /// NOK values and share counts from five digits up are grouped by thousands ("10 000"), shorter
+    /// ones not ("9999").
+    private static let groupedFrom = 10_000
 
     var body: some View {
         GeometryReader { geo in
@@ -204,22 +214,42 @@ struct OrdersPanel: View {
 
     @ViewBuilder private var orderRows: some View {
         let entries = orderEntries
+        let trips = tripOrders
         if entries.isEmpty { empty("No orders today") }
         ForEach(entries) { entry in
             switch entry {
-            case .working(let o): workingRow(o)
-            case .filled(let g): filledRow(g)
+            case .working(let o): workingRow(o, tripOrders: trips.numbers["\(o.symbol) \(o.id)"])
+            case .filled(let g): filledRow(g, tripOrders: trips.numbers["\(g.fill.symbol) \(RoundTrip.orderKey(g.fill))"])
             }
         }
     }
 
-    private func workingRow(_ o: OrderRow) -> some View {
+    /// Each order's place in its round trip, by symbol and `RoundTrip.orderKey`: the nth opening or
+    /// adding to it, or the nth closing it (an order that flips a position, in the newer trip). And by
+    /// symbol, the orders that opened or added to its open trip.
+    private var tripOrders: (numbers: [String: Int], open: [String: Int]) {
+        var numbers: [String: Int] = [:], open: [String: Int] = [:]
+        for t in RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions).reversed() {
+            for (i, order) in t.exitOrders.enumerated() { numbers["\(t.symbol) \(order)"] = i + 1 }
+            for (i, order) in t.entryOrders.enumerated() { numbers["\(t.symbol) \(order)"] = i + 1 }
+            if t.isOpen { open[t.symbol] = t.orderCount }
+        }
+        return (numbers, open)
+    }
+
+    /// "6" right after a symbol: the orders that opened or added to its round trip, or an order's place in it.
+    @ViewBuilder private func tripOrdersText(_ count: Int?) -> some View {
+        if let count, count > 0 { Text("\(count)").foregroundStyle(.primary) }
+    }
+
+    private func workingRow(_ o: OrderRow, tripOrders: Int?) -> some View {
         // Value in NOK of the shares still to fill, at the order's price (the last price for market orders).
         let price = o.limitPrice ?? o.auxPrice ?? broker.quote(o.symbol)?.last
         let valueNOK = price.flatMap { p in (o.usdNok ?? broker.usdNok).map { (o.quantity - o.filled) * p * $0 } }
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
                 symbolButton(o.symbol, onDoubleClick: { workspace.focusOrder(o.symbol, broker: broker) })
+                tripOrdersText(tripOrders)
                 Spacer(minLength: 2)
                 Text(o.status).foregroundStyle(.secondary).font(.system(size: 10))
                 Button {
@@ -232,10 +262,13 @@ struct OrdersPanel: View {
                 .disabled(o.id <= 0)
             }
             HStack(spacing: 4) {
-                if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(o.action == "BUY")) }
+                if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(o.action == "BUY")) }
+                Text(o.priceSummary)
                 // Shares still to fill; the bar below shows how much has filled.
-                Text("\(Fmt.shares(o.quantity - o.filled))\(o.priceSummary)")
+                Text(Fmt.shares(o.quantity - o.filled, groupedFrom: Self.groupedFrom))
                 Spacer(minLength: 0)
+                tieredText(orderTiered(o.id), usdNok: o.usdNok ?? broker.usdNok)
+                commissionText(orderCommission(o.id), usdNok: o.usdNok ?? broker.usdNok)
             }
             .font(.system(size: 10).monospacedDigit())
         }
@@ -243,17 +276,19 @@ struct OrdersPanel: View {
         .onTapGesture(count: 2) { workspace.focusOrder(o.symbol, broker: broker) }
         .help("Double-click to show \(o.symbol)'s chart")
         .rowStyle()
-        .overlay(alignment: .bottom) { fillBar(o) }
+        // Only while it's partly filled.
+        .overlay(alignment: .bottom) { if o.filled > 0, o.filled < o.quantity { fillBar(o) } }
     }
 
     /// A done order laid out like a working one, dimmed, with its fill time and average fill price.
-    private func filledRow(_ g: FillGroup) -> some View {
+    private func filledRow(_ g: FillGroup, tripOrders: Int?) -> some View {
         let f = g.fill
         let valueNOK = (f.usdNok ?? broker.usdNok).map { f.shares * f.price * $0 }
         let dim = Self.doneOpacity
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
-                symbolButton(f.symbol, onDoubleClick: { workspace.focusOrder(f.symbol, broker: broker) })
+                symbolButton(f.symbol, onDoubleClick: { showFills(g) })
+                tripOrdersText(tripOrders)
                 Spacer(minLength: 2)
                 if let source = broker.sourceLabel(g.orderIds) { Text(source) }
                 Text(f.time, format: .dateTime.hour().minute().second())
@@ -261,18 +296,30 @@ struct OrdersPanel: View {
             .foregroundStyle(.secondary)
             .opacity(dim)
             HStack(spacing: 4) {
-                if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(f.side == "BOT")) }
-                Text("\(Fmt.shares(f.shares))\(g.order?.priceSummary ?? "")")
+                if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(f.side == "BOT")) }
+                if let order = g.order { Text(order.priceSummary) }
                 Text("@ \(Fmt.price(f.price))").fontWeight(.semibold)
+                Text(Fmt.shares(f.shares, groupedFrom: Self.groupedFrom)).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
+                tieredText(tiered(g.fillIds), usdNok: f.usdNok ?? broker.usdNok)
+                commissionText(f.commission, usdNok: f.usdNok ?? broker.usdNok)
             }
             .opacity(dim)
             .font(.system(size: 10).monospacedDigit())
         }
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { workspace.focusOrder(f.symbol, broker: broker) }
-        .help("Double-click to show \(f.symbol)'s chart")
+        .onTapGesture(count: 2) { showFills(g) }
+        .help("Double-click to show its fills on \(f.symbol)'s chart")
         .rowStyle()
+    }
+
+    /// A filled order's fills on its stock's chart; just the chart while they haven't arrived.
+    private func showFills(_ g: FillGroup) {
+        if g.fillIds.isEmpty {
+            workspace.focusOrder(g.fill.symbol, broker: broker)
+        } else {
+            workspace.showFills(g.fillIds, symbol: g.fill.symbol, broker: broker)
+        }
     }
 
     /// Filled share of the order, growing to the right; a scaled shape, so updates cost no layout.
@@ -289,10 +336,13 @@ struct OrdersPanel: View {
     }
 
     /// What filled of one done order (or, for orders entered in TWS, of fills in one symbol, side and
-    /// second), at the volume-weighted average price, timed at the last fill.
+    /// second), at the volume-weighted average price, timed at the last fill, with the commissions and
+    /// fees reported for its fills so far.
     private struct FillGroup: Identifiable {
         var fill: Fill
         var orderIds: [Int]
+        /// The fills' exec ids; none for a done order whose fills haven't arrived.
+        var fillIds: Set<String> = []
         /// The order the fills came from, when known.
         var order: OrderRow?
         var id: String { fill.id }
@@ -308,13 +358,15 @@ struct OrdersPanel: View {
             let key: Key = f.orderId != 0 ? .order(f.orderId)
                 : .moment(symbol: f.symbol, side: f.side, second: Int(f.time.timeIntervalSince1970.rounded(.down)))
             guard var g = groups[key] else {
-                groups[key] = FillGroup(fill: f, orderIds: [f.orderId], order: f.orderId != 0 ? broker.orders[f.orderId] : nil)
+                groups[key] = FillGroup(fill: f, orderIds: [f.orderId], fillIds: [f.id], order: f.orderId != 0 ? broker.orders[f.orderId] : nil)
                 continue
             }
+            g.fillIds.insert(f.id)
             let shares = g.fill.shares + f.shares
             if shares > 0 { g.fill.price = (g.fill.price * g.fill.shares + f.price * f.shares) / shares }
             g.fill.shares = shares
             g.fill.time = f.time
+            if let c = f.commission { g.fill.commission = (g.fill.commission ?? 0) + c }
             if !g.orderIds.contains(f.orderId) { g.orderIds.append(f.orderId) }
             groups[key] = g
         }
@@ -328,6 +380,7 @@ struct OrdersPanel: View {
 
     @ViewBuilder private var positionRows: some View {
         let positions = broker.positions.values.sorted { $0.symbol < $1.symbol }
+        let openTripOrders = tripOrders.open
         if positions.isEmpty { empty("No positions") }
         ForEach(positions) { p in
             let last = broker.quote(p.symbol)?.last
@@ -340,12 +393,16 @@ struct OrdersPanel: View {
                     Text(p.symbol).fontWeight(.semibold)
                         .onTapGesture(count: 2) { workspace.focusPosition(p.symbol, broker: broker) }
                         .onTapGesture { workspace.loadIntoSelectedChart(p.symbol, broker: broker) }
+                    tripOrdersText(openTripOrders[p.symbol])
                     Spacer(minLength: 2)
-                    Text(Fmt.money(pnl, signed: true)).foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
+                    // In NOK at the current rate, like the chart's position badge (dollars without a rate).
+                    Text(pnl.map { usd in broker.usdNok.map { Fmt.nok(usd * $0, signed: true, groupedFrom: Self.groupedFrom) }
+                                       ?? Fmt.amount(usd, signed: true) } ?? "—")
+                        .foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
                 }
                 HStack(spacing: 4) {
-                    if let valueNOK { Text(Fmt.nok(valueNOK)).foregroundStyle(sideColor(p.quantity > 0)) }
-                    Text("\(Fmt.shares(p.quantity)) - \(Fmt.price(p.avgCost))")
+                    if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(p.quantity > 0)) }
+                    Text("\(Fmt.shares(p.quantity, groupedFrom: Self.groupedFrom)) - \(Fmt.price(p.avgCost))")
                     Spacer(minLength: 0)
                 }
                 .font(.system(size: 10).monospacedDigit())
@@ -359,39 +416,57 @@ struct OrdersPanel: View {
 
     /// Today's round trips, newest first; the header sums the closed ones.
     private var roundTrips: some View {
-        let trips = RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions)
-        let closed = trips.filter { !$0.isOpen }.compactMap { $0.pnl(last: nil) }
-        let realized = closed.isEmpty ? nil : closed.reduce(0, +)
+        let trips = RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions, tiered: broker.tieredEstimates)
+        // Without any USD.NOK rate, every trip's P/L is in dollars, so the sum is in one currency either way.
+        let closed = trips.filter { !$0.isOpen }.compactMap { tripPnL($0, last: nil) }
+        let realized = closed.first.map { (value: closed.reduce(0) { $0 + $1.value }, inNOK: $0.inNOK) }
         return column(title: { tabs(roundTripCount: trips.count) },
-                      trailing: realized.map { pnlText($0).fontWeight(.semibold) }, dimsHeader: true) {
+                      trailing: realized.map { pnlText($0.value, inNOK: $0.inNOK).fontWeight(.semibold) }, dimsHeader: true) {
             if trips.isEmpty { empty("No trades today") }
             ForEach(trips) { t in
-                let pnl = t.pnl(last: broker.quote(t.symbol)?.last)
+                let pnl = tripPnL(t, last: broker.quote(t.symbol)?.last)
+                let details = tripsShowingDetails.contains(t.id)
+                // Shares bought and sold in the trip together (today's fills), after the prices with the
+                // details shown, after the NOK value without; a "-" before them, colored like them.
+                let shares = Text(Fmt.shares(t.buyShares + t.sellShares, groupedFrom: Self.groupedFrom)).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
                         symbolButton(t.symbol)
-                        if let sources = tripSources(t) { Text(sources).foregroundStyle(.secondary) }
+                        // Every order in the trip, entries and exits (other rows count entries only).
+                        tripOrdersText(t.entryOrders.count + t.exitOrders.count)
+                        if details, let sources = tripSources(t) {
+                            Text(sources).foregroundStyle(.secondary)
+                        }
                         if t.isOpen { Text("open").foregroundStyle(.secondary) }
                         Spacer(minLength: 2)
-                        if let pnl { pnlText(pnl) } else { Text("—").foregroundStyle(.secondary) }
+                        if let pnl { pnlText(pnl.value, inNOK: pnl.inNOK) } else { Text("—").foregroundStyle(.secondary) }
                     }
                     HStack(spacing: 4) {
                         let prices = "\(t.entryPrice.map { Fmt.price($0) } ?? "earlier") → \(t.exitPrice.map { Fmt.price($0) } ?? "…")"
                         // The position's value in NOK at the entry price (the exit's for shares held from before today);
                         // in dollars until there's an exchange rate.
                         let value = (t.entryPrice ?? t.exitPrice).map { p in
-                            (t.usdNok ?? broker.usdNok).map { Fmt.nok(t.entryShares * p * $0) } ?? "$" + Int((t.entryShares * p).rounded()).formatted()
+                            (t.usdNok ?? broker.usdNok).map { Fmt.nok(t.entryShares * p * $0, groupedFrom: Self.groupedFrom) } ?? "$" + Int((t.entryShares * p).rounded()).formatted()
                         }
-                        Text(value.map { "\($0) - \(prices)" } ?? prices)
+                        if details {
+                            Text(value.map { "\($0) - \(prices)" } ?? prices)
+                        } else if let value {
+                            Text(value)
+                        }
+                        if details || value != nil { Text("-").foregroundStyle(.secondary) }
+                        shares
                         Spacer(minLength: 2)
-                        Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary)
+                        if details { Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary) }
+                        tieredText(t.tieredCommissions != 0 ? t.tieredCommissions : nil, usdNok: t.usdNok ?? broker.usdNok)
+                        commissionText(t.commissions != 0 ? t.commissions : nil, usdNok: t.usdNok ?? broker.usdNok)
                     }
                     .font(.system(size: 10).monospacedDigit())
                 }
                 .opacity(Self.doneOpacity)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) { workspace.showTrip(t, broker: broker) }
-                .help("Double-click to show the trade on \(t.symbol)'s chart")
+                .onTapGesture { tripsShowingDetails.formSymmetricDifference([t.id]) }
+                .help("Click to show or hide how its orders were placed and its prices · Double-click to show the trade on \(t.symbol)'s chart")
                 .rowStyle()
             }
         }
@@ -442,8 +517,53 @@ struct OrdersPanel: View {
         return "\(entry ?? "?") → \(exit ?? "?")"
     }
 
-    private func pnlText(_ pnl: Double) -> Text {
-        Text(Fmt.money(pnl, signed: true)).foregroundStyle(pnl >= 0 ? .green : .red)
+    /// A round trip's P/L in NOK at the trip's rate (the current one for a trip from before there was a
+    /// rate), or in dollars without any rate.
+    private func tripPnL(_ t: RoundTrip, last: Double?) -> (value: Double, inNOK: Bool)? {
+        guard let usd = t.pnl(last: last) else { return nil }
+        return (t.usdNok ?? broker.usdNok).map { (usd * $0, true) } ?? (usd, false)
+    }
+
+    /// Commissions and fees reported for a working order's fills so far, in dollars (nil before any).
+    private func orderCommission(_ id: Int) -> Double? {
+        let reported = broker.fills.values.filter { $0.orderId == id }.compactMap(\.commission)
+        return reported.isEmpty ? nil : reported.reduce(0, +)
+    }
+
+    /// What a working order's fills so far would have cost on IBKR Pro Tiered, in dollars (nil before any estimate).
+    private func orderTiered(_ id: Int) -> Double? {
+        tiered(Set(broker.fills.values.filter { $0.orderId == id }.map(\.id)))
+    }
+
+    /// What these fills would have cost on IBKR Pro Tiered, in dollars (nil before any estimate).
+    private func tiered(_ fillIds: Set<String>) -> Double? {
+        let estimates = fillIds.compactMap { broker.tieredEstimates[$0] }
+        return estimates.isEmpty ? nil : estimates.reduce(0, +)
+    }
+
+    /// The commissions and fees IBKR Pro Tiered would have charged, left of what IB charged: whole NOK
+    /// at `usdNok` (dollars and cents without a rate), dimmed like it.
+    @ViewBuilder private func tieredText(_ usd: Double?, usdNok: Double?) -> some View {
+        if let usd {
+            Text(usdNok.map { Fmt.nok(usd * $0, groupedFrom: Self.groupedFrom) } ?? Fmt.amount(usd))
+                .foregroundStyle(.secondary)
+                .help("Commissions and fees on IBKR Pro Tiered (estimate)")
+        }
+    }
+
+    /// Commissions and fees, dimmed like the times: whole NOK at `usdNok`, dollars and cents without a rate.
+    @ViewBuilder private func commissionText(_ usd: Double?, usdNok: Double?) -> some View {
+        if let usd {
+            Text(usdNok.map { Fmt.nok(usd * $0, groupedFrom: Self.groupedFrom) } ?? Fmt.amount(usd))
+                .foregroundStyle(.secondary)
+                .help("Commissions and fees")
+        }
+    }
+
+    /// Whole kroner, or dollars and cents.
+    private func pnlText(_ pnl: Double, inNOK: Bool) -> Text {
+        Text(inNOK ? Fmt.nok(pnl, signed: true, groupedFrom: Self.groupedFrom) : Fmt.amount(pnl, signed: true))
+            .foregroundStyle(pnl >= 0 ? .green : .red)
     }
 
     /// Text color for a buy / long (green) or sell / short (red).
