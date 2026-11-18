@@ -358,6 +358,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
     @AppStorage(LineColors.showGridKey) private var showGrid = false
+    @AppStorage(VolumeBars.opacityKey) private var volumeOpacity = VolumeBars.defaultOpacity
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top
@@ -437,6 +438,14 @@ private struct AppearanceSettings: View {
                 Toggle("SMA 9", isOn: $showFastSMA)
                 Toggle("SMA 21", isOn: $showSlowSMA)
                 Toggle("Trades (▲ buys, ▼ sells)", isOn: $showTrades)
+                LabeledContent("Volume bars opacity") {
+                    HStack {
+                        Slider(value: $volumeOpacity, in: VolumeBars.opacityRange, step: 0.05)
+                        Text("\(Int((volumeOpacity * 100).rounded()))%")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
                 LabeledContent("Line thickness") {
                     HStack {
                         Slider(value: $indicatorWidth, in: Indicators.lineWidthRange, step: 0.25)

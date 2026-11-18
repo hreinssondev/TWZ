@@ -43,7 +43,7 @@ enum AppearanceDefaults {
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
-        LineColors.showLastTradeLinesKey, LineColors.showGridKey,
+        LineColors.showLastTradeLinesKey, LineColors.showGridKey, VolumeBars.opacityKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
@@ -163,6 +163,13 @@ enum HoverPnLSize: String, CaseIterable, Identifiable {
         let percent = UserDefaults.standard.object(forKey: percentKey) as? Double ?? defaultPercent
         return min(100, max(1, percent)) / 100
     }
+}
+
+/// The volume bars along the bottom of each chart, in the candles' colors at this opacity (0 hides them).
+enum VolumeBars {
+    static let opacityKey = "volumeBarOpacity"
+    static let defaultOpacity = 0.35
+    static let opacityRange = 0.0...1.0
 }
 
 /// The price axis: label size, how closely labels are packed, and the last price box's opacity.

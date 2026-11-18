@@ -102,6 +102,7 @@ struct CandleChart: View {
     @AppStorage(LineDashes.lastPriceKey) private var lastPriceDashed = LineDashes.defaultLastPrice
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
     @AppStorage(LineColors.showGridKey) private var showGrid = false
+    @AppStorage(VolumeBars.opacityKey) private var volumeOpacity = VolumeBars.defaultOpacity
     @AppStorage(LineDashes.hoverKey) private var hoverDashed = LineDashes.defaultHover
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
@@ -466,9 +467,9 @@ struct CandleChart: View {
             }
         }
 
-        // Volume.
+        // Volume, at Settings' opacity.
         let maxVolume = visible.map(\.volume).max() ?? 0
-        if maxVolume > 0 {
+        if maxVolume > 0, volumeOpacity > 0 {
             var upVol = Path(), downVol = Path()
             for i in start..<end {
                 let b = bars[i]
@@ -476,8 +477,8 @@ struct CandleChart: View {
                 let rect = CGRect(x: x(i) - barWidth * 0.35, y: plot.maxY - h, width: max(1, barWidth * 0.7), height: h)
                 if b.close >= b.open { upVol.addRect(rect) } else { downVol.addRect(rect) }
             }
-            plotCtx.fill(upVol, with: .color(up.opacity(0.35)))
-            plotCtx.fill(downVol, with: .color(down.opacity(0.35)))
+            plotCtx.fill(upVol, with: .color(up.opacity(volumeOpacity)))
+            plotCtx.fill(downVol, with: .color(down.opacity(volumeOpacity)))
         }
 
         // Candles: batch into two paths per color for speed.
