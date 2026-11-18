@@ -520,9 +520,10 @@ struct TradingChart: View {
             }
         }
         if let p = broker.positions[chart.symbol] {
-            // Avg cost: number only on the axis (just left of it when the last price box would cover it).
+            // Avg cost: number only on the axis (just left of it when the last price box would cover it);
+            // set to dashed in Settings, drawn in the small dots.
             lines.append(PriceLine(price: p.avgCost, color: LineColors.resolve(avgCostHex, default: LineColors.defaultAvgCost),
-                                   label: "", dashed: avgCostDashed, movesAsideForLastPrice: true))
+                                   label: "", dashed: avgCostDashed, dotted: avgCostDashed, movesAsideForLastPrice: true))
         }
         if let whatIf = workspace.whatIfs[chart.symbol] {
             // ⌃-clicked with no position: a line at the pretend buy's price, the price on the axis (just
