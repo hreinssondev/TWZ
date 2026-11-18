@@ -23,7 +23,7 @@
 //  room (the free space around them changes); dragged shorter, they and the amount box shrink,
 //  and dragged on down the hotkey row collapses, giving the charts the space (drag up to bring it back).
 //  Collapsed, it shows at its smallest over the bottom of the charts once the pointer comes near the
-//  window's bottom edge below them, until it moves away well above the row.
+//  window's bottom edge below the left quarter of them, until it moves away well above the row.
 //
 
 import SwiftUI
@@ -140,13 +140,14 @@ struct ContentView: View {
                     .frame(width: sideWidth)
                 }
                 .padding(gap)
-                // The bottom of the charts' column, from the window's bottom edge (the row's drag handle and
-                // the margin under it) up a little way; while the row shows, up past it.
+                // The left quarter of the charts' column at its bottom, from the window's bottom edge (the
+                // row's drag handle and the margin under it) up a little way; while the row shows, all of
+                // the column's width, up past the row.
                 .overlay(alignment: .bottomLeading) {
+                    let showing = hotkeysPeek && rowHeight <= 0
                     HoverTracker(onHover: peekHotkeys)
-                        .frame(width: inner.width - sideWidth,
-                               height: gap * 2 + (hotkeysPeek && rowHeight <= 0
-                                                  ? minBottom + Self.peekReleaseMargin : Self.peekTriggerHeight))
+                        .frame(width: (inner.width - sideWidth) / (showing ? 1 : 4),
+                               height: gap * 2 + (showing ? minBottom + Self.peekReleaseMargin : Self.peekTriggerHeight))
                 }
             }
             if barPosition == .bottom {
