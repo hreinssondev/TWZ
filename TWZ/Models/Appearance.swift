@@ -144,6 +144,27 @@ enum DollarClickOrders {
     static let defaultAmount = 3000.0
 }
 
+/// What the chart's hover P/L sizes its pretend buy at the last price by, with no position or what-if
+/// open: a percent of the largest long IB's margin allows, or the shares a NOK amount buys.
+enum HoverPnLSize: String, CaseIterable, Identifiable {
+    case buyingPower = "Buying power"
+    case nok = "NOK amount"
+
+    var id: String { rawValue }
+
+    static let storageKey = "hoverPnLSize"
+    static let percentKey = "hoverPnLBuyingPowerPercent"
+    static let defaultPercent = 80.0
+    static let amountKey = "hoverPnLAmountNOK"
+    static let defaultAmount = 50_000.0
+
+    /// The buying power share, 1–100%.
+    static var fraction: Double {
+        let percent = UserDefaults.standard.object(forKey: percentKey) as? Double ?? defaultPercent
+        return min(100, max(1, percent)) / 100
+    }
+}
+
 /// The price axis: label size, how closely labels are packed, and the last price box's opacity.
 enum PriceAxis {
     static let fontSizeKey = "axisPriceFontSize"

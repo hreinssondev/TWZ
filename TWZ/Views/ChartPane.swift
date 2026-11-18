@@ -309,6 +309,8 @@ struct TradingChart: View {
     @AppStorage(LineDashes.ordersKey) private var ordersDashed = LineDashes.defaultOrders
     @AppStorage(LineDashes.lastTradeKey) private var lastTradeDashed = LineDashes.defaultLastTrade
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
+    @AppStorage(HoverPnLSize.storageKey) private var hoverSizing: HoverPnLSize = .buyingPower
+    @AppStorage(HoverPnLSize.amountKey) private var hoverAmountNOK = HoverPnLSize.defaultAmount
     /// The closed round trip whose exit lines were cleared by a click or a new order.
     @State private var dismissedTrip: String?
     /// With Settings' last trade lines off: the round trip whose exit line shows for its first 7 s.
@@ -366,13 +368,14 @@ struct TradingChart: View {
             },
             hoverPnL: { price in
                 // The open position's if it closed there, else the what-if line's, else a pretend buy
-                // at the last price, sized like a ⌃-click what-if.
+                // at the last price, sized as Settings says: by buying power or a NOK amount.
                 if let p = broker.positions[chart.symbol], p.quantity != 0 { return (price - p.avgCost) * p.quantity }
                 if let whatIf = workspace.whatIfs[chart.symbol] { return whatIf.pnl(at: price) }
-                guard let size = broker.hoverSizes[chart.symbol], let last = broker.quote(chart.symbol)?.last else { return nil }
-                return (price - last) * size.shares
+                guard let last = broker.quote(chart.symbol)?.last else { return nil }
+                if hoverSizing == .nok { return broker.shares(forNOK: hoverAmountNOK, at: last).map { (price - last) * $0 } }
+                return broker.hoverSizes[chart.symbol].map { (price - last) * $0.shares }
             },
-            onHover: { broker.refreshHoverSize(symbol: chart.symbol) },
+            onHover: { if hoverSizing == .buyingPower { broker.refreshHoverSize(symbol: chart.symbol) } },
             onCancelOrder: { id in
                 if id == WhatIf.lineId {
                     workspace.whatIfs[chart.symbol] = nil

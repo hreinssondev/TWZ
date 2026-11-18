@@ -84,14 +84,15 @@ final class Broker {
     private(set) var protectiveOrders: [Int: Protective] = [:]
     /// What placed each order this app sent ("Mid", "Mkt", "⌥-click", "SL", …), by order id.
     private(set) var orderSources: [Int: String] = [:]
-    /// The hover P/L's pretend buy per symbol: what a ⌃-click what-if at the last price would size
-    /// (see `refreshHoverSize`).
+    /// The hover P/L's pretend buy per symbol when sized by buying power: Settings' share of the
+    /// largest long IB's margin allows at the last price (see `refreshHoverSize`).
     private(set) var hoverSizes: [String: HoverSize] = [:]
     @ObservationIgnored private var hoverSizeAsked: [String: Date] = [:]
 
     struct HoverSize {
         var price: Double
         var shares: Double
+        var fraction: Double
         var time: Date
     }
 
@@ -260,16 +261,17 @@ final class Broker {
     }
 
     /// Sizes the hover P/L's pretend buy at the last price, quietly, unless the size in `hoverSizes`
-    /// is still fresh: under 3 minutes old and sized within 5% of the last price.
+    /// is still fresh: under 3 minutes old, sized within 5% of the last price, at Settings' share.
     func refreshHoverSize(symbol: String) {
         guard state == .connected, !symbol.isEmpty, let last = quote(symbol)?.last, last > 0 else { return }
-        let now = Date()
-        if let size = hoverSizes[symbol], now.timeIntervalSince(size.time) < 180, abs(last / size.price - 1) < 0.05 { return }
+        let now = Date(), fraction = HoverPnLSize.fraction
+        if let size = hoverSizes[symbol], size.fraction == fraction, now.timeIntervalSince(size.time) < 180,
+           abs(last / size.price - 1) < 0.05 { return }
         // IB answers in a second or two, or never (no completion): ask again after 15 s.
         if let asked = hoverSizeAsked[symbol], now.timeIntervalSince(asked) < 15 { return }
         hoverSizeAsked[symbol] = now
-        sizeWhatIf(symbol: symbol, at: last, fraction: WhatIf.buyingPowerFraction, quiet: true) { [weak self] size in
-            self?.hoverSizes[symbol] = HoverSize(price: size.price, shares: size.shares, time: Date())
+        sizeWhatIf(symbol: symbol, at: last, fraction: fraction, quiet: true) { [weak self] size in
+            self?.hoverSizes[symbol] = HoverSize(price: size.price, shares: size.shares, fraction: fraction, time: Date())
             self?.hoverSizeAsked[symbol] = nil
         }
     }

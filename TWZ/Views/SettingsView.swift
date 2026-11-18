@@ -167,6 +167,9 @@ private struct TradingSettings: View {
     @AppStorage(HotkeyClickMode.storageKey) private var clickMode: HotkeyClickMode = .select
     @AppStorage(DollarClickOrders.enabledKey) private var dollarClicks = false
     @AppStorage(DollarClickOrders.amountKey) private var dollarClickAmount = DollarClickOrders.defaultAmount
+    @AppStorage(HoverPnLSize.storageKey) private var hoverSizing: HoverPnLSize = .buyingPower
+    @AppStorage(HoverPnLSize.percentKey) private var hoverPercent = HoverPnLSize.defaultPercent
+    @AppStorage(HoverPnLSize.amountKey) private var hoverAmount = HoverPnLSize.defaultAmount
 
     private let shortcuts: [(String, String)] = [
         ("⌘⇧↩", "Send the selected hotkey"),
@@ -203,6 +206,31 @@ private struct TradingSettings: View {
                 Text(dollarClicks
                      ? "A DAY order at the clicked price, in place of the selected hotkey's ⌥-click order: a limit where it fills at that price or better, a stop-limit on the other side. Holding ⌥ turns the hover line and its price green, ⌘ red. The top bar's Alt-Click switches both off."
                      : "Off: ⌥-click places the selected hotkey's order at the clicked price (or a NOK buy), and ⌘-click does nothing.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Hover P/L with no position open") {
+                Picker("Pretend buy at the last price", selection: $hoverSizing) {
+                    ForEach(HoverPnLSize.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.radioGroup)
+                LabeledContent("Buying power (%)") {
+                    TextField("", value: $hoverPercent, format: .number.precision(.fractionLength(0)))
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                }
+                .disabled(hoverSizing != .buyingPower)
+                LabeledContent("Amount (NOK)") {
+                    TextField("", value: $hoverAmount, format: .number.precision(.fractionLength(0)))
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                }
+                .disabled(hoverSizing != .nok)
+                Text(hoverSizing == .buyingPower
+                     ? "Hovering a chart shows the P/L of buying that percent (1–100) of the largest long IB's margin allows at the last price, asked from IB as the pointer comes over the chart (a second or two, then kept a few minutes)."
+                     : "Hovering a chart shows the P/L of buying the shares this amount buys at the last price, at the current USD.NOK rate.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
