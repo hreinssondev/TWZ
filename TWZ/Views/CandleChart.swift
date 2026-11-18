@@ -101,6 +101,7 @@ struct CandleChart: View {
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @AppStorage(LineDashes.lastPriceKey) private var lastPriceDashed = LineDashes.defaultLastPrice
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
+    @AppStorage(LineColors.showGridKey) private var showGrid = true
     @AppStorage(LineDashes.hoverKey) private var hoverDashed = LineDashes.defaultHover
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
@@ -391,7 +392,8 @@ struct CandleChart: View {
         var plotCtx = ctx
         plotCtx.clip(to: Path(CGRect(x: 0, y: 0, width: plot.maxX, height: size.height)))
 
-        let gridColor = Color.primary.opacity(0.07)
+        // Grid lines switched off in Settings: drawn clear, the labels stay.
+        let gridColor = Color.primary.opacity(showGrid ? 0.07 : 0)
         let labelColor = Color.secondary
         let (up, down) = candleTheme.colors(customUp: customUp, customDown: customDown)
 

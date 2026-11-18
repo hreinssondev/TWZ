@@ -357,6 +357,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.ordersKey) private var ordersHex = ""
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
+    @AppStorage(LineColors.showGridKey) private var showGrid = true
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top
@@ -426,6 +427,7 @@ private struct AppearanceSettings: View {
                     LineStylePicker(key: LineDashes.lastTradeKey, default: LineDashes.defaultLastTrade)
                 }
                 Toggle("Show last trade lines after a round trip closes", isOn: $showLastTradeLines)
+                Toggle("Show grid lines (the price and time labels stay)", isOn: $showGrid)
                 Text("On: the exit and Avg lines stay until you click the chart or place an order. Off: just the exit line, for 7 seconds or until a click.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

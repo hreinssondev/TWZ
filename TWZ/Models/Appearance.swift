@@ -43,7 +43,7 @@ enum AppearanceDefaults {
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
-        LineColors.showLastTradeLinesKey,
+        LineColors.showLastTradeLinesKey, LineColors.showGridKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
@@ -198,6 +198,8 @@ enum LineColors {
     /// Off: of the Exit / Avg lines a chart shows once its symbol's round trip closes, just the exit
     /// line, for 7 s.
     static let showLastTradeLinesKey = "showLastTradeLines"
+    /// Off hides the chart's grid lines (the price and time labels stay).
+    static let showGridKey = "showChartGridLines"
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
     static let defaultAltClick = Color.white
