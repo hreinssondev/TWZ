@@ -9,9 +9,9 @@
 //  In the main window (not while a sheet or popover is open), for the selected chart's symbol:
 //  a hotkey's own keyboard shortcut sends that hotkey; ⌘⇧↩ sends the selected hotkey; ⌘↩ makes the
 //  selected chart fast or not, so it keeps tick-by-tick trades once deselected (see
-//  `Workspace.fastChartIDs`); ⌘A and ⌘⌫, like ⌥<,
-//  cancel every order in the symbol, stop loss and take profit included; ⌘Z, like ⌥Z, cancels the
-//  last order placed.
+//  `Workspace.fastChartIDs`); ⌘A, like ⌥<,
+//  cancels every order in the symbol, stop loss and take profit included; ⌘⌫ does too, then closes
+//  the whole position at market; ⌘Z, like ⌥Z, cancels the last order placed.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
@@ -67,9 +67,12 @@ struct TradingShortcuts: ViewModifier {
                             return nil
                         }
                         switch event.keyCode == 51 ? "⌫" : event.charactersIgnoringModifiers?.lowercased() {
-                        case "a", "⌫":
+                        case "a":
                             if typing { return event }
                             if symbol.isEmpty { NSSound.beep() } else { broker.cancelOrders(for: symbol) }
+                        case "⌫":
+                            if typing { return event }
+                            if symbol.isEmpty { NSSound.beep() } else { broker.closePosition(symbol) }
                         case "z":
                             if typing { return event }
                             broker.cancelLastOrder()
@@ -114,7 +117,7 @@ extension KeyShortcut {
                 return shift ? "⌘⇧↩ sends the selected hotkey" : "⌘↩ keeps the selected chart's tick-by-tick on or off"
             }
             if k == "a" { return "⌘A cancels the symbol's orders" }
-            if keyCode == 51 { return "⌘⌫ cancels the symbol's orders" }
+            if keyCode == 51 { return "⌘⌫ closes the position" }
             if k == "z" { return "⌘Z cancels the last order" }
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }

@@ -210,6 +210,12 @@ final class Broker {
         order { $0.cancelOrders(for: symbol) }
     }
 
+    /// ⌘⌫: cancels every order in `symbol`, stop loss and take profit included, then closes the whole
+    /// position at market.
+    func closePosition(_ symbol: String) {
+        order { $0.closePosition(symbol) }
+    }
+
     func cancelAllOrders() {
         order { $0.cancelAllOrders() }
     }

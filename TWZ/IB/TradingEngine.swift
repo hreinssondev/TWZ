@@ -147,6 +147,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var cancelsSent: Set<Int> = []
     /// Stop losses to place again once the take profit blocking them is cancelled, by its order id.
     private var stopsAwaitingCancel: [Int: (symbol: String, price: Double)] = [:]
+    /// ⌘⌫ closes waiting for their symbol's orders to cancel: each order id with what it had filled
+    /// when the cancel went out (see `closePosition`).
+    private var closesAwaitingCancel: [String: [Int: Double]] = [:]
     /// Margin previews (what-if orders) waiting for IB's answer, by order id.
     private var marginPreviews: [Int: (Result<MarginPreview, PreviewFailure>) -> Void] = [:]
     /// Every what-if order id sent, so IB's messages about them never show up as orders.
@@ -390,6 +393,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         tickLimit = nil
         tickLimitedSymbols.removeAll()
         stopsAwaitingCancel.removeAll()
+        closesAwaitingCancel.removeAll()
         marginPreviews.removeAll()
         positionsLoaded = false
         openOrdersLoaded = false
@@ -1124,6 +1128,60 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         send(58, 1)                                                       // reqGlobalCancel
         logLatency("Cancel all")
         log("CANCEL ALL (global cancel)")
+    }
+
+    /// ⌘⌫: what closes the position (Market, priced by session as `orderPrice` does).
+    private static let closeAllMarket = Hotkey(label: "⌘⌫ Close 100% MKT", action: .closeAll, orderType: .market)
+
+    /// ⌘⌫: cancels every working order in `symbol`, stop loss and take profit included, then closes
+    /// the whole position at market, so IB doesn't refuse the close over orders already working
+    /// against the position. The close goes once IB confirms the cancels (2 s at most), and not at
+    /// all if one of those orders filled meanwhile: the position may already be closed.
+    func closePosition(_ rawSymbol: String) {
+        let symbol = rawSymbol.uppercased()
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        guard let p = positions[symbol], p.quantity != 0 else {
+            lastMessage = "No position in \(symbol)"
+            return
+        }
+        stopsAwaitingCancel = stopsAwaitingCancel.filter { $0.value.symbol != symbol }
+        let working = orders.values.filter { $0.isActive && $0.symbol == symbol }
+        for o in working { cancelOrder(o.id, why: "⌘⌫ closing the position") }
+        // Orders entered in TWS can't be cancelled from here, so there's no confirming those.
+        let awaited = working.filter { $0.id > 0 }
+        guard !awaited.isEmpty else { return close(p, fraction: 1, hotkey: Self.closeAllMarket) }
+        closesAwaitingCancel[symbol] = Dictionary(uniqueKeysWithValues: awaited.map { ($0.id, $0.filled) })
+        lastMessage = "\(symbol): cancelling \(working.count) order\(working.count == 1 ? "" : "s"), then closing"
+        let current = session
+        queue.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self, self.session == current, self.closesAwaitingCancel[symbol] != nil else { return }
+            self.log("CLOSE \(symbol): not every cancel confirmed after 2 s; closing anyway")
+            self.finishClose(symbol)
+        }
+    }
+
+    /// Order `id` is done: sends the ⌘⌫ close waiting on it once none of the orders it waits on is working.
+    private func closeIfCancelled(after id: Int, symbol: String) {
+        guard let awaited = closesAwaitingCancel[symbol], awaited[id] != nil,
+              awaited.keys.allSatisfy({ orders[$0]?.isActive != true }) else { return }
+        finishClose(symbol)
+    }
+
+    /// Sends a ⌘⌫ close once its symbol's orders are cancelled (see `closePosition`).
+    private func finishClose(_ symbol: String) {
+        guard let awaited = closesAwaitingCancel.removeValue(forKey: symbol) else { return }
+        if awaited.contains(where: { (orders[$0.key]?.filled ?? 0) > $0.value }) {
+            lastMessage = "\(symbol): an order filled while cancelling, so the close wasn't sent — check the position"
+            return
+        }
+        guard let p = positions[symbol], p.quantity != 0 else {
+            lastMessage = "No position in \(symbol)"
+            return
+        }
+        close(p, fraction: 1, hotkey: Self.closeAllMarket)
     }
 
     // MARK: - Hotkeys
@@ -1940,6 +1998,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if !o.isActive, let stop = stopsAwaitingCancel.removeValue(forKey: id) {
             placeProtective(.stopLoss, symbol: stop.symbol, price: stop.price, why: "placed again after its take profit was cancelled")
         }
+        if !o.isActive { closeIfCancelled(after: id, symbol: o.symbol) }
     }
 
     private func openOrder(_ f: [String]) {
@@ -2083,6 +2142,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "Order \(o.symbol) #\(reqId): \(text)"
             log("ERROR #\(reqId) [\(code)] \(text) → \(describe(o))")
             if o.status == "Rejected" { protectiveRejected(reqId, text) }
+            if !o.isActive { closeIfCancelled(after: reqId, symbol: o.symbol) }
             return
         }
         lastMessage = "[\(code)] \(text)"
