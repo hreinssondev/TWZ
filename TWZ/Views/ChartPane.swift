@@ -6,10 +6,10 @@
 import SwiftUI
 
 extension Broker {
-    /// A chart header's tint: green while long the stock, red while short, none while flat.
-    func positionTint(_ symbol: String) -> Color {
+    /// A chart header's tint: the up color while long the stock, the down color while short, none while flat.
+    func positionTint(_ symbol: String, colors: SideColors) -> Color {
         guard let quantity = positions[symbol]?.quantity, quantity != 0 else { return .clear }
-        return (quantity > 0 ? Color.green : Color.red).opacity(0.3)
+        return colors.of(quantity > 0).opacity(0.3)
     }
 }
 
@@ -118,6 +118,7 @@ extension Workspace {
 struct ChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
+    @Environment(\.sideColors) private var sideColors
     let chart: ChartModel
 
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
@@ -189,13 +190,13 @@ struct ChartPane: View {
                     Text("\(orders > 0 ? "\(orders) " : "")\(p.quantity > 0 ? "LONG" : "SHORT") \(valueNOK.map { Fmt.nok($0, groupedFrom: 0) } ?? Fmt.shares(abs(p.quantity)))")
                     if let pnl {
                         Text(broker.usdNok.map { Fmt.nok(pnl * $0, signed: true, groupedFrom: 0) } ?? Fmt.amount(pnl, signed: true))
-                            .foregroundStyle(pnl >= 0 ? .green : .red)
+                            .foregroundStyle(sideColors.of(pnl >= 0))
                     }
                 }
                 .help("\(orders > 0 ? "\(orders) order\(orders == 1 ? "" : "s") opened or added to it, " : "")\(Fmt.shares(abs(p.quantity))) shares")
                 .font(.system(size: 10, weight: .semibold).monospacedDigit())
                 .padding(.horizontal, 5).padding(.vertical, 1)
-                .background(Capsule().fill((p.quantity > 0 ? Color.green : Color.red).opacity(0.25)))
+                .background(Capsule().fill(sideColors.of(p.quantity > 0).opacity(0.25)))
             }
 
             // Tick-by-tick: a fast chart (⌘↩, filled ⚡) streams its trades; the selected chart its
@@ -261,7 +262,7 @@ struct ChartPane: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
-        .background(broker.positionTint(chart.symbol))
+        .background(broker.positionTint(chart.symbol, colors: sideColors))
     }
 
     private var timeframeMenu: some View {
@@ -287,6 +288,7 @@ struct ChartPane: View {
 struct TradingChart: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
+    @Environment(\.sideColors) private var sideColors
     let chart: ChartModel
     /// ⌥-click orders; also switched off in the top bar.
     let allowsAltClick: Bool
@@ -338,8 +340,8 @@ struct TradingChart: View {
                 onTrade()
                 broker.placeDollars(dollarClickAmount, action: "SELL", symbol: chart.symbol, at: price)
             } : nil,
-            altClickTint: dollarClicks ? .green : .white,
-            commandClickTint: .red,
+            altClickTint: dollarClicks ? sideColors.up : .white,
+            commandClickTint: sideColors.down,
             tintsHoverLine: dollarClicks,
             onControlClick: { price in
                 guard !chart.symbol.isEmpty else { return }
@@ -492,10 +494,10 @@ struct TradingChart: View {
             // Shown from the Round trips tab: small dots, green at the average entry (unknown for shares
             // held from before today), red at the average exit.
             if trip.carried == 0, let entry = trip.entryPrice {
-                lines.append(PriceLine(price: entry, color: .green, label: "Entry", dotted: true))
+                lines.append(PriceLine(price: entry, color: sideColors.up, label: "Entry", dotted: true))
             }
             if let exit = trip.exitPrice {
-                lines.append(PriceLine(price: exit, color: .red, label: "Exit", dotted: true))
+                lines.append(PriceLine(price: exit, color: sideColors.down, label: "Exit", dotted: true))
             }
         } else if let fill = shownOrderFills.first {
             // Shown from the Orders list: small dots at the order's average fill price, green for a buy,
@@ -504,17 +506,17 @@ struct TradingChart: View {
             if shares > 0 {
                 let price = shownOrderFills.reduce(0) { $0 + $1.price * $1.shares } / shares
                 let isBuy = fill.side == "BOT"
-                lines.append(PriceLine(price: price, color: isBuy ? .green : .red, label: isBuy ? "Buy" : "Sell", dotted: true))
+                lines.append(PriceLine(price: price, color: sideColors.of(isBuy), label: isBuy ? "Buy" : "Sell", dotted: true))
             }
         } else if let trip = closedTrip, showLastTradeLines || flashingExitTrip == trip.id {
             // Just exited: red small dots at the average exit, from the latest candle to the axis as order
             // lines are, and green at the average entry (unknown for shares held from before today).
             // With Settings' last trade lines off, only the exit line, for its first 7 s.
             if let exit = trip.exitPrice {
-                lines.append(PriceLine(price: exit, color: .red, label: "", drawnLikeOrder: true))
+                lines.append(PriceLine(price: exit, color: sideColors.down, label: "", drawnLikeOrder: true))
             }
             if showLastTradeLines, trip.carried == 0, let entry = trip.entryPrice {
-                lines.append(PriceLine(price: entry, color: .green, label: "Avg", dashed: lastTradeDashed))
+                lines.append(PriceLine(price: entry, color: sideColors.up, label: "Avg", dashed: lastTradeDashed))
             }
         }
         if let p = broker.positions[chart.symbol] {

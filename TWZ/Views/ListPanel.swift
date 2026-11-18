@@ -16,6 +16,7 @@ import SwiftUI
 struct ListPanel: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
+    @Environment(\.sideColors) private var sideColors
 
     let panelId: String
     @AppStorage private var scanner: ScannerKind
@@ -224,9 +225,9 @@ struct ListPanel: View {
         return q?.changePercent
     }
 
-    private static func changeColor(_ change: Double?) -> Color {
+    private func changeColor(_ change: Double?) -> Color {
         guard let change else { return .secondary }
-        return change >= 0 ? .green : .red
+        return sideColors.of(change >= 0)
     }
 
     private func row(_ symbol: String, traded: Bool) -> some View {
@@ -246,10 +247,10 @@ struct ListPanel: View {
             .frame(minWidth: Self.minSymbolWidth, maxWidth: .infinity, alignment: .leading)
             Text(Fmt.price(values?.last)).frame(width: lastWidth, alignment: .trailing)
             Text(Fmt.percent(change))
-                .foregroundStyle(Self.changeColor(change))
+                .foregroundStyle(changeColor(change))
                 .frame(width: changeWidth, alignment: .trailing)
             Text(Fmt.percent(values?.recent))
-                .foregroundStyle(Self.changeColor(values?.recent))
+                .foregroundStyle(changeColor(values?.recent))
                 .opacity(values?.recentIsPartial == true ? 0.5 : 1)
                 .frame(width: recentWidth, alignment: .trailing)
         }

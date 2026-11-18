@@ -37,13 +37,48 @@ enum CandleTheme: String, CaseIterable, Identifiable {
     }
 }
 
+/// Buy / sell, long / short and gain / loss colors outside the candles: the candles' up and down colors
+/// while Settings' "Use the candle colors across the app" is on (the default), else plain green and red.
+struct SideColors: Equatable {
+    static let matchKey = "sideColorsMatchCandles"
+
+    var up: Color = .green
+    var down: Color = .red
+
+    func of(_ isUp: Bool) -> Color { isUp ? up : down }
+}
+
+private struct SideColorsKey: EnvironmentKey {
+    static let defaultValue = SideColors()
+}
+
+extension EnvironmentValues {
+    var sideColors: SideColors {
+        get { self[SideColorsKey.self] }
+        set { self[SideColorsKey.self] = newValue }
+    }
+}
+
+/// Gives a window's views the side colors Settings picks.
+struct SideColorsFromSettings: ViewModifier {
+    @AppStorage(SideColors.matchKey) private var matchCandles = true
+    @AppStorage(CandleTheme.storageKey) private var theme: CandleTheme = .teal
+    @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
+    @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
+
+    func body(content: Content) -> some View {
+        let candles = theme.colors(customUp: customUp, customDown: customDown)
+        content.environment(\.sideColors, matchCandles ? SideColors(up: candles.up, down: candles.down) : SideColors())
+    }
+}
+
 /// Every stored Appearance setting. Add new keys here so Settings' "Reset to Defaults" covers them.
 enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
-        LineColors.showLastTradeLinesKey, LineColors.showGridKey, VolumeBars.opacityKey,
+        LineColors.showLastTradeLinesKey, LineColors.showGridKey, VolumeBars.opacityKey, SideColors.matchKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,

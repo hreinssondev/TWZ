@@ -256,6 +256,7 @@ struct SecondaryChartsView: View {
 /// ⌃-click, the what-if, its lines and hover P/L work as on the main charts; ⌥-click orders are left off.
 struct SecondaryChartPane: View {
     @Environment(Broker.self) private var broker
+    @Environment(\.sideColors) private var sideColors
     @Environment(Workspace.self) private var workspace
     let chart: ChartModel
 
@@ -299,6 +300,6 @@ struct SecondaryChartPane: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
-        .background(broker.positionTint(chart.symbol))
+        .background(broker.positionTint(chart.symbol, colors: sideColors))
     }
 }

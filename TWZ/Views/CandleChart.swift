@@ -61,6 +61,7 @@ enum RightSpace {
 
 struct CandleChart: View {
     @Environment(Broker.self) private var broker
+    @Environment(\.sideColors) private var sideColors
     let chart: ChartModel
     var lines: [PriceLine] = []
     /// ⌥-click in the price area: called with the price under the cursor.
@@ -521,7 +522,7 @@ struct CandleChart: View {
                      tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))",
                      tagInside: covered || isOrder(line), chartTag: line.chartText,
                      lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress,
-                     progressColor: line.fillIsBuy ? .green : .red)
+                     progressColor: sideColors.of(line.fillIsBuy))
         }
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)
@@ -634,7 +635,7 @@ struct CandleChart: View {
             arrow.addLine(to: CGPoint(x: tip.x - halfWidth, y: tip.y + dir * head))
             arrow.closeSubpath()
             ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
-            ctx.fill(arrow, with: .color(m.isBuy ? .green : .red))
+            ctx.fill(arrow, with: .color(sideColors.of(m.isBuy)))
         }
     }
 
@@ -738,7 +739,7 @@ struct CandleChart: View {
             .font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
         let width = resolved.measure(in: CGSize(width: 300, height: 40)).width + 8
         let rect = CGRect(x: plot.maxX - width - 2, y: y - tagHeight / 2, width: width, height: tagHeight)
-        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(pnl >= 0 ? .green : .red))
+        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(sideColors.of(pnl >= 0)))
         ctx.draw(resolved, at: CGPoint(x: rect.midX, y: y))
     }
 

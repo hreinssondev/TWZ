@@ -359,6 +359,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
     @AppStorage(LineColors.showGridKey) private var showGrid = false
     @AppStorage(VolumeBars.opacityKey) private var volumeOpacity = VolumeBars.defaultOpacity
+    @AppStorage(SideColors.matchKey) private var matchCandles = true
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top
@@ -400,6 +401,12 @@ private struct AppearanceSettings: View {
                     ColorWell(title: "Down candles", key: CandleTheme.customDownKey,
                               color: Color(hex: customDown) ?? Color(hex: CandleTheme.defaultDownHex)!)
                 }
+                Toggle("Use the candle colors across the app", isOn: $matchCandles)
+                Text(matchCandles
+                     ? "Lists, Orders / Positions / Round trips, P/L, the position badge and tint, fill bars, trade arrows and buy / sell lines take the up and down candle colors."
+                     : "Off: those stay plain green and red.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Chart lines") {
                 lineColorRow("Last price", key: LineColors.lastPriceKey, hex: $lastPriceHex,

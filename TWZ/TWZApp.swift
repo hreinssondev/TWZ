@@ -22,6 +22,7 @@ struct TWZApp: App {
                 .modifier(TradingShortcuts())
                 .modifier(ClickToUnfocus())
                 .modifier(ChartsWindowShortcut())
+                .modifier(SideColorsFromSettings())
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)
@@ -48,6 +49,7 @@ struct TWZApp: App {
 
         Window(SecondaryCharts.windowTitle, id: SecondaryCharts.windowID) {
             SecondaryChartsView()
+                .modifier(SideColorsFromSettings())
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)

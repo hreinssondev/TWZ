@@ -28,6 +28,7 @@ import SwiftUI
 struct OrdersPanel: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
+    @Environment(\.sideColors) private var sideColors
     /// Width of the Orders column as a share of the panel; Positions takes the rest.
     @AppStorage("ordersWidth") private var ordersShare: Double = 1 / 2
     /// Positions on top of Orders instead of side by side.
@@ -325,7 +326,7 @@ struct OrdersPanel: View {
     /// Filled share of the order, growing to the right; a scaled shape, so updates cost no layout.
     private func fillBar(_ o: OrderRow) -> some View {
         let fraction = o.quantity > 0 ? min(1, max(0, o.filled / o.quantity)) : 0
-        let color = o.action == "BUY" ? Color.green : Color.red
+        let color = sideColors.of(o.action == "BUY")
         return Rectangle()
             .fill(color.opacity(0.7))
             .scaleEffect(x: fraction, y: 1, anchor: .leading)
@@ -398,7 +399,7 @@ struct OrdersPanel: View {
                     // In NOK at the current rate, like the chart's position badge (dollars without a rate).
                     Text(pnl.map { usd in broker.usdNok.map { Fmt.nok(usd * $0, signed: true, groupedFrom: Self.groupedFrom) }
                                        ?? Fmt.amount(usd, signed: true) } ?? "—")
-                        .foregroundStyle((pnl ?? 0) >= 0 ? .green : .red)
+                        .foregroundStyle(sideColors.of((pnl ?? 0) >= 0))
                 }
                 HStack(spacing: 4) {
                     if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(p.quantity > 0)) }
@@ -563,12 +564,12 @@ struct OrdersPanel: View {
     /// Whole kroner, or dollars and cents.
     private func pnlText(_ pnl: Double, inNOK: Bool) -> Text {
         Text(inNOK ? Fmt.nok(pnl, signed: true, groupedFrom: Self.groupedFrom) : Fmt.amount(pnl, signed: true))
-            .foregroundStyle(pnl >= 0 ? .green : .red)
+            .foregroundStyle(sideColors.of(pnl >= 0))
     }
 
     /// Text color for a buy / long (green) or sell / short (red).
     private func sideColor(_ isBuy: Bool) -> Color {
-        isBuy ? .green : .red
+        sideColors.of(isBuy)
     }
 
     /// A symbol that loads into the selected chart on click; with `onDoubleClick`, a double-click is
