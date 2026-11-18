@@ -89,9 +89,6 @@ struct CandleChart: View {
     var onDoubleClick: (() -> Void)?
     /// Fills drawn as arrows even with Trades off (a round trip shown from the Round trips tab).
     var shownFillIds: Set<String> = []
-    /// A just-closed round trip's exit fills: drawn as arrows either way, in `exitColor`.
-    var exitFillIds: Set<String> = []
-    var exitColor: Color = .red
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
 
@@ -508,7 +505,7 @@ struct CandleChart: View {
         plotCtx.fill(downBodies, with: .color(down))
 
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
-        if showTrades || !shownFillIds.isEmpty || !exitFillIds.isEmpty { drawTrades(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y) }
+        if showTrades || !shownFillIds.isEmpty { drawTrades(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y) }
 
         // Position / order lines; orders and the ones that move aside for the last price (avg cost) go
         // on top of it.
@@ -601,30 +598,25 @@ struct CandleChart: View {
         var bar: Int
         var isBuy: Bool
         var price: Double
-        /// A closed trade's exit, in `exitColor`.
-        var isExit = false
     }
 
     /// The day's fills in this chart's symbol, on the visible bars.
     private func drawTrades(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int,
                             x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
-        let fills = broker.fills.values.filter {
-            $0.symbol == chart.symbol && (showTrades || shownFillIds.contains($0.id) || exitFillIds.contains($0.id))
-        }
+        let fills = broker.fills.values.filter { $0.symbol == chart.symbol && (showTrades || shownFillIds.contains($0.id)) }
         guard !fills.isEmpty else { return }
-        var groups: [String: (bar: Int, isBuy: Bool, isExit: Bool, shares: Double, cost: Double)] = [:]
+        var groups: [String: (bar: Int, isBuy: Bool, shares: Double, cost: Double)] = [:]
         for fill in fills {
             guard let bar = Self.barIndex(of: fill.time, in: bars, barSeconds: chart.timeframe.barSeconds),
                   bar >= start, bar < end else { continue }
-            let isExit = exitFillIds.contains(fill.id)
-            let key = "\(fill.orderId)|\(fill.side)|\(bar)|\(isExit)"
-            var group = groups[key] ?? (bar, fill.side == "BOT", isExit, 0, 0)
+            let key = "\(fill.orderId)|\(fill.side)|\(bar)"
+            var group = groups[key] ?? (bar, fill.side == "BOT", 0, 0)
             group.shares += fill.shares
             group.cost += fill.shares * fill.price
             groups[key] = group
         }
         let markers = groups.values.compactMap { g in
-            g.shares > 0 ? TradeMarker(bar: g.bar, isBuy: g.isBuy, price: g.cost / g.shares, isExit: g.isExit) : nil
+            g.shares > 0 ? TradeMarker(bar: g.bar, isBuy: g.isBuy, price: g.cost / g.shares) : nil
         }
 
         let head: CGFloat = 7, halfWidth: CGFloat = 5, stem: CGFloat = 7, stemHalf: CGFloat = 1.25
@@ -641,7 +633,7 @@ struct CandleChart: View {
             arrow.addLine(to: CGPoint(x: tip.x - halfWidth, y: tip.y + dir * head))
             arrow.closeSubpath()
             ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
-            ctx.fill(arrow, with: .color(m.isExit ? exitColor : sideColors.of(m.isBuy)))
+            ctx.fill(arrow, with: .color(sideColors.of(m.isBuy)))
         }
     }
 

@@ -263,7 +263,7 @@ enum LineColors {
     static let stopLossKey = "stopLossLineColor"
     static let takeProfitKey = "takeProfitLineColor"
     static let ordersKey = "orderLineColor"
-    /// The exit line and arrow a chart shows once its symbol's round trip closes; empty means the
+    /// The exit line a chart shows once its symbol's round trip closes; empty means the
     /// side colors' down color.
     static let closedTradeKey = "closedTradeLineColor"
     /// Off hides the last price line itself; its price box on the axis stays.

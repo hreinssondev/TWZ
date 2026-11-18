@@ -398,9 +398,7 @@ struct TradingChart: View {
                 workspace.shownTrips[chart.symbol] = nil
                 workspace.shownOrderFills[chart.symbol] = nil
             },
-            shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? []),
-            exitFillIds: exitFillIds,
-            exitColor: closedTradeColor
+            shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? [])
         )
         // With the last trade lines off, a round trip that just closed (in the last 30 s, so not one
         // from before the chart showed the symbol) shows its exit line for 7 s.
@@ -485,18 +483,12 @@ struct TradingChart: View {
         return trip
     }
 
-    /// The just-closed round trip whose exit line (and arrow) shows: with nothing shown from the Round
+    /// The just-closed round trip whose exit line shows: with nothing shown from the Round
     /// trips tab or the Orders list, and with Settings' last trade lines off only for its first 7 s.
     private var exitingTrip: RoundTrip? {
         guard workspace.shownTrips[chart.symbol] == nil, workspace.shownOrderFills[chart.symbol] == nil,
               let trip = closedTrip, showLastTradeLines || flashingExitTrip == trip.id else { return nil }
         return trip
-    }
-
-    /// The exiting trip's fills on its exit side (sells out of a long, buys back a short).
-    private var exitFillIds: Set<String> {
-        guard let trip = exitingTrip else { return [] }
-        return Set(trip.fillIds.filter { id in broker.fills[id].map { ($0.side == "BOT") != trip.isLong } ?? false })
     }
 
     private var closedTradeColor: Color { LineColors.resolve(closedTradeHex, default: sideColors.down) }
@@ -536,7 +528,7 @@ struct TradingChart: View {
         } else if let trip = exitingTrip {
             // Just exited: the closed trade color (Settings) at the average exit, from the latest candle to
             // the axis as order lines are, and green at the average entry (unknown for shares held from
-            // before today). An arrow in the same color marks the exit on its candle.
+            // before today).
             // With Settings' last trade lines off, only the exit line, for its first 7 s.
             if let exit = trip.exitPrice {
                 lines.append(PriceLine(price: exit, color: closedTradeColor, label: "", dashed: lastTradeDashed,

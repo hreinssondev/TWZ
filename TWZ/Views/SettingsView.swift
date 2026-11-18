@@ -468,7 +468,7 @@ private struct AppearanceSettings: View {
                              dashedKey: LineDashes.lastTradeKey, dashedDefault: LineDashes.defaultLastTrade)
                 Toggle("Show last trade lines after a round trip closes", isOn: $showLastTradeLines)
                 Toggle("Show grid lines (the price and time labels stay)", isOn: $showGrid)
-                Text("Once a round trip closes, its chart shows the exit line and an arrow at the exit in the closed trade color, and the Avg line (same line style). On: they stay until you click the chart or place an order. Off: just the exit line and arrow, for 7 seconds or until a click.")
+                Text("Once a round trip closes, its chart shows the exit line in the closed trade color, and the Avg line (same line style). On: they stay until you click the chart or place an order. Off: just the exit line, for 7 seconds or until a click.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
