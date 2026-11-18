@@ -326,9 +326,6 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         var id: String { rawValue }
     }
 
-    /// ⌘S: close the whole position at market.
-    static let closeAllMarket = Hotkey(label: "Close 100% MKT", action: .closeAll, orderType: .market)
-
     var id = UUID()
     var label: String
     var action: Action

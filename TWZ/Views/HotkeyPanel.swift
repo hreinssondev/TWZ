@@ -74,8 +74,7 @@ struct HotkeyPanel: View {
                             }
                             .help((clickMode == .send ? "Click sends · ⌘⇧↩ sends it again" : "Click to select · ⌘⇧↩ sends it")
                                   + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
-                                  + " · ⌥-click a chart places it at the clicked price while selected"
-                                  + " · ⌘S closes 100% at market")
+                                  + " · ⌥-click a chart places it at the clicked price while selected")
                             .contextMenu {
                                 Button("Edit…") { editing = index }
                             }

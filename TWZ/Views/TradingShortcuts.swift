@@ -10,8 +10,8 @@
 //  a hotkey's own keyboard shortcut sends that hotkey; ⌘⇧↩ sends the selected hotkey; ⌘↩ makes the
 //  selected chart fast or not, so it keeps tick-by-tick trades once deselected (see
 //  `Workspace.fastChartIDs`); ⌘A, like ⌥<,
-//  cancels every order in the symbol, stop loss and take profit included; ⌘S closes 100% of the
-//  position at market; ⌘Z, like ⌥Z, cancels the last order placed.
+//  cancels every order in the symbol, stop loss and take profit included; ⌘Z, like ⌥Z, cancels the
+//  last order placed.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘Z stay Select All / Undo, and shortcuts
 //  without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
@@ -70,7 +70,6 @@ struct TradingShortcuts: ViewModifier {
                         case "a":
                             if typing { return event }
                             if symbol.isEmpty { NSSound.beep() } else { broker.cancelOrders(for: symbol) }
-                        case "s": broker.run(.closeAllMarket, symbol: symbol)
                         case "z":
                             if typing { return event }
                             broker.cancelLastOrder()
@@ -115,7 +114,6 @@ extension KeyShortcut {
                 return shift ? "⌘⇧↩ sends the selected hotkey" : "⌘↩ keeps the selected chart's tick-by-tick on or off"
             }
             if k == "a" { return "⌘A cancels the symbol's orders" }
-            if k == "s" { return "⌘S closes 100% at market" }
             if k == "z" { return "⌘Z cancels the last order" }
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }
