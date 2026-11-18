@@ -21,8 +21,8 @@
 //  fixed size while there's
 //  room (the free space around them changes); dragged shorter, they and the amount box shrink,
 //  and dragged on down the hotkey row collapses, giving the charts the space (drag up to bring it back).
-//  Collapsed, it shows at its smallest over the bottom of the charts while the pointer is at the
-//  window's bottom edge below them, or on the row itself.
+//  Collapsed, it shows at its smallest over the bottom of the charts once the pointer comes near the
+//  window's bottom edge below them, until it moves away well above the row.
 //
 
 import SwiftUI
@@ -51,6 +51,10 @@ struct ContentView: View {
     private static let snapSingleListSide: CGFloat = 386
     private static let minListsHeight: CGFloat = 160
     private static let minOrdersHeight: CGFloat = 80
+    /// How far above the bottom edge the pointer brings the collapsed hotkey row up, and how far above
+    /// the shown row it can go before the row hides again.
+    private static let peekTriggerHeight: CGFloat = 40
+    private static let peekReleaseMargin: CGFloat = 40
 
     var body: some View {
         VStack(spacing: 0) {
@@ -93,7 +97,6 @@ struct ContentView: View {
                                                 .fill(Color(nsColor: .windowBackgroundColor))
                                                 .shadow(color: .black.opacity(0.35), radius: 8))
                                             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.12)))
-                                            .onHover(perform: peekHotkeys)
                                             .opacity(hotkeysPeek ? 1 : 0)
                                             .offset(y: hotkeysPeek ? 0 : 8)
                                             .allowsHitTesting(hotkeysPeek)
@@ -134,10 +137,13 @@ struct ContentView: View {
                     .frame(width: sideWidth)
                 }
                 .padding(gap)
-                // The window's bottom edge below the charts (the row's drag handle and the margin under it).
+                // The bottom of the charts' column, from the window's bottom edge (the row's drag handle and
+                // the margin under it) up a little way; while the row shows, up past it.
                 .overlay(alignment: .bottomLeading) {
                     HoverTracker(onHover: peekHotkeys)
-                        .frame(width: inner.width - sideWidth, height: gap * 2)
+                        .frame(width: inner.width - sideWidth,
+                               height: gap * 2 + (hotkeysPeek && rowHeight <= 0
+                                                  ? minBottom + Self.peekReleaseMargin : Self.peekTriggerHeight))
                 }
             }
         }
@@ -148,9 +154,9 @@ struct ContentView: View {
         .onChange(of: singleList) { _, single in storedSideWidth = Self.snapSideWidth(singleList: single) }
     }
 
-    /// Shows the collapsed hotkey row while the pointer is at the bottom edge or on the row; hides it a
-    /// moment after the pointer leaves both, so moving from one to the other doesn't flicker, and not
-    /// while a popover or sheet (the hotkey customizer or editor) is open over the window.
+    /// Shows the collapsed hotkey row while the pointer is near the bottom edge or around the row; hides
+    /// it a moment after the pointer leaves, and not while a popover or sheet (the hotkey customizer or
+    /// editor) is open over the window.
     private func peekHotkeys(_ hovering: Bool) {
         hotkeysPeekHide?.cancel()
         if hovering {
@@ -198,16 +204,34 @@ private struct HoverTracker: NSViewRepresentable {
 
         required init?(coder: NSCoder) { fatalError() }
 
+        private var isInside = false
+
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+        // One area that follows the view's size: re-created while the pointer is inside, it would
+        // miss the pointer leaving.
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
-            trackingAreas.forEach(removeTrackingArea)
-            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                                           owner: self))
+            if trackingAreas.isEmpty {
+                addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                               owner: self))
+            }
         }
 
-        override func mouseEntered(with event: NSEvent) { onHover(true) }
-        override func mouseExited(with event: NSEvent) { onHover(false) }
+        override func mouseEntered(with event: NSEvent) { setInside(true) }
+        override func mouseExited(with event: NSEvent) { setInside(false) }
+
+        /// Resized (growing while the row shows), it checks where the pointer is itself.
+        override func setFrameSize(_ newSize: NSSize) {
+            super.setFrameSize(newSize)
+            guard let window else { return }
+            setInside(bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil)))
+        }
+
+        private func setInside(_ inside: Bool) {
+            guard inside != isInside else { return }
+            isInside = inside
+            onHover(inside)
+        }
     }
 }
