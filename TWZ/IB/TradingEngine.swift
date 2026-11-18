@@ -1161,25 +1161,38 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 return
             }
             let action = hotkey.action == .buy ? "BUY" : "SELL"
-            guard let price = orderPrice(symbol: symbol, action: action, hotkey: hotkey) else { return }
-            let quantity: Double
+            let isBuy = action == "BUY", why = "hotkey \"\(hotkey.label)\""
+            func send(_ quantity: Double, at price: HotkeyPrice, summary: String? = nil) {
+                guard quantity >= 1 else {
+                    lastMessage = "Size too small for \(symbol)"
+                    return
+                }
+                submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
+                       summary: summary, source: Self.source(hotkey, isBuy: isBuy), why: why)
+            }
             switch hotkey.sizing {
             case .shares:
-                quantity = hotkey.amount.rounded(.down)
+                guard let price = orderPrice(symbol: symbol, action: action, hotkey: hotkey) else { return }
+                send(hotkey.amount.rounded(.down), at: price)
             case .dollars:
+                guard let price = orderPrice(symbol: symbol, action: action, hotkey: hotkey) else { return }
                 // Market orders size off the side of the spread they'll likely fill at.
-                guard let ref = price.limit ?? quote(symbol, .cross, isBuy: action == "BUY")?.price else {
+                guard let ref = price.limit ?? quote(symbol, .cross, isBuy: isBuy)?.price else {
                     lastMessage = "No price for \(symbol) yet"
                     return
                 }
-                quantity = (hotkey.amount / ref).rounded(.down)
+                send((hotkey.amount / ref).rounded(.down), at: price)
+            case .buyingPower:
+                // Sized at the side of the spread it'll likely fill at, priced once IB has answered.
+                guard let ref = quote(symbol, .cross, isBuy: isBuy) else {
+                    lastMessage = "No price for \(symbol) yet"
+                    return
+                }
+                sizeFromBuyingPower(hotkey.amount, symbol: symbol, action: action, at: ref.price, why: why) { [self] shares, note in
+                    guard let price = orderPrice(symbol: symbol, action: action, hotkey: hotkey) else { return }
+                    send(shares, at: price, summary: "\(action) \(Fmt.shares(shares)), \(note)")
+                }
             }
-            guard quantity >= 1 else {
-                lastMessage = "Size too small for \(symbol)"
-                return
-            }
-            submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
-                   source: Self.source(hotkey, isBuy: action == "BUY"), why: "hotkey \"\(hotkey.label)\"")
         }
     }
 
@@ -1284,41 +1297,48 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     }
 
     /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price instead
-    /// of at its quote. Buy / Sell size as the hotkey does (dollars at the clicked price), Close 50% /
-    /// 100% from the position; a limit or stop-limit as for `buyNOK`, on the order's side.
+    /// of at its quote. Buy / Sell size as the hotkey does (dollars and % of buying power at the
+    /// clicked price), Close 50% / 100% from the position; a limit or stop-limit as for `buyNOK`, on
+    /// the order's side.
     func run(_ hotkey: Hotkey, symbol rawSymbol: String, at clickedPrice: Double) {
         let symbol = rawSymbol.uppercased()
         guard chartOrderReady(symbol) else { return }
-        let action: String
-        let quantity: Double
+        func place(_ action: String, _ quantity: Double, note: String? = nil) {
+            guard quantity >= 1 else {
+                lastMessage = "Size too small for \(symbol)"
+                return
+            }
+            let plan = chartOrder(symbol: symbol, action: action, clicked: clickedPrice)
+            guard let label = plan.label(action, shares: quantity) else {
+                if case .unavailable(let reason) = plan { lastMessage = "\(reason), so the order wasn't sent" }
+                return
+            }
+            placeChartOrder(symbol: symbol, action: action, quantity: quantity, plan: plan, tif: hotkey.tif,
+                            outsideRth: hotkey.outsideRth, summary: "\(label) (\(note ?? hotkey.label))")
+        }
         switch hotkey.action {
         case .buy, .sell:
-            action = hotkey.action == .buy ? "BUY" : "SELL"
+            let action = hotkey.action == .buy ? "BUY" : "SELL"
             let price = Self.roundToTick(clickedPrice)
             guard price > 0 else { return }
-            quantity = (hotkey.sizing == .shares ? hotkey.amount : hotkey.amount / price).rounded(.down)
+            switch hotkey.sizing {
+            case .shares: place(action, hotkey.amount.rounded(.down))
+            case .dollars: place(action, (hotkey.amount / price).rounded(.down))
+            case .buyingPower:
+                sizeFromBuyingPower(hotkey.amount, symbol: symbol, action: action, at: price,
+                                    why: "⌥-click \"\(hotkey.label)\"") { shares, note in
+                    place(action, shares, note: note)
+                }
+            }
         case .closeHalf, .closeAll:
             guard let p = positions[symbol], p.quantity != 0 else {
                 lastMessage = "No position in \(symbol)"
                 return
             }
-            action = p.quantity > 0 ? "SELL" : "BUY"
-            quantity = Self.closeQuantity(p, fraction: hotkey.action == .closeHalf ? 0.5 : 1)
+            place(p.quantity > 0 ? "SELL" : "BUY", Self.closeQuantity(p, fraction: hotkey.action == .closeHalf ? 0.5 : 1))
         case .cancelSymbol, .cancelAll, .flattenAll:
             lastMessage = "⌥-click: \"\(hotkey.label)\" doesn't place an order at a price"
-            return
         }
-        guard quantity >= 1 else {
-            lastMessage = "Size too small for \(symbol)"
-            return
-        }
-        let plan = chartOrder(symbol: symbol, action: action, clicked: clickedPrice)
-        guard let label = plan.label(action, shares: quantity) else {
-            if case .unavailable(let reason) = plan { lastMessage = "\(reason), so the order wasn't sent" }
-            return
-        }
-        placeChartOrder(symbol: symbol, action: action, quantity: quantity, plan: plan, tif: hotkey.tif,
-                        outsideRth: hotkey.outsideRth, summary: "\(label) (\(hotkey.label))")
     }
 
     private func chartOrderReady(_ symbol: String) -> Bool {
@@ -1357,7 +1377,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         var maxShares: Double
     }
 
-    /// What IB's margin preview of a buy says.
+    /// What IB's margin preview of an order says.
     struct MarginPreview {
         /// Equity with loan value over the initial margin before the order: the available funds.
         var available: Double
@@ -1371,9 +1391,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         var reason: String
     }
 
-    /// Sizes a ⌃-click what-if buy from IB's margin previews (what-if orders, never placed). One for a
-    /// small order gives the available funds and margin per share; margin per share can rise with
-    /// the position's size, so a second near the largest size allowed refines it. Takes a second or
+    /// Sizes a ⌃-click what-if buy from IB's margin previews (see `marginLimit`). Takes a second or
     /// two; `completion` runs on the engine queue, and not at all if IB can't size it (`lastMessage` says why).
     /// `quiet` (the hover P/L's sizing) leaves `lastMessage` alone.
     func sizeWhatIf(symbol rawSymbol: String, at clickedPrice: Double, fraction: Double, quiet: Bool = false,
@@ -1395,37 +1413,84 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         let price = Self.roundToTick(clickedPrice)
         say("\(symbol) what-if: asking IB for the margin…")
-        previewMargin(symbol, shares: max(1, (1000 / price).rounded(.down)), price: price, why: why) { [self] first in
-            let small: MarginPreview
-            switch first {
-            case .success(let preview): small = preview
+        marginLimit(symbol, action: "BUY", price: price, why: why) { result in
+            let preview: MarginPreview
+            switch result {
+            case .success(let p): preview = p
             case .failure(let failure):
                 say("\(symbol) what-if: \(failure.reason)")
                 return
             }
-            guard small.maxShares >= 1 else {
+            let shares = (preview.maxShares * fraction).rounded(.down)
+            guard shares >= 1 else {
                 say("\(symbol) what-if: no buying power left for a long")
                 return
             }
-            previewMargin(symbol, shares: max(1, (small.maxShares * 0.95).rounded(.down)), price: price, why: why) { [self] second in
+            say("\(symbol) what-if: BUY \(Fmt.shares(shares)) @ \(Fmt.price(price)), "
+                + "\(Int((fraction * 100).rounded()))% of the \(Fmt.shares(preview.maxShares)) IB's margin allows")
+            completion(WhatIfSize(price: price, shares: shares, maxShares: preview.maxShares))
+        }
+    }
+
+    /// Sizes a % of buying power hotkey order: `percent` of the largest new long (BUY) or short
+    /// (SELL) IB's margin allows in `symbol` at `price`. `send` gets the shares and a note saying so
+    /// a second or two later, on the engine queue, and isn't called when it can't be sized
+    /// (`lastMessage` says why). Refused while a position on the other side is open: IB's preview of
+    /// an order that first closes it doesn't give the margin a new position takes.
+    private func sizeFromBuyingPower(_ percent: Double, symbol: String, action: String, at rawPrice: Double,
+                                     why: String, send: @escaping (_ shares: Double, _ note: String) -> Void) {
+        let isBuy = action == "BUY", side = isBuy ? "long" : "short"
+        let pct = percent.formatted(.number.precision(.fractionLength(0...1))) + "%"
+        guard percent > 0, percent <= 100 else {
+            lastMessage = "\(pct) of buying power: use 1–100%"
+            return
+        }
+        if let held = positions[symbol]?.quantity, held != 0, (held > 0) != isBuy {
+            lastMessage = "\(symbol): \(held > 0 ? "long" : "short") \(Fmt.shares(abs(held))) — close it before a \(pct) of buying power \(isBuy ? "buy" : "sell")"
+            return
+        }
+        let price = Self.roundToTick(rawPrice)
+        guard price > 0 else { return }
+        lastMessage = "\(symbol): asking IB for the buying power for a \(side)…"
+        marginLimit(symbol, action: action, price: price, why: "margin preview for \(why)") { [self] result in
+            let preview: MarginPreview
+            switch result {
+            case .success(let p): preview = p
+            case .failure(let failure):
+                lastMessage = "\(symbol) \(pct) of buying power: \(failure.reason), so the order wasn't sent"
+                return
+            }
+            let shares = (preview.maxShares * percent / 100).rounded(.down)
+            guard shares >= 1 else {
+                lastMessage = "\(symbol): no buying power left for a \(side)"
+                return
+            }
+            send(shares, "\(pct) of the \(Fmt.shares(preview.maxShares)) IB's margin allows at \(Fmt.price(price))")
+        }
+    }
+
+    /// The largest new `action` (BUY: long, SELL: short) IB's margin allows in `symbol` at `price`,
+    /// from its margin previews (what-if orders, never placed). One for a small order gives the
+    /// available funds and margin per share; margin per share can rise with the position's size, so
+    /// a second near the largest size allowed refines it. `reply` runs on the engine queue a second
+    /// or two later.
+    private func marginLimit(_ symbol: String, action: String, price: Double, why: String,
+                             _ reply: @escaping (Result<MarginPreview, PreviewFailure>) -> Void) {
+        previewMargin(symbol, action: action, shares: max(1, (1000 / price).rounded(.down)), price: price, why: why) { [self] first in
+            guard case .success(let small) = first, small.maxShares >= 1 else { return reply(first) }
+            previewMargin(symbol, action: action, shares: max(1, (small.maxShares * 0.95).rounded(.down)),
+                          price: price, why: why) { second in
                 // Without the second answer, the small order's margin per share is the best there is.
-                let preview = (try? second.get()) ?? small
-                let shares = (preview.maxShares * fraction).rounded(.down)
-                guard shares >= 1 else {
-                    say("\(symbol) what-if: no buying power left for a long")
-                    return
-                }
-                say("\(symbol) what-if: BUY \(Fmt.shares(shares)) @ \(Fmt.price(price)), "
-                    + "\(Int((fraction * 100).rounded()))% of the \(Fmt.shares(preview.maxShares)) IB's margin allows")
-                completion(WhatIfSize(price: price, shares: shares, maxShares: preview.maxShares))
+                reply(.success((try? second.get()) ?? small))
             }
         }
     }
 
-    /// Asks IB what buying `shares` at `price` would do to the account's margin, without placing the order.
-    private func previewMargin(_ symbol: String, shares: Double, price: Double, why: String,
+    /// Asks IB what `action` (BUY / SELL) of `shares` at `price` would do to the account's margin,
+    /// without placing the order.
+    private func previewMargin(_ symbol: String, action: String, shares: Double, price: Double, why: String,
                                _ reply: @escaping (Result<MarginPreview, PreviewFailure>) -> Void) {
-        guard let id = placeOrder(symbol: symbol, action: "BUY", quantity: shares, limit: price,
+        guard let id = placeOrder(symbol: symbol, action: action, quantity: shares, limit: price,
                                   whatIf: true, why: why) else { return }
         whatIfOrderIds.insert(id)
         marginPreviews[id] = reply
@@ -1476,7 +1541,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         let shares = f.double(14)
         guard shares > 0, initChange - equityChange > 0 else {
-            return .failure(PreviewFailure(reason: "IB's margin preview shows no margin for a buy"))
+            return .failure(PreviewFailure(reason: "IB's margin preview shows no margin for the order"))
         }
         log("WHATIF #\(f.str(1)) init margin \(Fmt.amount(initBefore)) + \(Fmt.amount(initChange)), "
             + "equity with loan \(Fmt.amount(equityBefore)) \(Fmt.amount(equityChange, signed: true))")

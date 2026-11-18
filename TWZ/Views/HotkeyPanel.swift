@@ -116,12 +116,12 @@ private extension Hotkey {
     var tint: Color { (color ?? action.defaultColor).color }
 
     /// One-line label for buttons too short for a subtitle: the price it sends at and the size,
-    /// e.g. "Mid 1000$", "Ask 100" or "MKT 500"; other actions keep their label.
+    /// e.g. "Mid 1000$", "Ask 100", "MKT 500" or "Ask 80% BP"; other actions keep their label.
     var compactLabel: String {
         guard action.needsSize else { return label }
         let price = orderType == .market ? "MKT" : priceReference.label(isBuy: action == .buy)
         let size = amount.formatted(.number.grouping(.never).precision(.fractionLength(0...2)))
-        return "\(price) \(size)\(sizing == .dollars ? "$" : "")"
+        return "\(price) \(size)\(sizing.suffix)"
     }
 
     /// Compact description of what the button sends, e.g. "MKT" or "LMT Mid +0.02 · GTC".
@@ -450,19 +450,36 @@ private struct HotkeyFields: View {
                     ForEach(Hotkey.Sizing.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                TextField(hotkey.sizing == .shares ? "Shares" : "Dollar amount",
-                          value: $hotkey.amount, format: .number)
+                TextField(amountTitle, value: $hotkey.amount, format: .number)
+                if hotkey.sizing == .buyingPower {
+                    Text("Asks IB, before sending, for the most shares its margin allows in the stock at the order's price (a new long for buys, a new short for sells) and sends this percent of it, 1–100. IB answers in a second or two. Refused while holding a position on the other side.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if hotkey.action.placesOrder {
                 orderSection
             }
         }
         .formStyle(.grouped)
+        // A share or dollar amount isn't a percent: switching to % of buying power starts at 80%.
+        .onChange(of: hotkey.sizing) { _, sizing in
+            if sizing == .buyingPower, hotkey.amount > 100 { hotkey.amount = 80 }
+        }
         .onChange(of: labelInputs) { old, new in
             // Keep an automatic label in sync ("Buy 100" → "Buy 1000$"); leave custom labels alone.
             if Hotkey.isAutoLabel(hotkey.label, action: old.action, sizing: old.sizing, amount: old.amount) {
                 hotkey.label = Hotkey.autoLabel(action: new.action, sizing: new.sizing, amount: new.amount)
             }
+        }
+    }
+
+    private var amountTitle: String {
+        switch hotkey.sizing {
+        case .shares: "Shares"
+        case .dollars: "Dollar amount"
+        case .buyingPower: "Percent of buying power"
         }
     }
 

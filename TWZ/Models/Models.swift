@@ -329,7 +329,19 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     enum Sizing: String, Codable, CaseIterable, Identifiable {
         case shares = "Shares"
         case dollars = "Dollars"
+        /// A percent of the most shares IB's margin allows in the stock: a new long for buys, a new
+        /// short for sells (see `TradingEngine.sizeFromBuyingPower`).
+        case buyingPower = "% Buying power"
         var id: String { rawValue }
+
+        /// After the amount in labels: "100", "1000$", "80% BP".
+        var suffix: String {
+            switch self {
+            case .shares: ""
+            case .dollars: "$"
+            case .buyingPower: "% BP"
+            }
+        }
     }
 
     var id = UUID()
@@ -400,12 +412,12 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         try c.encodeIfPresent(shortcut, forKey: .shortcut)
     }
 
-    /// What a hotkey for these settings is called automatically, e.g. "Buy 100" or "Sell 1000$".
+    /// What a hotkey for these settings is called automatically, e.g. "Buy 100", "Sell 1000$" or "Buy 80% BP".
     static func autoLabel(action: Action, sizing: Sizing, amount: Double) -> String {
         switch action {
         case .buy, .sell:
             let n = amount.formatted(.number.grouping(.never).precision(.fractionLength(0...2)))
-            return "\(action.rawValue) \(n)\(sizing == .dollars ? "$" : "")"
+            return "\(action.rawValue) \(n)\(sizing.suffix)"
         case .closeHalf, .closeAll: return action.rawValue
         case .cancelSymbol: return "Cancel Symbol"
         case .cancelAll: return "Cancel All"
