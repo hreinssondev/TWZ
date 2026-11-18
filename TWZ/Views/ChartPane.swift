@@ -442,12 +442,12 @@ struct TradingChart: View {
                                    label: "", dashed: avgCostDashed, movesAsideForLastPrice: true))
         }
         if let whatIf = workspace.whatIfs[chart.symbol] {
-            // ⌃-clicked with no position: a line at the pretend buy's price with, on the axis, what it's
-            // worth in NOK (80% of what IB's margin allows; "W" until the rate is in), just left of the
-            // axis where the last price box would cover it; a click on it removes it.
+            // ⌃-clicked with no position: a line at the pretend buy's price, the price on the axis (just
+            // left of it where the last price box would cover it) and, in the chart beside it, what it's
+            // worth in NOK (80% of what IB's margin allows; "W" until the rate is in); a click on it removes it.
             let valueNOK = broker.usdNok.map { whatIf.shares * whatIf.price * $0 }
-            lines.append(PriceLine(price: whatIf.price, color: Self.whatIfColor, label: "W", orderId: WhatIf.lineId,
-                                   movesAsideForLastPrice: true, axisText: valueNOK.map(OrderAmount.format) ?? "W",
+            lines.append(PriceLine(price: whatIf.price, color: Self.whatIfColor, label: "", orderId: WhatIf.lineId,
+                                   movesAsideForLastPrice: true, chartText: valueNOK.map(OrderAmount.format) ?? "W",
                                    cancelsOnClick: true))
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {
