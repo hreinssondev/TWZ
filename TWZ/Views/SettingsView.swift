@@ -357,7 +357,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.ordersKey) private var ordersHex = ""
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
-    @AppStorage(LineColors.showGridKey) private var showGrid = true
+    @AppStorage(LineColors.showGridKey) private var showGrid = false
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top

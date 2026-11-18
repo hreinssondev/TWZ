@@ -101,7 +101,7 @@ struct CandleChart: View {
     @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
     @AppStorage(LineDashes.lastPriceKey) private var lastPriceDashed = LineDashes.defaultLastPrice
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
-    @AppStorage(LineColors.showGridKey) private var showGrid = true
+    @AppStorage(LineColors.showGridKey) private var showGrid = false
     @AppStorage(LineDashes.hoverKey) private var hoverDashed = LineDashes.defaultHover
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true

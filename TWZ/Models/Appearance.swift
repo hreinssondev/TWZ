@@ -198,7 +198,7 @@ enum LineColors {
     /// Off: of the Exit / Avg lines a chart shows once its symbol's round trip closes, just the exit
     /// line, for 7 s.
     static let showLastTradeLinesKey = "showLastTradeLines"
-    /// Off hides the chart's grid lines (the price and time labels stay).
+    /// On shows the chart's grid lines (off by default; the price and time labels show either way).
     static let showGridKey = "showChartGridLines"
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
