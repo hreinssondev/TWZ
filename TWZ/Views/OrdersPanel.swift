@@ -542,11 +542,11 @@ struct OrdersPanel: View {
     }
 
     /// The commissions and fees IBKR Pro Tiered would have charged, left of what IB charged: whole NOK
-    /// at `usdNok` (dollars and cents without a rate), dimmed like it.
+    /// at `usdNok` (dollars and cents without a rate), a slightly darker gray than it.
     @ViewBuilder private func tieredText(_ usd: Double?, usdNok: Double?) -> some View {
         if let usd {
             Text(usdNok.map { Fmt.nok(usd * $0, groupedFrom: Self.groupedFrom) } ?? Fmt.amount(usd))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.secondary.opacity(0.7))
                 .help("Commissions and fees on IBKR Pro Tiered (estimate)")
         }
     }
