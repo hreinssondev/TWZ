@@ -577,11 +577,16 @@ struct TradingChart: View {
                 }
                 continue
             }
-            // Other orders: the side, no share count, in the box.
+            // Other orders: the side, no share count, in the box. A market order (⌘⌫'s close during
+            // regular hours, say) has no price: "MKT" at the last price, following it until it fills.
             if let lmt = o.limitPrice {
                 lines.append(PriceLine(price: lmt, color: LineColors.resolve(ordersHex, default: LineColors.defaultOrders),
                                        label: side, dashed: ordersDashed, dotted: ordersDashed && ordersDots, orderId: o.id,
                                        fillProgress: o.fillProgress))
+            } else if o.orderType == "MKT" {
+                lines.append(PriceLine(price: o.avgFillPrice, color: LineColors.resolve(ordersHex, default: LineColors.defaultOrders),
+                                       label: "\(side) MKT", dashed: ordersDashed, dotted: ordersDashed && ordersDots,
+                                       orderId: o.id, fillProgress: o.fillProgress, followsLastPrice: true))
             }
             // Stop / trigger price (TRAIL's aux is a distance, not a price).
             if let aux = o.auxPrice, !o.orderType.hasPrefix("TRAIL"), o.orderType != "REL" {

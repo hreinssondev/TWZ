@@ -48,6 +48,9 @@ struct PriceLine {
     var cancelsOnClick = false
     /// How much of the order has filled (0–1): its price box fills with the line's color that far.
     var fillProgress: Double?
+    /// A market order's line: it has no price of its own, so it sits at the last price, moving with
+    /// it until the order fills (`price` is only used before the chart has a price).
+    var followsLastPrice = false
 }
 
 /// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
@@ -349,12 +352,22 @@ struct CandleChart: View {
                         anchor: anchor, anchorX: anchorX, start: start, end: end, lo: lo, hi: hi, rest: rest)
     }
 
+    /// `lines`, those following the last price moved to it.
+    private var placedLines: [PriceLine] {
+        guard lines.contains(where: \.followsLastPrice), let last = lastPrice ?? chart.bars.last?.close else { return lines }
+        return lines.map { line in
+            var line = line
+            if line.followsLastPrice { line.price = last }
+            return line
+        }
+    }
+
     /// The order line closest to `point` vertically, if one is within a few points of it; for a
     /// `singleClick`, only if that closest line cancels on a single click.
     private func orderLine(near point: CGPoint, size: CGSize, singleClick: Bool = false) -> Int? {
         guard onCancelOrder != nil, let v = viewport(size: size),
               point.y >= v.plot.minY, point.y <= v.plot.maxY else { return nil }
-        let closest = lines
+        let closest = placedLines
             .compactMap { line in
                 line.orderId.flatMap { id in
                     line.price > v.lo && line.price < v.hi ? (id, abs(v.y(line.price) - point.y), line.cancelsOnClick) : nil
@@ -521,7 +534,7 @@ struct CandleChart: View {
                      tagInside: covered || isOrder(line), chartTag: line.chartText,
                      lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress)
         }
-        let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
+        let visibleLines = placedLines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)
 
         // Last price: color, dashes and whether the line shows (the box always does) from Settings.
