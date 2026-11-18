@@ -163,7 +163,12 @@ final class Workspace {
 
         if let data = defaults.data(forKey: "hotkeys"),
            let keys = try? JSONDecoder().decode([Hotkey].self, from: data) {
-            hotkeys = keys
+            // A shortcut recorded before the app took it for itself (⌘⌫) is dropped: the hotkey's unassigned.
+            hotkeys = keys.map { key in
+                var key = key
+                if key.shortcut?.reservedFor != nil { key.shortcut = nil }
+                return key
+            }
         } else {
             hotkeys = Hotkey.defaults
         }

@@ -14,8 +14,7 @@
 //  last order placed.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
-//  The app's own shortcuts (`KeyShortcut.reservedFor`) win over a hotkey given the same one before
-//  it was reserved. Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
+//  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
 //
 
@@ -35,9 +34,8 @@ struct TradingShortcuts: ViewModifier {
                     if ShortcutRecorder.isRecording { return event }
                     let modifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
                     let inMainWindow = event.window.map { $0 === NSApp.mainWindow && $0.attachedSheet == nil } ?? false
-                    let shortcut = KeyShortcut(event)
-                    if inMainWindow, shortcut.reservedFor == nil,
-                       let hotkey = workspace.hotkeys.first(where: { $0.shortcut == shortcut }) {
+                    if inMainWindow, let hotkey = workspace.hotkeys.first(where: { $0.shortcut == KeyShortcut(event) }) {
+                        let shortcut = KeyShortcut(event)
                         let typing = event.window?.firstResponder is NSTextView
                         if typing, !shortcut.command, !shortcut.option, !shortcut.control, !shortcut.isFunctionKey {
                             return event
