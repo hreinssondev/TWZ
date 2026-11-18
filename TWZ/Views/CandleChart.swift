@@ -479,12 +479,14 @@ struct CandleChart: View {
         // on top of it.
         let last = (lastPrice ?? bars.last?.close).flatMap { $0 > lo && $0 < hi ? $0 : nil }
         func isOrder(_ line: PriceLine) -> Bool { line.orderId != nil && !line.movesAsideForLastPrice }
+        // Order lines run from the latest candle to the axis, not across the whole chart.
+        let orderLineStart = min(max(x(bars.count - 1), plot.minX), plot.maxX)
         func draw(_ line: PriceLine) {
             let lineY = y(line.price)
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed,
                      tag: line.axisText ?? (line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))"),
-                     tagInside: covered || isOrder(line))
+                     tagInside: covered || isOrder(line), lineStart: isOrder(line) ? orderLineStart : nil)
         }
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)
@@ -645,10 +647,10 @@ struct CandleChart: View {
     }
 
     private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, tag: String,
-                          tagOpacity: Double = 1, tagInside: Bool = false, showsLine: Bool = true) {
+                          tagOpacity: Double = 1, tagInside: Bool = false, showsLine: Bool = true, lineStart: CGFloat? = nil) {
         if showsLine {
             var path = Path()
-            path.move(to: CGPoint(x: plot.minX, y: y))
+            path.move(to: CGPoint(x: lineStart ?? plot.minX, y: y))
             path.addLine(to: CGPoint(x: plot.maxX, y: y))
             ctx.stroke(path, with: .color(color.opacity(0.8)), style: StrokeStyle(lineWidth: 1, dash: dashed ? [4, 3] : []))
         }
