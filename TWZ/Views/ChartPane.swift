@@ -542,7 +542,7 @@ struct TradingChart: View {
                 if let price = isStop ? o.auxPrice : o.limitPrice {
                     lines.append(PriceLine(price: price, color: protectiveColor(p.kind),
                                            label: "", dashed: isStop ? stopLossDashed : takeProfitDashed, orderId: o.id,
-                                           cancelsOnClick: true, fillProgress: o.fillProgress, fillIsBuy: o.action == "BUY"))
+                                           cancelsOnClick: true, fillProgress: o.fillProgress))
                 }
                 continue
             }
@@ -551,19 +551,19 @@ struct TradingChart: View {
                 // price in its box.
                 if let price = o.auxPrice ?? o.limitPrice {
                     lines.append(PriceLine(price: price, color: LineColors.resolve(altClickHex, default: LineColors.defaultAltClick),
-                                           label: "", dashed: altClickDashed, orderId: o.id, fillProgress: o.fillProgress, fillIsBuy: o.action == "BUY"))
+                                           label: "", dashed: altClickDashed, orderId: o.id, fillProgress: o.fillProgress))
                 }
                 continue
             }
             // Other orders: the side, no share count, in the box.
             if let lmt = o.limitPrice {
                 lines.append(PriceLine(price: lmt, color: LineColors.resolve(ordersHex, default: LineColors.defaultOrders),
-                                       label: side, dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress, fillIsBuy: o.action == "BUY"))
+                                       label: side, dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress))
             }
             // Stop / trigger price (TRAIL's aux is a distance, not a price).
             if let aux = o.auxPrice, !o.orderType.hasPrefix("TRAIL"), o.orderType != "REL" {
                 lines.append(PriceLine(price: aux, color: .purple, label: "\(o.orderType) \(side)",
-                                       dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress, fillIsBuy: o.action == "BUY"))
+                                       dashed: ordersDashed, orderId: o.id, fillProgress: o.fillProgress))
             }
         }
         return lines

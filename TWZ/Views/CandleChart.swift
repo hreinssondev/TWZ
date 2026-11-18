@@ -46,10 +46,8 @@ struct PriceLine {
     var chartText: String?
     /// A single click on the line cancels it too (the ⌃-click lines: stop loss, take profit, what-if).
     var cancelsOnClick = false
-    /// How much of the order has filled (0–1): a thin bar just above its price box, green for a buy,
-    /// red for a sell.
+    /// How much of the order has filled (0–1): its price box fills with the line's color that far.
     var fillProgress: Double?
-    var fillIsBuy = true
 }
 
 /// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
@@ -521,8 +519,7 @@ struct CandleChart: View {
                      dotted: line.dotted || (isOrder(line) && line.dashed),
                      tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))",
                      tagInside: covered || isOrder(line), chartTag: line.chartText,
-                     lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress,
-                     progressColor: sideColors.of(line.fillIsBuy))
+                     lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress)
         }
         let visibleLines = lines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)
@@ -688,7 +685,7 @@ struct CandleChart: View {
     /// `chartTag` is a second box in the chart, just left of the axis or of the tag when it's inside.
     private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, dotted: Bool = false, tag: String,
                           tagOpacity: Double = 1, tagInside: Bool = false, chartTag: String? = nil, showsLine: Bool = true,
-                          lineStart: CGFloat? = nil, progress: Double? = nil, progressColor: Color? = nil) {
+                          lineStart: CGFloat? = nil, progress: Double? = nil) {
         if showsLine {
             var path = Path()
             path.move(to: CGPoint(x: lineStart ?? plot.minX, y: y))
@@ -696,8 +693,7 @@ struct CandleChart: View {
             ctx.stroke(path, with: .color(color.opacity(0.8)),
                        style: StrokeStyle(lineWidth: 1, dash: dotted ? [1, 2] : dashed ? [4, 3] : []))
         }
-        let box = drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside, progress: progress,
-                          progressColor: progressColor)
+        let box = drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside, progress: progress)
         if let chartTag {
             drawTag(in: &ctx, text: chartTag, y: y, plot: plot, color: color, inside: true, insideRight: tagInside ? box.minX - 2 : nil)
         }
@@ -706,13 +702,11 @@ struct CandleChart: View {
     /// `opacity` fades only the box, not its text; at the opacity slider's minimum there's no box.
     /// The text is white, or black on a light box (white ⌥-click lines, say).
     /// `inside` puts the box in the chart, just left of the price axis (or of `insideRight`), instead of on it.
-    /// `progress` (0–1, an order's fill) draws a thin bar as wide as the box just above it, filled that
-    /// far, in `progressColor` (the box's color without one); the box itself starts black, outlined in
-    /// its color, and fills with it from the left as far, its text white on the black part.
+    /// `progress` (0–1, an order's fill): the box starts black, outlined in its color, and fills with it
+    /// from the left that far, its text white on the black part.
     @discardableResult
     private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
-                         opacity: Double = 1, inside: Bool = false, insideRight: CGFloat? = nil, progress: Double? = nil,
-                         progressColor: Color? = nil) -> CGRect {
+                         opacity: Double = 1, inside: Bool = false, insideRight: CGFloat? = nil, progress: Double? = nil) -> CGRect {
         let boxed = !PriceAxis.hidesLastPriceBox(opacity)
         let textColor: Color = boxed && opacity >= 0.5 && color.isLight ? .black : .white
         let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(textColor))
@@ -739,13 +733,6 @@ struct CandleChart: View {
         } else {
             if boxed { ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color.opacity(opacity))) }
             ctx.draw(resolved, at: textAt, anchor: .leading)
-        }
-        if let progress {
-            let track = CGRect(x: rect.minX, y: rect.minY - 4, width: rect.width, height: 3)
-            let barColor = progressColor ?? color
-            ctx.fill(Path(roundedRect: track, cornerRadius: 1.5), with: .color(barColor.opacity(0.3)))
-            let filled = CGRect(x: track.minX, y: track.minY, width: track.width * min(1, max(0, progress)), height: track.height)
-            ctx.fill(Path(roundedRect: filled, cornerRadius: 1.5), with: .color(barColor))
         }
         return rect
     }
