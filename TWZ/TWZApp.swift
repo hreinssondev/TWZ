@@ -38,6 +38,13 @@ struct TWZApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowBackgroundDragBehavior(.enabled)
         .defaultSize(width: 1600, height: 1000)
+        .commands {
+            // The app menu's Settings item, on ⌘I; it opens the sheet the account bar's gear opens.
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { workspace.showsSettings = true }
+                    .keyboardShortcut("i")
+            }
+        }
 
         Window(SecondaryCharts.windowTitle, id: SecondaryCharts.windowID) {
             SecondaryChartsView()
