@@ -268,7 +268,6 @@ struct OrdersPanel: View {
                 // Shares still to fill; the bar below shows how much has filled.
                 Text(Fmt.shares(o.quantity - o.filled, groupedFrom: Self.groupedFrom))
                 Spacer(minLength: 0)
-                tieredText(orderTiered(o.id), usdNok: o.usdNok ?? broker.usdNok)
                 commissionText(orderCommission(o.id), usdNok: o.usdNok ?? broker.usdNok)
             }
             .font(.system(size: 10).monospacedDigit())
@@ -302,7 +301,6 @@ struct OrdersPanel: View {
                 Text("@ \(Fmt.price(f.price))").fontWeight(.semibold)
                 Text(Fmt.shares(f.shares, groupedFrom: Self.groupedFrom)).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                tieredText(tiered(g.fillIds), usdNok: f.usdNok ?? broker.usdNok)
                 commissionText(f.commission, usdNok: f.usdNok ?? broker.usdNok)
             }
             .opacity(dim)
@@ -417,7 +415,7 @@ struct OrdersPanel: View {
 
     /// Today's round trips, newest first; the header sums the closed ones.
     private var roundTrips: some View {
-        let trips = RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions, tiered: broker.tieredEstimates)
+        let trips = RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions)
         // Without any USD.NOK rate, every trip's P/L is in dollars, so the sum is in one currency either way.
         let closed = trips.filter { !$0.isOpen }.compactMap { tripPnL($0, last: nil) }
         let realized = closed.first.map { (value: closed.reduce(0) { $0 + $1.value }, inNOK: $0.inNOK) }
@@ -458,7 +456,6 @@ struct OrdersPanel: View {
                         shares
                         Spacer(minLength: 2)
                         if details { Text(t.start, format: .dateTime.hour().minute()).foregroundStyle(.secondary) }
-                        tieredText(t.tieredCommissions != 0 ? t.tieredCommissions : nil, usdNok: t.usdNok ?? broker.usdNok)
                         commissionText(t.commissions != 0 ? t.commissions : nil, usdNok: t.usdNok ?? broker.usdNok)
                     }
                     .font(.system(size: 10).monospacedDigit())
@@ -529,27 +526,6 @@ struct OrdersPanel: View {
     private func orderCommission(_ id: Int) -> Double? {
         let reported = broker.fills.values.filter { $0.orderId == id }.compactMap(\.commission)
         return reported.isEmpty ? nil : reported.reduce(0, +)
-    }
-
-    /// What a working order's fills so far would have cost on IBKR Pro Tiered, in dollars (nil before any estimate).
-    private func orderTiered(_ id: Int) -> Double? {
-        tiered(Set(broker.fills.values.filter { $0.orderId == id }.map(\.id)))
-    }
-
-    /// What these fills would have cost on IBKR Pro Tiered, in dollars (nil before any estimate).
-    private func tiered(_ fillIds: Set<String>) -> Double? {
-        let estimates = fillIds.compactMap { broker.tieredEstimates[$0] }
-        return estimates.isEmpty ? nil : estimates.reduce(0, +)
-    }
-
-    /// The commissions and fees IBKR Pro Tiered would have charged, left of what IB charged: whole NOK
-    /// at `usdNok` (dollars and cents without a rate), a slightly darker gray than it.
-    @ViewBuilder private func tieredText(_ usd: Double?, usdNok: Double?) -> some View {
-        if let usd {
-            Text(usdNok.map { Fmt.nok(usd * $0, groupedFrom: Self.groupedFrom) } ?? Fmt.amount(usd))
-                .foregroundStyle(.secondary.opacity(0.7))
-                .help("Commissions and fees on IBKR Pro Tiered (estimate)")
-        }
     }
 
     /// Commissions and fees, dimmed like the times: whole NOK at `usdNok`, dollars and cents without a rate.

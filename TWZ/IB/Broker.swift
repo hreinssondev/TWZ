@@ -41,9 +41,6 @@ final class Broker {
     private(set) var positions: [String: Position] = [:]
     private(set) var orders: [Int: OrderRow] = [:]
     private(set) var fills: [String: Fill] = [:]
-    /// Each fill's commissions and fees had it been on IBKR Pro Tiered, in dollars, by execId
-    /// (see `TieredCommissions`).
-    private(set) var tieredEstimates: [String: Double] = [:]
     /// Every quote, for code outside views. Views read `quote(_:)` instead, so a tick in one symbol
     /// doesn't redraw every view that shows some other symbol's quote.
     @ObservationIgnored private(set) var quotes: [String: Quote] = [:]
@@ -373,13 +370,7 @@ final class Broker {
         }
         if let v = s.positions { update(\.positions, v) }
         if let v = s.orders { update(\.orders, v) }
-        if let v = s.fills {
-            update(\.fills, v)
-            let fills = Array(v.values)
-            TieredCommissions.record(fills, account: account)
-            let before = fills.map(\.time).min().map { TieredCommissions.monthShares(before: MarketSession.dayKey($0), account: account) } ?? 0
-            update(\.tieredEstimates, TieredCommissions.estimate(fills: fills, monthSharesBefore: before))
-        }
+        if let v = s.fills { update(\.fills, v) }
         if let v = s.quotes {
             quotes = v
             for (symbol, box) in quoteBoxes where box.quote != v[symbol] { box.quote = v[symbol] }

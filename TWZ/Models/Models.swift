@@ -84,9 +84,6 @@ nonisolated struct Fill: Identifiable, Equatable {
     var usdNok: Double?
     /// Commissions and fees IB charged for the fill, in dollars, once its commission report is in.
     var commission: Double?
-    /// The venue it filled on, and IB's lastLiquidity: 1 added, 2 removed, 3 routed out, 0 unknown.
-    var exchange = ""
-    var liquidity = 0
 }
 
 /// One trade in a symbol, from flat back to flat, built from the day's fills.
@@ -112,8 +109,6 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
     /// Commissions and fees IB reported for those fills, in dollars (a fill that flips the position
     /// split between the trips by shares); fills whose report isn't in yet add nothing.
     var commissions = 0.0
-    /// The same on IBKR Pro Tiered, from `TieredCommissions` (fills without an estimate add nothing).
-    var tieredCommissions = 0.0
     /// The orders that opened or added to the trip, and those closing it, in fill order, an order split
     /// into several fills once (keys from `orderKey`).
     var entryOrders: [String] = []
@@ -146,7 +141,7 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
 
     /// Round trips, newest activity first. `positions` give each symbol's current holding, so shares
     /// held before the first fill (net of today's fills) are known.
-    static func build(fills: [Fill], positions: [String: Position], tiered: [String: Double] = [:]) -> [RoundTrip] {
+    static func build(fills: [Fill], positions: [String: Position]) -> [RoundTrip] {
         var trips: [RoundTrip] = []
         for (symbol, symbolFills) in Dictionary(grouping: fills, by: \.symbol) {
             let sorted = symbolFills.sorted { ($0.time, $0.id) < ($1.time, $1.id) }
@@ -171,7 +166,6 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
                     let step = opening ? remaining : (remaining > 0 ? min(remaining, -qty) : max(remaining, -qty))
                     if !trip!.fillIds.contains(fill.id) { trip!.fillIds.append(fill.id) }
                     if let commission = fill.commission, fill.shares > 0 { trip!.commissions += commission * abs(step) / fill.shares }
-                    if let estimate = tiered[fill.id], fill.shares > 0 { trip!.tieredCommissions += estimate * abs(step) / fill.shares }
                     let order = orderKey(fill)
                     if (step > 0) == trip!.isLong {
                         if !trip!.entryOrderIds.contains(fill.orderId) { trip!.entryOrderIds.append(fill.orderId) }

@@ -2095,9 +2095,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             price: f.double(20),
             time: Self.parseExecTime(f.str(15)) ?? Date(),
             usdNok: fills[id]?.usdNok ?? usdNok,
-            commission: commissions[id],
-            exchange: f.str(17),
-            liquidity: f.int(30)                                        // lastLiquidity
+            commission: commissions[id]
         )
         if fills[fill.id] == nil {
             log("FILL #\(fill.orderId) \(fill.side) \(Fmt.shares(fill.shares)) \(fill.symbol) @ \(Fmt.price(fill.price)) exec \(fill.id)")
