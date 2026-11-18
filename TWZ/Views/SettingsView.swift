@@ -354,6 +354,8 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.hoverKey) private var hoverHex = ""
     @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
     @AppStorage(LineColors.takeProfitKey) private var takeProfitHex = ""
+    @AppStorage(LineColors.closedTradeKey) private var closedTradeHex = ""
+    @Environment(\.sideColors) private var sideColors
     @AppStorage(LineColors.ordersKey) private var ordersHex = ""
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
@@ -460,12 +462,13 @@ private struct AppearanceSettings: View {
                 lineColorRow("Take profit (⌃-click)", key: LineColors.takeProfitKey, hex: $takeProfitHex,
                              default: LineColors.defaultTakeProfit,
                              dashedKey: LineDashes.takeProfitKey, dashedDefault: LineDashes.defaultTakeProfit)
-                LabeledContent("Last trade (Avg)") {
-                    LineStylePicker(key: LineDashes.lastTradeKey, default: LineDashes.defaultLastTrade)
-                }
+                // The style also sets the Avg line shown with it.
+                lineColorRow("Closed trade (exit)", key: LineColors.closedTradeKey, hex: $closedTradeHex,
+                             default: sideColors.down,
+                             dashedKey: LineDashes.lastTradeKey, dashedDefault: LineDashes.defaultLastTrade)
                 Toggle("Show last trade lines after a round trip closes", isOn: $showLastTradeLines)
                 Toggle("Show grid lines (the price and time labels stay)", isOn: $showGrid)
-                Text("On: the exit and Avg lines stay until you click the chart or place an order. Off: just the exit line, for 7 seconds or until a click.")
+                Text("Once a round trip closes, its chart shows the exit line and an arrow at the exit in the closed trade color, and the Avg line (same line style). On: they stay until you click the chart or place an order. Off: just the exit line and arrow, for 7 seconds or until a click.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -316,6 +316,7 @@ struct TradingChart: View {
     @AppStorage(LineDashes.dotsKey(LineDashes.takeProfitKey)) private var takeProfitDots = LineDashes.defaultDots(LineDashes.takeProfitKey)
     @AppStorage(LineDashes.dotsKey(LineDashes.ordersKey)) private var ordersDots = LineDashes.defaultDots(LineDashes.ordersKey)
     @AppStorage(LineDashes.dotsKey(LineDashes.lastTradeKey)) private var lastTradeDots = LineDashes.defaultDots(LineDashes.lastTradeKey)
+    @AppStorage(LineColors.closedTradeKey) private var closedTradeHex = ""
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
     @AppStorage(HoverPnLSize.storageKey) private var hoverSizing: HoverPnLSize = .buyingPower
     @AppStorage(HoverPnLSize.amountKey) private var hoverAmountNOK = HoverPnLSize.defaultAmount
@@ -397,7 +398,9 @@ struct TradingChart: View {
                 workspace.shownTrips[chart.symbol] = nil
                 workspace.shownOrderFills[chart.symbol] = nil
             },
-            shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? [])
+            shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? []),
+            exitFillIds: exitFillIds,
+            exitColor: closedTradeColor
         )
         // With the last trade lines off, a round trip that just closed (in the last 30 s, so not one
         // from before the chart showed the symbol) shows its exit line for 7 s.
@@ -482,6 +485,22 @@ struct TradingChart: View {
         return trip
     }
 
+    /// The just-closed round trip whose exit line (and arrow) shows: with nothing shown from the Round
+    /// trips tab or the Orders list, and with Settings' last trade lines off only for its first 7 s.
+    private var exitingTrip: RoundTrip? {
+        guard workspace.shownTrips[chart.symbol] == nil, workspace.shownOrderFills[chart.symbol] == nil,
+              let trip = closedTrip, showLastTradeLines || flashingExitTrip == trip.id else { return nil }
+        return trip
+    }
+
+    /// The exiting trip's fills on its exit side (sells out of a long, buys back a short).
+    private var exitFillIds: Set<String> {
+        guard let trip = exitingTrip else { return [] }
+        return Set(trip.fillIds.filter { id in broker.fills[id].map { ($0.side == "BOT") != trip.isLong } ?? false })
+    }
+
+    private var closedTradeColor: Color { LineColors.resolve(closedTradeHex, default: sideColors.down) }
+
     /// Hot pink: the system pink reads as red next to the stop loss line.
     private static let whatIfColor = Color(red: 1.0, green: 0.25, blue: 0.8)
 
@@ -514,12 +533,13 @@ struct TradingChart: View {
                 let isBuy = fill.side == "BOT"
                 lines.append(PriceLine(price: price, color: sideColors.of(isBuy), label: isBuy ? "Buy" : "Sell", dotted: true))
             }
-        } else if let trip = closedTrip, showLastTradeLines || flashingExitTrip == trip.id {
-            // Just exited: red at the average exit, from the latest candle to the axis as order lines are,
-            // and green at the average entry (unknown for shares held from before today).
+        } else if let trip = exitingTrip {
+            // Just exited: the closed trade color (Settings) at the average exit, from the latest candle to
+            // the axis as order lines are, and green at the average entry (unknown for shares held from
+            // before today). An arrow in the same color marks the exit on its candle.
             // With Settings' last trade lines off, only the exit line, for its first 7 s.
             if let exit = trip.exitPrice {
-                lines.append(PriceLine(price: exit, color: sideColors.down, label: "", dashed: lastTradeDashed,
+                lines.append(PriceLine(price: exit, color: closedTradeColor, label: "", dashed: lastTradeDashed,
                                        dotted: lastTradeDashed && lastTradeDots, drawnLikeOrder: true))
             }
             if showLastTradeLines, trip.carried == 0, let entry = trip.entryPrice {

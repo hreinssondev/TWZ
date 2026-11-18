@@ -95,7 +95,8 @@ enum AppearanceDefaults {
     static let keys = [
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
-        LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
+        LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.closedTradeKey,
+        LineColors.showLastPriceLineKey,
         LineColors.showLastTradeLinesKey, LineColors.showGridKey, VolumeBars.opacityKey,
         SideColors.sourceKey, SideColors.customUpKey, SideColors.customDownKey, Dimmed.opacityKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
@@ -262,6 +263,9 @@ enum LineColors {
     static let stopLossKey = "stopLossLineColor"
     static let takeProfitKey = "takeProfitLineColor"
     static let ordersKey = "orderLineColor"
+    /// The exit line and arrow a chart shows once its symbol's round trip closes; empty means the
+    /// side colors' down color.
+    static let closedTradeKey = "closedTradeLineColor"
     /// Off hides the last price line itself; its price box on the axis stays.
     static let showLastPriceLineKey = "showLastPriceLine"
     /// Off: of the Exit / Avg lines a chart shows once its symbol's round trip closes, just the exit
