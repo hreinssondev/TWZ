@@ -45,6 +45,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var fills: [String: Fill] = [:] { didSet { changed(.fills) } }
     /// Each fill's commissions and fees in dollars, by execId (a report can come before its fill).
     private var commissions: [String: Double] = [:]
+    /// Symbols whose stop loss / take profit are due a resize to the position (see `scheduleProtectiveSync`).
+    private var protectiveSyncDue: Set<String> = []
     private var quotes: [String: Quote] = [:] { didSet { changed(.quotes) } }
     /// IB's shortable tick per symbol: above 2.5 easy to borrow, above 1.5 hard to borrow, else not shortable.
     private var shortability: [String: Double] = [:] { didSet { changed(.shortability) } }
@@ -422,6 +424,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         orders.removeAll()
         fills.removeAll()
         commissions.removeAll()
+        protectiveSyncDue.removeAll()
     }
 
     private func handle(_ event: IBSocket.Event) {
@@ -2338,7 +2341,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             positions[symbol] = Position(symbol: symbol, quantity: qty, avgCost: f.double(15))
         }
         syncQuoteSubscriptions()
-        syncProtective(symbol)
+        scheduleProtectiveSync(symbol)
+    }
+
+    /// Resizes the symbol's stop loss and take profit to the position a second after it changes. IB
+    /// reports a protective order's own fill as a position change before the fill and the order's new
+    /// status; resized right away, the order would shrink by what it just sold and leave that many
+    /// shares held once it fills. A second later its fills are in, and an order filling isn't resized.
+    private func scheduleProtectiveSync(_ symbol: String) {
+        guard protectiveSyncDue.insert(symbol).inserted else { return }
+        queue.asyncAfter(deadline: .now() + 1) { [weak self] in
+            guard let self, self.protectiveSyncDue.remove(symbol) != nil else { return }
+            self.syncProtective(symbol)
+        }
     }
 
     private func accountSummary(_ f: [String]) {
