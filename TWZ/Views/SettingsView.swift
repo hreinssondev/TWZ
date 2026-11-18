@@ -359,7 +359,9 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
     @AppStorage(LineColors.showGridKey) private var showGrid = false
     @AppStorage(VolumeBars.opacityKey) private var volumeOpacity = VolumeBars.defaultOpacity
-    @AppStorage(SideColors.matchKey) private var matchCandles = true
+    @AppStorage(SideColors.sourceKey) private var sideSource: SideColors.Source = .candles
+    @AppStorage(SideColors.customUpKey) private var sideUp = ""
+    @AppStorage(SideColors.customDownKey) private var sideDown = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top
@@ -401,10 +403,23 @@ private struct AppearanceSettings: View {
                     ColorWell(title: "Down candles", key: CandleTheme.customDownKey,
                               color: Color(hex: customDown) ?? Color(hex: CandleTheme.defaultDownHex)!)
                 }
-                Toggle("Use the candle colors across the app", isOn: $matchCandles)
-                Text(matchCandles
-                     ? "Lists, Orders / Positions / Round trips, P/L, the position badge and tint, fill bars, trade arrows and buy / sell lines take the up and down candle colors."
-                     : "Off: those stay plain green and red.")
+            }
+            Section("App colors") {
+                Picker("Up / down outside the candles", selection: $sideSource) {
+                    ForEach(SideColors.Source.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.radioGroup)
+                if sideSource == .custom {
+                    let candles = theme.colors(customUp: customUp, customDown: customDown)
+                    ColorWell(title: "Up, gains, buys", key: SideColors.customUpKey, color: Color(hex: sideUp) ?? candles.up)
+                    ColorWell(title: "Down, losses, sells", key: SideColors.customDownKey, color: Color(hex: sideDown) ?? candles.down)
+                    Button("Back to the candle colors") {
+                        sideUp = ""
+                        sideDown = ""
+                    }
+                    .disabled(sideUp.isEmpty && sideDown.isEmpty)
+                }
+                Text("Lists, Orders / Positions / Round trips, P/L, the position badge and tint, fill bars, trade arrows and buy / sell lines. Own colors start at the candle colors until picked.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

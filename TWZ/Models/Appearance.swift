@@ -37,10 +37,21 @@ enum CandleTheme: String, CaseIterable, Identifiable {
     }
 }
 
-/// Buy / sell, long / short and gain / loss colors outside the candles: the candles' up and down colors
-/// while Settings' "Use the candle colors across the app" is on (the default), else plain green and red.
+/// Buy / sell, long / short and gain / loss colors outside the candles (lists, Orders / Positions /
+/// Round trips, P/L, position badges, fill bars, trade arrows, buy / sell lines), from Settings' App
+/// colors: the candles' up and down colors (the default), plain green and red, or colors of their own.
 struct SideColors: Equatable {
-    static let matchKey = "sideColorsMatchCandles"
+    enum Source: String, CaseIterable, Identifiable {
+        case candles = "Candle colors"
+        case greenRed = "Green / Red"
+        case custom = "Own colors"
+        var id: String { rawValue }
+    }
+
+    static let sourceKey = "sideColorsSource"
+    /// "RRGGBB" for `.custom`; empty until picked, which shows the candle color.
+    static let customUpKey = "sideColorsUp"
+    static let customDownKey = "sideColorsDown"
 
     var up: Color = .green
     var down: Color = .red
@@ -61,14 +72,21 @@ extension EnvironmentValues {
 
 /// Gives a window's views the side colors Settings picks.
 struct SideColorsFromSettings: ViewModifier {
-    @AppStorage(SideColors.matchKey) private var matchCandles = true
+    @AppStorage(SideColors.sourceKey) private var source: SideColors.Source = .candles
+    @AppStorage(SideColors.customUpKey) private var sideUp = ""
+    @AppStorage(SideColors.customDownKey) private var sideDown = ""
     @AppStorage(CandleTheme.storageKey) private var theme: CandleTheme = .teal
     @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
     @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
 
     func body(content: Content) -> some View {
         let candles = theme.colors(customUp: customUp, customDown: customDown)
-        content.environment(\.sideColors, matchCandles ? SideColors(up: candles.up, down: candles.down) : SideColors())
+        let colors = switch source {
+        case .candles: SideColors(up: candles.up, down: candles.down)
+        case .greenRed: SideColors()
+        case .custom: SideColors(up: Color(hex: sideUp) ?? candles.up, down: Color(hex: sideDown) ?? candles.down)
+        }
+        content.environment(\.sideColors, colors)
     }
 }
 
@@ -78,7 +96,8 @@ enum AppearanceDefaults {
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.showLastPriceLineKey,
-        LineColors.showLastTradeLinesKey, LineColors.showGridKey, VolumeBars.opacityKey, SideColors.matchKey,
+        LineColors.showLastTradeLinesKey, LineColors.showGridKey, VolumeBars.opacityKey,
+        SideColors.sourceKey, SideColors.customUpKey, SideColors.customDownKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
