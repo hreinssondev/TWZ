@@ -2225,7 +2225,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private func openOrder(_ f: [String]) {
         guard f.count > 25 else { return }
         if whatIfOrderIds.contains(f.int(1)) {
-            marginPreviews.removeValue(forKey: f.int(1))?(marginPreview(f))
+            let id = f.int(1), result = marginPreview(f)
+            // A preview without margin figures is usually followed by IB's error saying why (an FX trade
+            // that needs currency leverage, say): a second for that to answer in its place.
+            if case .failure = result {
+                queue.asyncAfter(deadline: .now() + 1) { [weak self] in self?.marginPreviews.removeValue(forKey: id)?(result) }
+                return
+            }
+            marginPreviews.removeValue(forKey: id)?(result)
             return
         }
         let id = Self.orderKey(orderId: f.int(1), permId: f.int(25))
