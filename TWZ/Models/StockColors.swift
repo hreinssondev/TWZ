@@ -17,13 +17,14 @@ nonisolated enum StockColor: String, CaseIterable, Sendable {
 
     static let storageKey = "stockColors"
 
-    /// The letter giving it with ⌥⇧: its first, but for black's K, pink's I and brown's N (B is blue's,
-    /// P purple's).
+    /// The letter giving it with ⌥⇧: its first, but for black's K, pink's I, brown's N and turquoise's F
+    /// (B is blue's, P purple's).
     var key: String {
         switch self {
         case .black: "k"
         case .pink: "i"
         case .brown: "n"
+        case .turquoise: "f"
         default: String(rawValue.prefix(1))
         }
     }
