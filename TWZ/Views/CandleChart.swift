@@ -197,8 +197,12 @@ struct CandleChart: View {
 
     /// The view reaches the oldest bar loaded: zoomed or scrolled out that far, or too little
     /// history to fill it. The full history then loads behind it (once per load).
+    /// Zoomed out as wide as the bars loaded counts too: zooming around the pointer leaves room
+    /// for the future on the right, so the oldest bar can stay just off screen when the zoom stops at
+    /// every bar loaded (a forex pair's day of minutes is more than `maxVisibleBars`).
     private var showsOldestBar: Bool {
-        !chart.bars.isEmpty && chart.scrollBack + chart.visibleBars >= Double(chart.bars.count)
+        let count = Double(chart.bars.count)
+        return count > 0 && (chart.scrollBack + chart.visibleBars >= count || chart.visibleBars >= count)
     }
 
     private func barWidth(plotWidth: CGFloat) -> CGFloat {
