@@ -164,6 +164,7 @@ private struct ConnectionSettings: View {
 
 private struct TradingSettings: View {
     @Environment(Workspace.self) private var workspace
+    @Environment(Broker.self) private var broker
     @AppStorage(HotkeyClickMode.storageKey) private var clickMode: HotkeyClickMode = .select
     @AppStorage(DollarClickOrders.enabledKey) private var dollarClicks = false
     @AppStorage(DollarClickOrders.amountKey) private var dollarClickAmount = DollarClickOrders.defaultAmount
@@ -207,6 +208,12 @@ private struct TradingSettings: View {
                 Text(dollarClicks
                      ? "A DAY order at the clicked price, in place of the selected hotkey's ⌥-click order: a limit where it fills at that price or better, a stop-limit on the other side. Holding ⌥ turns the hover line and its price green, ⌘ red. The top bar's Alt-Click switches both off."
                      : "Off: ⌥-click places the selected hotkey's order at the clicked price (or a NOK buy), and ⌘-click does nothing.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Lists and charts") {
+                Toggle("Hide restricted stocks", isOn: Bindable(broker).hideRestricted)
+                Text("Leaves the stocks IB won't let you buy (closing-only, no KID for your country, a compliance restriction) out of the lists and the charts that follow them. Each listed stock is checked with a what-if buy of one share, never placed, and again every 30 minutes. A stock you hold or have a working order in stays; one you load by hand shows.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

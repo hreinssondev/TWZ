@@ -547,6 +547,11 @@ nonisolated struct ScanResult: Equatable {
     var updated: Date?
 }
 
+/// Settings › Trading's Hide restricted stocks (see `Broker.hideRestricted`). Off by default.
+enum RestrictedStocks {
+    static let hideKey = "hideRestrictedStocks"
+}
+
 // MARK: - Market session
 
 nonisolated enum MarketSession {

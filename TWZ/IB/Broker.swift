@@ -47,8 +47,24 @@ final class Broker {
     @ObservationIgnored private var quoteBoxes: [String: QuoteBox] = [:]
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private(set) var unavailableQuotes: [String: String] = [:]
-    /// Latest scanner results per list panel.
+    /// Latest scanner results per list panel, as shown: with Hide restricted stocks on, without the
+    /// stocks in `restricted` (see `filterScans`).
     private(set) var scans: [String: ScanResult] = [:]
+    /// The scanner lists as IB sends them.
+    @ObservationIgnored private var rawScans: [String: ScanResult] = [:]
+    /// Stocks IB won't let this account open a position in (closing-only, no KID, a compliance
+    /// restriction), with IB's reason. Found from what-if buys and refused orders.
+    private(set) var restricted: [String: String] = [:]
+    /// Settings' Hide restricted stocks: the lists' stocks are checked with what-if buys, and the
+    /// restricted ones are left out of the lists and the charts that follow them.
+    var hideRestricted: Bool {
+        didSet {
+            defaults.set(hideRestricted, forKey: RestrictedStocks.hideKey)
+            let on = hideRestricted
+            engine.perform { $0.setChecksRestrictions(on) }
+            filterScans()
+        }
+    }
     /// Symbols with a tick-by-tick trade stream open (see `setFastCharts`).
     private(set) var tickTradeSymbols: Set<String> = []
     /// Fast charts' symbols IB's tick-by-tick limit left without a trade stream.
@@ -92,8 +108,9 @@ final class Broker {
 
     struct MarginSize {
         var price: Double
-        /// The largest long IB's margin allows at `price`.
-        var maxShares: Double
+        /// The largest long IB's margin allows at `price`; nil when IB couldn't size one (a
+        /// restricted stock, say), so it isn't asked again until this goes stale.
+        var maxShares: Double?
         /// When IB was asked.
         var time: Date
     }
@@ -137,10 +154,13 @@ final class Broker {
         host = defaults.string(forKey: "ib.host") ?? "127.0.0.1"
         port = defaults.object(forKey: "ib.port") as? Int ?? 4002          // paper gateway by default
         clientId = defaults.object(forKey: "ib.clientId") as? Int ?? 1
+        hideRestricted = defaults.bool(forKey: RestrictedStocks.hideKey)
         let engine = engine
         apply(engine.queue.sync { engine.fullSnapshot() })
         engine.sink = { [weak self] snapshot in self?.apply(snapshot) }
         ssrList.onChange = { symbols in engine.perform { $0.setNasdaqSSR(symbols) } }
+        let checks = hideRestricted
+        engine.perform { $0.setChecksRestrictions(checks) }
     }
 
     // MARK: - Commands
@@ -278,7 +298,7 @@ final class Broker {
         if let asked = marginSizeAsked[symbol], now.timeIntervalSince(asked) < 15 { return }
         marginSizeAsked[symbol] = now
         let answered: @MainActor @Sendable (Double, Double?) -> Void = { [weak self] price, shares in
-            self?.marginSizes[symbol] = shares.map { MarginSize(price: price, maxShares: $0, time: now) }
+            self?.marginSizes[symbol] = MarginSize(price: price, maxShares: shares, time: now)
             self?.marginSizeAsked[symbol] = nil
         }
         engine.perform { engine in
@@ -292,8 +312,9 @@ final class Broker {
     /// `refreshMarginSize`): the shares it allows at the price asked at, which moves little with the
     /// price. nil while not connected, before IB answers, or when it can't size one.
     func buyingPowerNOK(_ symbol: String) -> Double? {
-        guard state == .connected, let size = marginSizes[symbol], let usd = usdPerPriceUnit(symbol), let usdNok else { return nil }
-        return size.maxShares * size.price * usd * usdNok
+        guard state == .connected, let size = marginSizes[symbol], let shares = size.maxShares,
+              let usd = usdPerPriceUnit(symbol), let usdNok else { return nil }
+        return shares * size.price * usd * usdNok
     }
 
     /// Order commands are timed from here until they reach the socket.
@@ -411,7 +432,9 @@ final class Broker {
             for (symbol, box) in quoteBoxes where box.quote != v[symbol] { box.quote = v[symbol] }
         }
         if let v = s.unavailableQuotes { update(\.unavailableQuotes, v) }
-        if let v = s.scans { update(\.scans, v) }
+        if let v = s.scans { rawScans = v }
+        if let v = s.restricted { update(\.restricted, v) }
+        if s.scans != nil || s.restricted != nil || s.positions != nil || s.orders != nil { filterScans() }
         if let v = s.tickTradeSymbols { update(\.tickTradeSymbols, v) }
         if let v = s.tickLimitedSymbols { update(\.tickLimitedSymbols, v) }
         if let v = s.shortability { update(\.shortability, v) }
@@ -429,6 +452,19 @@ final class Broker {
             if chart.isLoading != patch.isLoading { chart.isLoading = patch.isLoading }
             if chart.error != patch.error { chart.error = patch.error }
         }
+    }
+
+    /// The scanner lists without the restricted stocks while Hide restricted stocks is on, but for
+    /// those with a position or a working order, which stay in view.
+    private func filterScans() {
+        guard hideRestricted, !restricted.isEmpty else { return update(\.scans, rawScans) }
+        let kept = Set(positions.values.filter { $0.quantity != 0 }.map(\.symbol))
+            .union(orders.values.filter(\.isActive).map(\.symbol))
+        update(\.scans, rawScans.mapValues { scan in
+            var scan = scan
+            scan.symbols.removeAll { restricted[$0] != nil && !kept.contains($0) }
+            return scan
+        })
     }
 
     private func update<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<Broker, T>, _ value: T) {

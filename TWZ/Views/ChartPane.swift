@@ -279,7 +279,7 @@ struct ChartPane: View {
                 .foregroundStyle(Color.secondary.opacity(0.7))
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .help("Buying power: IB's margin allows a long of up to \(Fmt.shares(size.maxShares))\(units) "
+                .help("Buying power: IB's margin allows a long of up to \(Fmt.shares(size.maxShares ?? 0))\(units) "
                       + "at \(Fmt.price(size.price, for: chart.symbol)), \(Fmt.nok(nok, groupedFrom: 0)) NOK "
                       + "(asked again each minute, and after a position changes)")
         }
@@ -421,7 +421,7 @@ struct TradingChart: View {
                 if hoverSizing == .nok {
                     return broker.shares(forNOK: hoverAmountNOK, of: chart.symbol, at: last).map { (price - last) * $0 * usd }
                 }
-                return broker.marginSizes[chart.symbol].map { (price - last) * ($0.maxShares * HoverPnLSize.fraction).rounded(.down) * usd }
+                return broker.marginSizes[chart.symbol]?.maxShares.map { (price - last) * ($0 * HoverPnLSize.fraction).rounded(.down) * usd }
             },
             onHover: { if hoverSizing == .buyingPower { broker.refreshMarginSize(symbol: chart.symbol) } },
             onCancelOrder: { id in

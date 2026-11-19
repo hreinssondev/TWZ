@@ -79,7 +79,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private var unavailableQuotes: [String: String] = [:] { didSet { changed(.unavailable) } }
     /// Latest scanner results per list panel.
-    private var scans: [String: ScanResult] = [:] { didSet { changed(.scans) } }
+    private var scans: [String: ScanResult] = [:] { didSet { changed(.scans); scheduleRestrictionCheck() } }
     /// Regular-session closes keyed "SYMBOL|yyyyMMdd", fetched for after-hours scanner rows.
     private var sessionCloses: [String: Double] = [:] { didSet { changed(.closes) } }
     /// Orders placed by alt-clicking a chart; drawn as solid lines in the ⌥-click color (Settings).
@@ -158,6 +158,22 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var marginPreviews: [Int: (Result<MarginPreview, PreviewFailure>) -> Void] = [:]
     /// Every what-if order id sent, so IB's messages about them never show up as orders.
     private var whatIfOrderIds: Set<Int> = []
+    /// The stock of each what-if buy, by order id: IB's answer tells whether it's restricted.
+    private var whatIfBuys: [Int: String] = [:]
+    /// Stocks IB won't let this account open a position in, by symbol (see `noteBuyAnswer`). Saved,
+    /// and kept a day unless IB says otherwise sooner.
+    private var restricted: [String: Restriction] = [:] {
+        didSet {
+            changed(.restricted)
+            if let data = try? JSONEncoder().encode(restricted) { defaults.set(data, forKey: Self.restrictedKey) }
+        }
+    }
+    /// When each listed stock was last checked with a what-if buy (see `checkNextRestriction`).
+    private var restrictionChecked: [String: Date] = [:]
+    /// Settings' Hide restricted stocks: the lists' stocks are checked.
+    private var checksRestrictions = false
+    private var restrictionCheckScheduled = false
+    private static let restrictedKey = "restrictedStocks"
     /// IB has sent every position / open order since connecting (positionEnd, openOrderEnd).
     private var positionsLoaded = false
     private var openOrdersLoaded = false
@@ -204,6 +220,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         static let orderSources = Dirty(rawValue: 1 << 10)
         static let tickStreams = Dirty(rawValue: 1 << 11)
         static let shortability = Dirty(rawValue: 1 << 12)
+        static let restricted = Dirty(rawValue: 1 << 13)
     }
 
     /// One display frame at 120 Hz (ProMotion): the UI never gets more snapshots than it can show.
@@ -231,6 +248,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             .flatMap { try? JSONDecoder().decode([Int: Protective].self, from: $0) } ?? [:]
         orderSources = Dictionary(uniqueKeysWithValues: (defaults.dictionary(forKey: "orderSources") as? [String: String] ?? [:])
             .compactMap { key, value in Int(key).map { ($0, value) } })
+        restricted = (defaults.data(forKey: Self.restrictedKey)
+            .flatMap { try? JSONDecoder().decode([String: Restriction].self, from: $0) } ?? [:])
+            .filter { Date().timeIntervalSince($0.value.seen) < Restriction.kept }
         socket.onEvent = { [weak self] event in self?.handle(event) }
         queue.async { self.watchMainThread() }
     }
@@ -246,7 +266,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// Everything the UI shows, for its initial state. Call on the engine queue.
     func fullSnapshot() -> EngineSnapshot {
-        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources, .tickStreams, .shortability]
+        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources, .tickStreams, .shortability, .restricted]
         return takeSnapshot()
     }
 
@@ -300,6 +320,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if dirty.contains(.chartOrders) { s.chartOrderIds = chartOrderIds }
         if dirty.contains(.protective) { s.protectiveOrders = protectiveOrders }
         if dirty.contains(.orderSources) { s.orderSources = orderSources }
+        if dirty.contains(.restricted) { s.restricted = restricted.mapValues(\.reason) }
         if dirty.contains(.tickStreams) {
             s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind != .bidAsk }.map(\.symbol))
             s.tickLimitedSymbols = tickLimitedSymbols
@@ -408,6 +429,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         stopsAwaitingCancel.removeAll()
         closesAwaitingCancel.removeAll()
         marginPreviews.removeAll()
+        whatIfBuys.removeAll()
         positionsLoaded = false
         openOrdersLoaded = false
         cancelsSent.removeAll()
@@ -492,6 +514,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         for id in charts.keys.sorted() { requestChart(id) }
         syncTickByTick()
         for owner in scanSpecs.keys { startScan(owner) }
+        scheduleRestrictionCheck()
     }
 
     // MARK: - Market data
@@ -1740,6 +1763,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard let id = placeOrder(symbol: symbol, action: action, quantity: shares, limit: price,
                                   whatIf: true, why: why) else { return }
         whatIfOrderIds.insert(id)
+        if action == "BUY" { whatIfBuys[id] = symbol }
         marginPreviews[id] = reply
         let current = session
         queue.asyncAfter(deadline: .now() + 10) { [weak self] in
@@ -1794,6 +1818,83 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             + "equity with loan \(Fmt.amount(equityBefore)) \(Fmt.amount(equityChange, signed: true))")
         return .success(MarginPreview(available: equityBefore - initBefore,
                                       perShare: (initChange - equityChange) / shares))
+    }
+
+    // MARK: - Restricted stocks
+
+    /// A stock IB won't let this account open a position in, and when IB last said so.
+    struct Restriction: Codable, Equatable, Sendable {
+        var reason: String
+        var seen: Date
+        static let kept: TimeInterval = 24 * 3600
+    }
+
+    /// How often a listed stock is checked again.
+    private static let restrictionRecheck: TimeInterval = 30 * 60
+
+    /// IB's reasons when a rejection says the account may not open a position in the stock
+    /// (closing-only status, no KID for this country, a compliance restriction), else nil. Not
+    /// enough margin is no restriction.
+    static func restrictionReason(_ text: String) -> String? {
+        let markers = ["No Trading Permission", "Customer Ineligible", "closing-only", "No Opening Trades"]
+        guard markers.contains(where: text.contains) else { return nil }
+        let reasons = text.components(separatedBy: "Ineligibility reasons:").dropFirst().first ?? text
+        return reasons.replacingOccurrences(of: "<br>", with: " ")
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            .trimmingCharacters(in: CharacterSet(charactersIn: " .,"))
+    }
+
+    /// IB's answer to a buy: a what-if's preview or refusal, or a real order's restriction refusal.
+    private func noteBuyAnswer(_ symbol: String, rejection: String?) {
+        guard !ForexPair.isForex(symbol) else { return }
+        restrictionChecked[symbol] = Date()
+        if let reason = rejection.flatMap(Self.restrictionReason) {
+            if restricted[symbol]?.reason != reason { log("RESTRICTED \(symbol): \(reason)") }
+            restricted[symbol] = Restriction(reason: reason, seen: Date())
+        } else if restricted[symbol] != nil {
+            log("RESTRICTED \(symbol) no longer")
+            restricted[symbol] = nil
+        }
+    }
+
+    /// Settings' Hide restricted stocks: while on, every stock in a list is checked (see
+    /// `checkNextRestriction`).
+    func setChecksRestrictions(_ on: Bool) {
+        checksRestrictions = on
+        scheduleRestrictionCheck()
+    }
+
+    private func scheduleRestrictionCheck(after delay: TimeInterval = 0.5) {
+        guard checksRestrictions, apiReady, !restrictionCheckScheduled else { return }
+        restrictionCheckScheduled = true
+        queue.asyncAfter(deadline: .now() + delay) { [self] in
+            restrictionCheckScheduled = false
+            checkNextRestriction()
+        }
+    }
+
+    /// Checks the next listed stock (by rank) not checked in the last 30 minutes with a what-if buy
+    /// of one share, never placed (at the last price, or at market before a quote), two a second;
+    /// then looks again in 30 s. IB's answer goes to `noteBuyAnswer`.
+    private func checkNextRestriction() {
+        guard checksRestrictions, apiReady else { return }
+        let now = Date()
+        // Top ranks first, across the lists: those are the ones the charts show.
+        let lists = scans.values.map(\.symbols), depth = lists.map(\.count).max() ?? 0
+        let ranked = (0..<depth).lazy.flatMap { rank in lists.compactMap { rank < $0.count ? $0[rank] : nil } }
+        let due = ranked.first { symbol in
+            !ForexPair.isForex(symbol)
+                && restrictionChecked[symbol].map { now.timeIntervalSince($0) >= Self.restrictionRecheck } ?? true
+        }
+        guard let symbol = due else { return scheduleRestrictionCheck(after: 30) }
+        restrictionChecked[symbol] = now
+        let last = quotes[symbol]?.last ?? 0
+        if let id = placeOrder(symbol: symbol, action: "BUY", quantity: 1, limit: last > 0 ? tickRounded(last, for: symbol) : nil,
+                               whatIf: true, why: "restriction check") {
+            whatIfOrderIds.insert(id)
+            whatIfBuys[id] = symbol
+        }
+        scheduleRestrictionCheck()
     }
 
     // MARK: - Stop loss / take profit
@@ -2245,6 +2346,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard f.count > 25 else { return }
         if whatIfOrderIds.contains(f.int(1)) {
             let id = f.int(1), result = marginPreview(f)
+            if case .success = result, let symbol = whatIfBuys.removeValue(forKey: id) { noteBuyAnswer(symbol, rejection: nil) }
             // A preview without margin figures is usually followed by IB's error saying why (an FX trade
             // that needs currency leverage, say): a second for that to answer in its place.
             if case .failure = result {
@@ -2408,10 +2510,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         if whatIfOrderIds.contains(reqId) {
             log("WHATIF #\(reqId) [\(code)] \(text)")
+            if let symbol = whatIfBuys.removeValue(forKey: reqId) { noteBuyAnswer(symbol, rejection: text) }
             marginPreviews.removeValue(forKey: reqId)?(.failure(PreviewFailure(reason: text)))
             return
         }
         if var o = orders[reqId] {
+            if o.action == "BUY", Self.restrictionReason(text) != nil { noteBuyAnswer(o.symbol, rejection: text) }
             if code == 202 { o.status = "Cancelled" }
             else if code == 201 || code == 10148 || (100...199).contains(code) || o.status == "PendingSubmit" {
                 o.status = "Rejected"
@@ -2755,6 +2859,8 @@ nonisolated struct EngineSnapshot: Sendable {
     var shortableShares: [String: Double]?
     /// Short sale restriction worked out from IB's prices, with why (see `TradingEngine.ssr`).
     var ssr: [String: String]?
+    /// Stocks IB won't let this account open a position in, with IB's reason.
+    var restricted: [String: String]?
     var charts: [ChartPatch] = []
 }
 
