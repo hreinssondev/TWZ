@@ -165,11 +165,14 @@ enum AccountBarPosition: String, CaseIterable, Identifiable {
     static let storageKey = "accountBarPosition"
 }
 
-/// Thickness of the accent outline around the selected chart.
+/// Thickness of the outline around the selected chart, stored as a third of it: the line a stock with
+/// a color is outlined in while not selected (see `StockColor`). Settings' slider shows the selected one.
 enum SelectedOutline {
     static let widthKey = "selectedChartOutlineWidth"
     static let defaultWidth = 1.5
     static let range = 0.5...4.0
+    /// The selected chart's outline, in the accent color or the stock's, is this many times the stored width.
+    static let selectedMultiple = 3.0
 }
 
 /// Which indicator lines the charts draw, and how thick.

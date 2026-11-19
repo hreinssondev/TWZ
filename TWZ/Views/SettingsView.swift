@@ -409,6 +409,12 @@ private struct AppearanceSettings: View {
     @AppStorage(PriceAxis.labelSpacingKey) private var labelSpacing = PriceAxis.defaultLabelSpacing
     @AppStorage(PriceAxis.lastPriceOpacityKey) private var lastPriceOpacity = PriceAxis.defaultLastPriceOpacity
 
+    /// The selected chart's outline as it's drawn: the stored width is a third of it (see `SelectedOutline`).
+    private var selectedOutline: Binding<Double> {
+        Binding(get: { outlineWidth * SelectedOutline.selectedMultiple },
+                set: { outlineWidth = $0 / SelectedOutline.selectedMultiple })
+    }
+
     var body: some View {
         Form {
             Section("Presets") {
@@ -576,10 +582,11 @@ private struct AppearanceSettings: View {
             Section("Selected chart") {
                 LabeledContent("Outline thickness") {
                     HStack {
-                        Slider(value: $outlineWidth, in: SelectedOutline.range, step: 0.25)
-                        Text("\(outlineWidth.formatted(.number.precision(.fractionLength(0...2)))) pt")
+                        Slider(value: selectedOutline, in: SelectedOutline.range.lowerBound * SelectedOutline.selectedMultiple
+                                ... SelectedOutline.range.upperBound * SelectedOutline.selectedMultiple, step: 0.5)
+                        Text("\(selectedOutline.wrappedValue.formatted(.number.precision(.fractionLength(0...1)))) pt")
                             .monospacedDigit()
-                            .frame(width: 44, alignment: .trailing)
+                            .frame(width: 52, alignment: .trailing)
                     }
                 }
             }

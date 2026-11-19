@@ -4,7 +4,8 @@
 //
 //  Colors given to stocks from the keyboard: ⌘⇧ and a color's letter colors the selected chart's
 //  stock, ⌘⇧⌫ takes its color off (see `TradingShortcuts`). Every chart showing the stock is
-//  outlined in its color, three times as thick in place of the selection outline while it's selected.
+//  outlined in its color, as thick as the selection outline in its place while it's selected, a third
+//  of that otherwise.
 //  Kept per stock across relaunches.
 //
 

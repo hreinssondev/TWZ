@@ -162,16 +162,17 @@ struct ChartPane: View {
         }
     }
 
-    /// The selection outline (fainter on another chart of the same stock), else the plain border. A
-    /// stock with a color is outlined in it instead: three times as thick while selected.
+    /// The thick selection outline (fainter on another chart of the same stock), else the plain border.
+    /// A stock with a color is outlined in it instead: as thick while selected, a third of that otherwise.
     private var outline: some View {
         let selected = isSelected || showsTarget
         let fade = isSelected || !showsTarget ? 1 : 0.6
+        let thick = outlineWidth * SelectedOutline.selectedMultiple
         let color: Color, width: Double
         if let mark = workspace.stockColors[chart.symbol]?.color {
-            (color, width) = (mark.opacity(fade), selected ? outlineWidth * 3 : outlineWidth)
+            (color, width) = (mark.opacity(fade), selected ? thick : outlineWidth)
         } else if selected {
-            (color, width) = (Color.accentColor.opacity(fade), outlineWidth)
+            (color, width) = (Color.accentColor.opacity(fade), thick)
         } else {
             (color, width) = (Color.primary.opacity(0.12), 1)
         }
