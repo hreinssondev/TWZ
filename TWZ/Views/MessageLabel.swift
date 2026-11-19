@@ -3,8 +3,8 @@
 //  TWZ
 //
 //  A one-line status or error message. Click it to read the whole message in a popover.
-//  `FloatingMessages`: the same, floating over the charts while the hotkey row is collapsed (and
-//  with it the line that shows messages); its popover also lists the latest messages.
+//  `FloatingMessages`: the same, floating at the window's bottom edge while the hotkey row is collapsed
+//  (and with it the line that shows messages); its popover also lists the latest messages.
 //
 
 import AppKit
@@ -51,8 +51,8 @@ struct MessageLabel: View {
     }
 }
 
-/// The latest message in a bar as wide as the charts, floating at their bottom, for when the hotkey
-/// row (whose header shows it) is collapsed. Each message shows for 10 seconds, or until the list
+/// The latest message in a bar as wide as the charts, floating at the window's bottom edge, for when
+/// the hotkey row (whose header shows it) is collapsed. Each message shows for 10 seconds, or until the list
 /// opened by clicking it (the whole message and the ones before it) closes; × hides it sooner.
 struct FloatingMessages: View {
     @Environment(Broker.self) private var broker

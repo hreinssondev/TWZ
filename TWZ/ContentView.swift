@@ -87,13 +87,12 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
                         ChartGrid(gap: gap)
-                            // The hotkey row shows messages; collapsed, they float over the charts, and
-                            // the row itself shows there while peeking. It stays laid out while hidden,
+                            // Collapsed, the hotkey row shows over the charts while peeking (its messages
+                            // float at the window's bottom edge, below). It stays laid out while hidden,
                             // so an editor or popover opened from it stays open.
                             .overlay(alignment: .bottom) {
                                 if rowHeight <= 0 {
                                     ZStack(alignment: .bottom) {
-                                        if !hotkeysPeek { FloatingMessages().padding(.horizontal, 6).padding(.bottom, 8) }
                                         HotkeyPanel()
                                             .frame(height: minBottom)
                                             .background(RoundedRectangle(cornerRadius: 6)
@@ -140,6 +139,16 @@ struct ContentView: View {
                     .frame(width: sideWidth)
                 }
                 .padding(gap)
+                // The hotkey row shows messages; collapsed, they float under the charts at the window's
+                // bottom edge, over the row's drag handle (not while the row peeks: it shows them).
+                .overlay(alignment: .bottomLeading) {
+                    if rowHeight <= 0, !hotkeysPeek {
+                        FloatingMessages()
+                            .frame(width: max(0, inner.width - gap - sideWidth - 12))
+                            .padding(.leading, gap + 6)
+                            .padding(.bottom, 3)
+                    }
+                }
                 // The left quarter of the charts' column at its bottom, from the window's bottom edge (the
                 // row's drag handle and the margin under it) up a little way; while the row shows, all of
                 // the column's width, up past the row.
