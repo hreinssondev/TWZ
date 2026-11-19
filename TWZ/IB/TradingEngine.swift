@@ -126,6 +126,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var fastChartIds: Set<Int> = []
     private var chartByReq: [Int: Int] = [:]
     private var reqByChart: [Int: Int] = [:]
+    /// Pages of bars before a chart's oldest, as the view reaches it (see `loadOlderBars`).
+    private var olderChartByReq: [Int: Int] = [:]
     /// Intraday charts also load the overnight session (20:00–03:50 ET) from the OVERNIGHT venue,
     /// since SMART's extended-hours bars stop at 20:00. Bars are kept per chart id.
     private var overnightChartByReq: [Int: Int] = [:]
@@ -425,6 +427,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         overnightQuotes.removeAll()
         chartByReq.removeAll()
         reqByChart.removeAll()
+        olderChartByReq.removeAll()
         overnightChartByReq.removeAll()
         overnightReqByChart.removeAll()
         overnightHistoryReqs.removeAll()
@@ -1051,17 +1054,38 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if symbolChanged { syncTickByTick() }
     }
 
-    /// The view reached the chart's oldest bar: asks for its full history, keeping the bars it shows
-    /// until that's in. Skipped if the chart has loaded something else since (`generation`).
-    func loadFullHistory(_ id: Int, generation: Int) {
-        guard let c = charts[id], c.generation == generation, !c.fullHistory, !c.symbol.isEmpty, !c.isLoading else {
-            let c = charts[id]
-            Self.log.notice("Full history skipped for chart \(id): generation \(c?.generation ?? -1) vs \(generation), full \(c?.fullHistory ?? false), loading \(c?.isLoading ?? false)")
+    /// The view reached the chart's oldest bar. First asks for its full history, keeping the bars it
+    /// shows until that's in; once that's in, for a page of bars before the oldest (`Timeframe.olderPage`),
+    /// one at a time, until IB has none older. Skipped if the chart has loaded something else since
+    /// (`generation`).
+    func loadOlderBars(_ id: Int, generation: Int) {
+        guard apiReady, let c = charts[id], c.generation == generation, !c.symbol.isEmpty, !c.isLoading else { return }
+        if !c.fullHistory {
+            c.fullHistory = true
+            requestChart(id, keepingBars: true)
             return
         }
-        c.fullHistory = true
-        requestChart(id, keepingBars: true)
+        guard c.fullHistoryIn, c.olderReq == nil, !c.reachedStart, let oldest = c.bars.first?.time else { return }
+        let reqId = makeReqId()
+        c.olderReq = reqId
+        olderChartByReq[reqId] = id
+        let tf = c.timeframe
+        let forex = ForexPair.isForex(c.symbol)
+        let end = Self.utcStamp.string(from: oldest)
+        Self.log.notice("History #\(reqId) \(c.symbol, privacy: .public) \(tf.barSize, privacy: .public) \(tf.olderPage, privacy: .public) before \(end, privacy: .public)")
+        // endDateTime "yyyyMMdd-HH:mm:ss" is UTC; no updates, just the page.
+        sendFields([20, reqId] + contract(c.symbol) + [
+            false, end, tf.barSize, tf.olderPage, tf.isIntraday || forex ? 0 : 1, forex ? "MIDPOINT" : "TRADES", 2, false, "",
+        ])
     }
+
+    private static let utcStamp: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyyMMdd-HH:mm:ss"
+        return f
+    }()
 
     /// (Re)requests a chart's bars. `keepingBars`: the bars it has stay on screen, not loading,
     /// until the new ones replace them.
@@ -1077,6 +1101,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             overnightHistoryReqs.remove(old)
         }
         overnightBars[id] = nil
+        if let old = c.olderReq { olderChartByReq[old] = nil }
+        c.olderReq = nil
+        c.reachedStart = false
+        c.fullHistoryIn = false
         if !keepingBars {
             c.bars = []
             c.error = nil
@@ -1093,7 +1121,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         // reqHistoricalData: endDateTime "" + keepUpToDate streams live bar updates.
         // Every chart starts with a short history and skips the OVERNIGHT venue outside the overnight
         // session: a fraction of the data to load for a grid of charts. Its full history loads once
-        // its view reaches the oldest bar (`loadFullHistory`). Forex has no trades: its bars are the
+        // its view reaches the oldest bar (`loadOlderBars`). Forex has no trades: its bars are the
         // bid/ask mid, round the clock.
         Self.log.notice("History #\(reqId) \(c.symbol, privacy: .public) \(tf.barSize, privacy: .public) \(c.duration, privacy: .public)\(keepingBars ? " (behind the bars shown)" : "", privacy: .public)")
         sendFields([20, reqId] + contract(c.symbol) + [
@@ -2537,6 +2565,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             scans[owner, default: ScanResult()].error = text
             return
         }
+        // A page before the oldest bar: "no data" means IB has nothing older; after a pacing
+        // violation, the next time the view reaches the oldest bar asks again.
+        if let id = olderChartByReq.removeValue(forKey: reqId) {
+            guard let c = charts[id], c.olderReq == reqId else { return }
+            c.olderReq = nil
+            if !text.localizedCaseInsensitiveContains("pacing") { c.reachedStart = true }
+            Self.log.notice("Older bars refused for \(c.symbol, privacy: .public): \(code) \(text, privacy: .public)")
+            return
+        }
         if let id = chartByReq[reqId], let c = charts[id] {
             // The full history failed behind the bars on screen: back to the short one, so they stay live.
             if c.fullHistory, !c.bars.isEmpty {
@@ -2601,6 +2638,20 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                             close: f.double(i + 4), volume: max(0, f.double(i + 5))))
             i += 8
         }
+        if let id = olderChartByReq.removeValue(forKey: reqId) {
+            guard let c = charts[id], c.olderReq == reqId else { return }
+            c.olderReq = nil
+            let oldest = c.bars.first?.time ?? .distantFuture
+            let older = bars.filter { $0.time < oldest }
+            Self.log.notice("History #\(reqId) \(c.symbol, privacy: .public): \(older.count) older bars from \(older.first?.time.description ?? "-", privacy: .public)")
+            if older.isEmpty {
+                c.reachedStart = true
+            } else {
+                c.bars = older + c.bars
+                chartChanged(c, all: true)
+            }
+            return
+        }
         if let id = overnightChartByReq[reqId], let c = charts[id] {
             overnightBars[id] = bars
             // History only: the request is done; the overnight session's start asks again, live.
@@ -2617,6 +2668,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard let id = chartByReq[reqId], let c = charts[id] else { return }
         Self.log.notice("History #\(reqId) \(c.symbol, privacy: .public): \(bars.count) bars from \(bars.first?.time.description ?? "-", privacy: .public)")
         c.bars = Self.merge(bars, overnightBars[id] ?? [])
+        c.fullHistoryIn = c.fullHistory
         c.isLoading = false
         c.error = c.bars.isEmpty ? "No data" : nil
         chartChanged(c, all: true)
@@ -2835,6 +2887,12 @@ nonisolated private final class ChartState {
     /// The full history, with the overnight session, rather than the short one every load starts
     /// with (see `requestChart`).
     var fullHistory: Bool
+    /// The bars are the full history's (with any older pages before them).
+    var fullHistoryIn = false
+    /// The page before the oldest bar being asked for, if any.
+    var olderReq: Int?
+    /// IB had nothing before the oldest bar.
+    var reachedStart = false
     var generation = 0
     var bars: [Bar] = []
     var isLoading = false

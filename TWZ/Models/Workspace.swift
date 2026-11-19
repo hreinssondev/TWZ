@@ -25,9 +25,6 @@ final class ChartModel: Identifiable {
     var priceShift: Double = 0
     /// ⌘-swipe vertical zoom: the auto-fitted price range times this (above 1 = zoomed out).
     var priceScale: Double = 1
-    /// Every load starts with a short history; once the view reaches its oldest bar, the full
-    /// history loads (see `Broker.loadFullHistory`).
-    var hasFullHistory = false
     /// When the chart last loaded a symbol, counted across charts: of two main-window charts showing
     /// the same stock, the lower one showed it first (see `Workspace.timeframe(showing:in:otherwise:)`).
     @ObservationIgnored var loadOrder = 0
@@ -157,11 +154,11 @@ final class Workspace {
         var kind: ScannerKind
         var id = UUID()
     }
-    /// Counts the account bar's Resets: every main-window chart follows the gainers again, on the
+    /// Counts the account bar's Resets: every main-window chart follows the grid's list again, on the
     /// top bar's timeframe.
     var gainerResets = 0
-    /// The list the main-window charts follow in place of the top gainers, from a list's load button,
-    /// until Reset (nil: the gainers). Saved.
+    /// The list the main-window charts follow in place of the top gainers, from a list's load button
+    /// or ⌘⇧ shortcut, until another list loads; Reset keeps it (nil: the gainers). Saved.
     var gridScan: ScanSpec? {
         didSet { defaults.set(gridScan.flatMap { try? JSONEncoder().encode($0) }, forKey: MainGrid.scanKey) }
     }

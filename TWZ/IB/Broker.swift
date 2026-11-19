@@ -9,11 +9,9 @@
 
 import Foundation
 import Observation
-import OSLog
 
 @Observable
 final class Broker {
-    private static let log = Logger(subsystem: "TWZ", category: "broker")
     typealias ConnectionState = TradingEngine.ConnectionState
     typealias Protective = TradingEngine.Protective
 
@@ -204,7 +202,7 @@ final class Broker {
 
     func registerCharts(_ charts: [ChartModel]) {
         self.charts = charts
-        let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe, fullHistory: $0.hasFullHistory) }
+        let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe) }
         engine.perform { $0.registerCharts(specs) }
     }
 
@@ -227,23 +225,17 @@ final class Broker {
         chart.priceShift = 0
         chart.priceScale = 1
         chart.isLoading = state == .connected && !chart.symbol.isEmpty
-        chart.hasFullHistory = false
         let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe)
         engine.perform { $0.loadChart(spec, generation: generation) }
     }
 
-    /// The view reached the chart's oldest bar: loads the full history (`Timeframe.duration`, with
-    /// the overnight session) behind the short one it started with. The bars on screen stay until
-    /// it's in, and the view stays where it is. Once per load.
-    func loadFullHistory(_ chart: ChartModel) {
-        guard state == .connected, !chart.hasFullHistory, !chart.isLoading, !chart.symbol.isEmpty, !chart.bars.isEmpty else {
-            Self.log.notice("Full history not asked for \(chart.symbol, privacy: .public): connected \(self.state == .connected), has it \(chart.hasFullHistory), loading \(chart.isLoading), \(chart.bars.count) bars")
-            return
-        }
-        Self.log.notice("Full history wanted for \(chart.symbol, privacy: .public) \(chart.timeframe.rawValue, privacy: .public): \(chart.bars.count) bars on screen")
-        chart.hasFullHistory = true
+    /// The view reached the chart's oldest bar: loads its full history (`Timeframe.duration`, with the
+    /// overnight session) behind the short one it started with, then a page before it each time
+    /// again (see `TradingEngine.loadOlderBars`). The bars on screen stay, and the view stays where it is.
+    func loadOlderBars(_ chart: ChartModel) {
+        guard state == .connected, !chart.isLoading, !chart.symbol.isEmpty, !chart.bars.isEmpty else { return }
         let (id, generation) = (chart.id, chartGeneration[chart.id] ?? 0)
-        engine.perform { $0.loadFullHistory(id, generation: generation) }
+        engine.perform { $0.loadOlderBars(id, generation: generation) }
     }
 
     /// `why` goes in the order log, e.g. "Orders panel ✕".

@@ -230,7 +230,7 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// The shorter history every chart load starts with (see `Broker.loadFullHistory`).
+    /// The shorter history every chart load starts with (see `Broker.loadOlderBars`).
     var compactDuration: String {
         switch self {
         case .m1: "1 D"
@@ -238,6 +238,17 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         case .m15: "5 D"
         case .h1: "10 D"
         case .d1: "6 M"
+        }
+    }
+
+    /// Each page of bars before the oldest, once the full history is in (see `TradingEngine.loadOlderBars`).
+    var olderPage: String {
+        switch self {
+        case .m1: "1 D"
+        case .m5: "5 D"
+        case .m15: "10 D"
+        case .h1: "1 M"
+        case .d1: "1 Y"
         }
     }
 

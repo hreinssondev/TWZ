@@ -188,15 +188,15 @@ struct CandleChart: View {
                 onRightClick: resetView
             ))
         }
-        .onChange(of: showsOldestBar, initial: true) { _, shows in
-            if shows { broker.loadFullHistory(chart) }
+        .onChange(of: oldestBarShown, initial: true) { _, shown in
+            if shown != nil { broker.loadOlderBars(chart) }
         }
     }
 
     // MARK: Viewport
 
     /// The view reaches the oldest bar loaded: zoomed or scrolled out that far, or too little
-    /// history to fill it. The full history then loads behind it (once per load).
+    /// history to fill it. Older bars then load behind it (see `Broker.loadOlderBars`).
     /// Zoomed out as wide as the bars loaded counts too: zooming around the pointer leaves room
     /// for the future on the right, so the oldest bar can stay just off screen when the zoom stops at
     /// every bar loaded (a forex pair's day of minutes is more than `maxVisibleBars`).
@@ -204,6 +204,10 @@ struct CandleChart: View {
         let count = Double(chart.bars.count)
         return count > 0 && (chart.scrollBack + chart.visibleBars >= count || chart.visibleBars >= count)
     }
+
+    /// The bar count while the view reaches the oldest bar (nil otherwise): older bars that still
+    /// leave it on screen ask for the page before them.
+    private var oldestBarShown: Int? { showsOldestBar ? chart.bars.count : nil }
 
     private func barWidth(plotWidth: CGFloat) -> CGFloat {
         plotWidth / (chart.visibleBars + rightPadding(restOfDay))
@@ -466,13 +470,15 @@ struct CandleChart: View {
 
         // Vertical grid + time labels, roughly every 90px.
         let labelEvery = max(1, Int((90 / barWidth).rounded(.up)))
+        let labelSpacing = Double(labelEvery) * (chart.timeframe.barSeconds ?? 86_400)
         for i in start..<end where i % labelEvery == 0 {
             let xx = x(i)
             var path = Path()
             path.move(to: CGPoint(x: xx, y: plot.minY))
             path.addLine(to: CGPoint(x: xx, y: plot.maxY))
             plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
-            plotCtx.draw(Text(timeLabel(bars[i].time)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
+            let previous = i >= labelEvery ? bars[i - labelEvery].time : nil
+            plotCtx.draw(Text(timeLabel(bars[i].time, previous: previous, spacing: labelSpacing)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
                      at: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1))
         }
         if let rest = v.rest {
@@ -484,7 +490,7 @@ struct CandleChart: View {
                 path.addLine(to: CGPoint(x: xx, y: plot.maxY))
                 plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
                 let time = rest.from.addingTimeInterval(Double(k) * rest.barSeconds)
-                plotCtx.draw(Text(timeLabel(time)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
+                plotCtx.draw(Text(timeLabel(time, previous: time.addingTimeInterval(-labelSpacing), spacing: labelSpacing)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
                              at: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1))
             }
         }
@@ -779,10 +785,13 @@ struct CandleChart: View {
         }
     }
 
-    private func timeLabel(_ date: Date) -> String {
-        chart.timeframe.isIntraday
-            ? Self.timeFormatter.string(from: date)
-            : Self.dayFormatter.string(from: date)
+    /// A time axis label: the time, but the date for daily bars, for labels 12 hours or more apart,
+    /// and where a new day starts since the label before (`previous`, `spacing` seconds of bars back).
+    private func timeLabel(_ date: Date, previous: Date?, spacing: Double) -> String {
+        guard chart.timeframe.isIntraday, spacing < 12 * 3600,
+              previous.map({ Calendar.current.isDate($0, inSameDayAs: date) }) ?? true
+        else { return Self.dayFormatter.string(from: date) }
+        return Self.timeFormatter.string(from: date)
     }
 
     private static let timeFormatter: DateFormatter = {

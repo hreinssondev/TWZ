@@ -88,14 +88,13 @@ extension Workspace {
         manualChartIDs.insert(chart.id)
     }
 
-    /// Every main-window chart follows the gainers again (also after a list's load button), on the
-    /// account bar's timeframe.
+    /// Every main-window chart follows the grid's list again (the gainers, or the list last loaded
+    /// into it), on the account bar's timeframe.
     func resetToGainers() {
         manualChartIDs = []
         handDisplaced = [:]
         secondaryPins = [:]
         secondaryDisplaced = [:]
-        gridScan = nil
         gainerResets += 1
     }
 
