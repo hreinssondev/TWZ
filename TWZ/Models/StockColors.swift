@@ -13,15 +13,17 @@
 import SwiftUI
 
 nonisolated enum StockColor: String, CaseIterable, Sendable {
-    case red, green, blue, yellow, orange, purple, magenta, white, black, pink
+    case red, green, blue, yellow, orange, purple, magenta, white, black, pink, brown, turquoise
 
     static let storageKey = "stockColors"
 
-    /// The letter giving it with ⌥⇧: its first, but for black's K and pink's I (B is blue's, P purple's).
+    /// The letter giving it with ⌥⇧: its first, but for black's K, pink's I and brown's N (B is blue's,
+    /// P purple's).
     var key: String {
         switch self {
         case .black: "k"
         case .pink: "i"
+        case .brown: "n"
         default: String(rawValue.prefix(1))
         }
     }
@@ -44,6 +46,8 @@ nonisolated enum StockColor: String, CaseIterable, Sendable {
         case .white: .white
         case .black: .black
         case .pink: Color(red: 1, green: 0.6, blue: 0.8)
+        case .brown: Color(red: 0.6, green: 0.4, blue: 0.2)
+        case .turquoise: Color(red: 0.25, green: 0.88, blue: 0.82)
         }
     }
 }
