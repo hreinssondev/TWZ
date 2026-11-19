@@ -6,6 +6,8 @@
 //  between them; clicking one of their headers stacks them instead, Positions on top (clicking again
 //  puts them side by side). Rows are two lines so they fit the narrow columns.
 //  Orders lists the working orders and, once done, what each filled: dimmed, at its average fill price.
+//  A ⌃-click what-if buy shows among them too, as What-if, with IB's preview of its commissions and fees
+//  and the margin it would take (it's never sent); its ✕ removes it, like ⌃-clicking its line.
 //  Fills of orders entered in TWS (which IB reports without an order id) in the same symbol, side and
 //  second show as one row.
 //  Filled orders and round trips name what placed them: the hotkey's price (Mid, Last, Bid, Ask),
@@ -190,11 +192,13 @@ struct OrdersPanel: View {
     private enum OrderEntry: Identifiable {
         case working(OrderRow)
         case filled(FillGroup)
+        case whatIf(symbol: String, WhatIf)
 
         var id: String {
             switch self {
             case .working(let o): "order \(o.id)"
             case .filled(let g): g.id
+            case .whatIf(let symbol, _): "what-if \(symbol)"
             }
         }
 
@@ -202,15 +206,17 @@ struct OrdersPanel: View {
             switch self {
             case .working(let o): o.updated
             case .filled(let g): g.fill.time
+            case .whatIf(_, let w): w.time ?? .distantPast
             }
         }
     }
 
-    /// Working orders and filled ones, newest first.
+    /// Working orders, ⌃-click what-ifs and filled orders, newest first.
     private var orderEntries: [OrderEntry] {
         let working = activeOrders
         let filled = fillGroups(excluding: Set(working.map(\.id)))
-        return (working.map(OrderEntry.working) + filled.map(OrderEntry.filled)).sorted { $0.time > $1.time }
+        let whatIfs = workspace.whatIfs.map { OrderEntry.whatIf(symbol: $0.key, $0.value) }
+        return (working.map(OrderEntry.working) + whatIfs + filled.map(OrderEntry.filled)).sorted { $0.time > $1.time }
     }
 
     @ViewBuilder private var orderRows: some View {
@@ -221,6 +227,7 @@ struct OrdersPanel: View {
             switch entry {
             case .working(let o): workingRow(o, tripOrders: trips.numbers["\(o.symbol) \(o.id)"])
             case .filled(let g): filledRow(g, tripOrders: trips.numbers["\(g.fill.symbol) \(RoundTrip.orderKey(g.fill))"])
+            case .whatIf(let symbol, let w): whatIfRow(symbol, w)
             }
         }
     }
@@ -279,6 +286,68 @@ struct OrdersPanel: View {
         .rowStyle()
         // Only while it's partly filled.
         .overlay(alignment: .bottom) { if o.filled > 0, o.filled < o.quantity { fillBar(o) } }
+    }
+
+    /// A ⌃-click what-if buy laid out like a working order, in the what-if line's color, never sent:
+    /// its value in NOK, price and shares, and IB's preview of its commissions and fees (in NOK, a
+    /// range when IB gives one); the margin it would take in its tooltip.
+    private func whatIfRow(_ symbol: String, _ w: WhatIf) -> some View {
+        let valueNOK = broker.usdPerPriceUnit(symbol).flatMap { usd in broker.usdNok.map { w.shares * w.price * usd * $0 } }
+        let fees = w.preview?.commission
+        let feesText = fees.map(commissionRange)
+        var help = "What-if: BUY \(Fmt.shares(w.shares)) \(symbol) LMT \(Fmt.price(w.price, for: symbol)), never sent. "
+        if let p = w.preview {
+            help += "IB's preview: initial margin +\(Fmt.nok(p.initMarginChange, groupedFrom: 0)) NOK"
+            if let maint = p.maintMarginChange { help += ", maintenance margin +\(Fmt.nok(maint, groupedFrom: 0)) NOK" }
+            if let fees {
+                help += ", commissions and fees \(Self.range(fees.min, fees.max) { Fmt.amount($0) }) \(fees.currency). "
+            } else {
+                help += ", no commission given. "
+            }
+        } else {
+            help += "IB's preview of its commissions and margin isn't in. "
+        }
+        help += "Double-click to show the chart; ✕ or ⌃-clicking its line removes it."
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                symbolButton(symbol, onDoubleClick: { workspace.focusOrder(symbol, broker: broker) })
+                Spacer(minLength: 2)
+                Text("What-if").foregroundStyle(TradingChart.whatIfColor).font(.system(size: 10))
+                Button {
+                    workspace.whatIfs[symbol] = nil
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .help("Remove the what-if")
+            }
+            HStack(spacing: 4) {
+                if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(true)) }
+                Text("LMT \(Fmt.price(w.price, for: symbol))")
+                Text(Fmt.shares(w.shares, groupedFrom: Self.groupedFrom))
+                Spacer(minLength: 0)
+                if let feesText { Text(feesText).foregroundStyle(.secondary) }
+            }
+            .font(.system(size: 10).monospacedDigit())
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { workspace.focusOrder(symbol, broker: broker) }
+        .help(help)
+        .rowStyle()
+    }
+
+    /// IB's commission estimate in whole NOK (a range when it gives one), or in its own currency
+    /// without a rate for it.
+    private func commissionRange(_ c: OrderPreview.Commission) -> String {
+        let rate: Double? = c.currency == "NOK" ? 1 : c.currency == "USD" ? broker.usdNok : nil
+        guard let rate else { return "\(Self.range(c.min, c.max) { Fmt.amount($0) }) \(c.currency)" }
+        return Self.range(c.min * rate, c.max * rate) { Fmt.nok($0, groupedFrom: Self.groupedFrom) }
+    }
+
+    /// "12" or "12–15": one figure when both ends round alike.
+    private static func range(_ low: Double, _ high: Double, _ format: (Double) -> String) -> String {
+        let a = format(low), b = format(high)
+        return a == b ? a : "\(a)–\(b)"
     }
 
     /// A done order laid out like a working one, dimmed, with its fill time and average fill price.

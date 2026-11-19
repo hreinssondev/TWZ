@@ -1648,6 +1648,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         var available: Double
         /// Initial margin each share adds, plus the equity it costs (commission).
         var perShare: Double
+        /// The order's own figures: the margin it adds, its commissions and fees.
+        var order: OrderPreview
 
         var maxShares: Double { perShare > 0 ? max(0, available / perShare).rounded(.down) : 0 }
     }
@@ -1707,6 +1709,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let why = "margin preview for the chart's \(action == "BUY" ? "buying" : "short selling") power"
         marginLimit(symbol, action: action, price: price, why: why) { result in
             completion(price, try? result.get().maxShares)
+        }
+    }
+
+    /// IB's preview of one order, never placed, asked quietly: the margin it would add and its
+    /// commissions and fees. `completion` gets it (nil when IB can't preview it) on the engine queue
+    /// a second or two later; it isn't called while not connected.
+    func previewOrder(_ action: String, symbol rawSymbol: String, shares: Double, at rawPrice: Double,
+                      completion: @escaping @Sendable (OrderPreview?) -> Void) {
+        let symbol = rawSymbol.uppercased()
+        guard apiReady, !symbol.isEmpty, shares > 0, rawPrice > 0 else { return }
+        previewMargin(symbol, action: action, shares: shares, price: tickRounded(rawPrice, for: symbol),
+                      why: "preview of a ⌃-click what-if") { result in
+            completion(try? result.get().order)
         }
     }
 
@@ -1815,7 +1830,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         skip(1)                                     // status
         func value() -> Double? { Double(next()).flatMap { $0 < Self.unsetDouble / 2 ? $0 : nil } }
         let initBefore = value(), _ = value(), equityBefore = value()
-        let initChange = value(), _ = value(), equityChange = value()
+        let initChange = value(), maintChange = value(), equityChange = value()
+        skip(3)                                     // initMarginAfter, maintMarginAfter, equityWithLoanAfter
+        let commission = value(), minCommission = value(), maxCommission = value(), currency = next()
         guard whatIf == "1" || whatIf == "true", let initBefore, let equityBefore, let initChange, let equityChange else {
             log("WHATIF #\(f.str(1)) unreadable answer: \(f.joined(separator: "|"))")
             return .failure(PreviewFailure(reason: "couldn't read IB's margin preview"))
@@ -1824,10 +1841,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard shares > 0, initChange - equityChange > 0 else {
             return .failure(PreviewFailure(reason: "IB's margin preview shows no margin for the order"))
         }
+        // IB gives the commission, or for a what-if usually just its range; a currency code says they're read right.
+        var fees: OrderPreview.Commission?
+        if let low = commission ?? minCommission, let high = commission ?? maxCommission ?? minCommission,
+           low >= 0, high >= low, currency.count == 3, currency.allSatisfy({ $0.isLetter && $0.isUppercase }) {
+            fees = OrderPreview.Commission(min: low, max: high, currency: currency)
+        }
         log("WHATIF #\(f.str(1)) init margin \(Fmt.amount(initBefore)) + \(Fmt.amount(initChange)), "
-            + "equity with loan \(Fmt.amount(equityBefore)) \(Fmt.amount(equityChange, signed: true))")
+            + "equity with loan \(Fmt.amount(equityBefore)) \(Fmt.amount(equityChange, signed: true))"
+            + (fees.map { ", commission \(Fmt.amount($0.min))–\(Fmt.amount($0.max)) \($0.currency)" } ?? ""))
         return .success(MarginPreview(available: equityBefore - initBefore,
-                                      perShare: (initChange - equityChange) / shares))
+                                      perShare: (initChange - equityChange) / shares,
+                                      order: OrderPreview(initMarginChange: initChange, maintMarginChange: maintChange,
+                                                          commission: fees)))
     }
 
     // MARK: - Restricted stocks

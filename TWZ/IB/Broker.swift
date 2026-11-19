@@ -330,6 +330,18 @@ final class Broker {
         }
     }
 
+    /// IB's preview of one order, never placed: the margin it would take and its commissions and
+    /// fees. `completion` gets it a second or two later (nil when IB can't preview it), or never
+    /// while not connected.
+    func previewOrder(_ action: String, symbol: String, shares: Double, at price: Double,
+                      completion: @escaping @MainActor @Sendable (OrderPreview?) -> Void) {
+        engine.perform { engine in
+            engine.previewOrder(action, symbol: symbol, shares: shares, at: price) { preview in
+                Task { @MainActor in completion(preview) }
+            }
+        }
+    }
+
     /// IB's shortable tick says the stock can't be shorted (see `shortability`).
     private static func cantShort(_ level: Double?, _ symbol: String) -> Bool {
         !ForexPair.isForex(symbol) && (level.map { $0 <= 1.5 } ?? false)

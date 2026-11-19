@@ -58,9 +58,28 @@ nonisolated struct WhatIf: Codable {
 
     var price: Double
     var shares: Double
+    /// When it was made: tells it apart from a later one in the same symbol.
+    var time: Date?
+    /// IB's preview of the buy, a second or two after it's made (see `Broker.previewOrder`).
+    var preview: OrderPreview?
 
     /// P/L if sold at `exit`.
     func pnl(at exit: Double) -> Double { (exit - price) * shares }
+}
+
+/// What IB's preview of an order (a what-if, never placed) says it would take.
+nonisolated struct OrderPreview: Codable, Equatable, Sendable {
+    /// Initial and maintenance margin the order adds, in the account's currency (NOK).
+    var initMarginChange: Double
+    var maintMarginChange: Double?
+    var commission: Commission?
+
+    /// Commissions and fees: IB's estimate is a range (`min` = `max` when it's sure).
+    struct Commission: Codable, Equatable, Sendable {
+        var min: Double
+        var max: Double
+        var currency: String
+    }
 }
 
 /// A main-window chart given a stock by hand, as saved: its cell and what it shows.

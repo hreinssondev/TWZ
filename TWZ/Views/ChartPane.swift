@@ -400,7 +400,13 @@ struct TradingChart: View {
                     // No position: a what-if buy at the clicked price, sized from IB's margin preview.
                     let symbol = chart.symbol
                     broker.sizeWhatIf(symbol: symbol, at: price, fraction: WhatIf.buyingPowerFraction) { size in
-                        workspace.whatIfs[symbol] = WhatIf(price: size.price, shares: size.shares)
+                        let whatIf = WhatIf(price: size.price, shares: size.shares, time: Date())
+                        workspace.whatIfs[symbol] = whatIf
+                        // IB's preview of exactly that buy, for its commissions and margin in the Orders panel.
+                        broker.previewOrder("BUY", symbol: symbol, shares: size.shares, at: size.price) { preview in
+                            guard workspace.whatIfs[symbol]?.time == whatIf.time else { return }
+                            workspace.whatIfs[symbol]?.preview = preview
+                        }
                     }
                 }
             },
@@ -539,7 +545,7 @@ struct TradingChart: View {
     private var closedTradeColor: Color { LineColors.resolve(closedTradeHex, default: sideColors.down) }
 
     /// Hot pink: the system pink reads as red next to the stop loss line.
-    private static let whatIfColor = Color(red: 1.0, green: 0.25, blue: 0.8)
+    static let whatIfColor = Color(red: 1.0, green: 0.25, blue: 0.8)
 
     private var hasPosition: Bool { broker.positions[chart.symbol].map { $0.quantity != 0 } ?? false }
 
