@@ -22,6 +22,8 @@ struct BorrowTab: View {
         VStack(alignment: .leading, spacing: 0) {
             if symbol.isEmpty {
                 note("Select a chart to see its borrow")
+            } else if let pair = ForexPair(symbol) {
+                note("\(symbol): forex needs no borrow. A short leaves the account owing \(pair.base), charged IB's interest on it.")
             } else {
                 content
             }

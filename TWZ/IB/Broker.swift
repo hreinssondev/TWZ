@@ -93,13 +93,16 @@ final class Broker {
         var time: Date
     }
 
-    /// Live market value of all positions in USD (falls back to cost when no quote yet).
+    /// Live market value of all positions in USD (falls back to cost when no quote yet); nil until
+    /// every forex position's currency has a dollar rate.
     var totalPositionValue: Double? {
         guard state == .connected else { return nil }
-        if positions.isEmpty { return 0 }
-        return positions.values.reduce(0) { sum, p in
-            sum + abs(p.quantity) * (quote(p.symbol)?.last ?? p.avgCost)
+        var sum = 0.0
+        for p in positions.values {
+            guard let usd = usdPerPriceUnit(p.symbol) else { return nil }
+            sum += abs(p.quantity) * (quote(p.symbol)?.last ?? p.avgCost) * usd
         }
+        return sum
     }
 
     /// Position value in NOK, the account's base currency like equity and P/L: the live USD value
@@ -285,9 +288,18 @@ final class Broker {
         sessionCloses["\(symbol)|\(MarketSession.dayKey())"]
     }
 
-    /// Shares a NOK amount buys at `price`, converted at the current USD.NOK rate.
-    func shares(forNOK nok: Double, at price: Double) -> Double? {
-        TradingEngine.shares(forNOK: nok, at: price, usdNok: usdNok)
+    /// Shares (a forex pair's base currency units) a NOK amount buys of `symbol` at `price`, at the
+    /// current rates.
+    func shares(forNOK nok: Double, of symbol: String, at price: Double) -> Double? {
+        TradingEngine.shares(forNOK: nok, at: price, usdNok: usdNok, usdPerUnit: usdPerPriceUnit(symbol))
+    }
+
+    /// Dollars per unit of the currency `symbol` is priced in: 1 for a stock; for a forex pair, its
+    /// quote currency's rate from the live quotes, nil until that's quoted. Prices times shares times
+    /// this are dollars.
+    func usdPerPriceUnit(_ symbol: String) -> Double? {
+        guard let pair = ForexPair(symbol) else { return 1 }
+        return ForexPair.usdPerUnit(of: pair.quote, usdNok: usdNok) { quotes[$0]?.mid }
     }
 
     /// What a ⌃-click at `price` places: a stop loss on the losing side of the position's average

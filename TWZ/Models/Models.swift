@@ -40,6 +40,12 @@ nonisolated struct Quote: Equatable {
         guard let last, let prevClose, prevClose > 0 else { return nil }
         return (last - prevClose) / prevClose * 100
     }
+
+    /// Bid/ask midpoint, else the last price.
+    var mid: Double? {
+        if let bid, let ask, bid > 0, ask > 0 { return (bid + ask) / 2 }
+        return last
+    }
 }
 
 nonisolated struct Position: Identifiable, Equatable {
@@ -122,11 +128,12 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
     var exitPrice: Double? { Self.average(isLong ? sellValue : buyValue, isLong ? sellShares : buyShares) }
 
     /// Closed: proceeds minus cost, commissions and fees. Open: also values the shares still held at `last`.
-    /// nil when part of the trip was opened before today, or an open trip has no last price.
-    func pnl(last: Double?) -> Double? {
+    /// In dollars, the prices' currency converted at `usdPerUnit` (a forex pair's quote currency; 1 for
+    /// stocks). nil when part of the trip was opened before today, or an open trip has no last price.
+    func pnl(last: Double?, usdPerUnit: Double = 1) -> Double? {
         guard carried == 0 else { return nil }
-        guard isOpen else { return sellValue - buyValue - commissions }
-        return last.map { sellValue - buyValue + openShares * $0 - commissions }
+        guard isOpen else { return (sellValue - buyValue) * usdPerUnit - commissions }
+        return last.map { (sellValue - buyValue + openShares * $0) * usdPerUnit - commissions }
     }
 
     /// The order a fill came from: its id, or for orders entered in TWS (which IB reports without one)
@@ -496,6 +503,8 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
     case losers = "Top Losers"
     case afterHours = "AH Gainers"
     case dollarVolume = "Most Active $"
+    /// Not an IB scan: the engine ranks `ForexPair.listed` itself, by % change.
+    case forex = "Forex"
     var id: String { rawValue }
 
     /// Rows a list panel's scanner returns; a chart grid's asks for IB's maximum, 50, to fill 8×4.
@@ -510,6 +519,7 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
         case .losers: "TOP_PERC_LOSE"
         case .afterHours: "TOP_AFTER_HOURS_PERC_GAIN"
         case .dollarVolume: "MOST_ACTIVE_USD"
+        case .forex: ""
         }
     }
 
@@ -582,6 +592,28 @@ nonisolated enum MarketSession {
             .compactMap { s, e, p in max(s, date) < e ? (max(s, date), e, p) : nil }
     }
 
+    /// IDEALPRO forex hours: Sunday 17:15 ET to Friday 17:00 ET, closed 17:00–17:15 ET in between.
+    static func forexIsOpen(_ date: Date = Date()) -> Bool {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = eastern
+        let c = cal.dateComponents([.weekday, .hour, .minute], from: date)
+        guard let weekday = c.weekday, let h = c.hour, let m = c.minute else { return false }
+        let minutes = h * 60 + m, close = 17 * 60, reopen = 17 * 60 + 15
+        switch weekday {
+        case 7: return false                                    // Saturday
+        case 1: return minutes >= reopen                        // Sunday evening
+        case 6: return minutes < close                          // Friday
+        default: return minutes < close || minutes >= reopen
+        }
+    }
+
+    /// When a closed IDEALPRO opens again: "17:15 ET" after a weekday's close, else "Sunday 17:15 ET".
+    static func forexReopening(_ date: Date = Date()) -> String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = eastern
+        return (2...5).contains(cal.component(.weekday, from: date)) ? "17:15 ET" : "Sunday 17:15 ET"
+    }
+
     /// True during regular US equity hours (09:30–16:00 ET, Mon–Fri).
     static func isRegularHours(_ date: Date = Date()) -> Bool {
         phase(date) == .regular
@@ -625,6 +657,13 @@ nonisolated enum Fmt {
     static func price(_ v: Double?) -> String {
         guard let v else { return "—" }
         return v.formatted(.number.precision(.fractionLength(v < 1 ? 4 : 2)))
+    }
+
+    /// A price at `symbol`'s precision: a forex pair's 5 decimals (3 for yen pairs), else as `price(_:)`.
+    static func price(_ v: Double?, for symbol: String) -> String {
+        guard let pair = ForexPair(symbol) else { return price(v) }
+        guard let v else { return "—" }
+        return v.formatted(.number.precision(.fractionLength(pair.decimals)).grouping(.never))
     }
 
     static func money(_ v: Double?, signed: Bool = false) -> String {

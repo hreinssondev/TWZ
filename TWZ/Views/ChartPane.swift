@@ -75,7 +75,7 @@ extension Workspace {
     /// the gainers, until Reset. A chart that already shows it just keeps it; next to another chart
     /// showing it, it takes the other of 1m / 5m (see `timeframe(showing:in:otherwise:)`).
     func loadByHand(_ symbol: String, into chart: ChartModel, broker: Broker) {
-        let s = symbol.trimmingCharacters(in: .whitespaces).uppercased()
+        let s = ForexPair.normalize(symbol)
         guard !s.isEmpty else { return }
         if chart.symbol != s {
             load(s, timeframe: timeframe(showing: s, in: chart, otherwise: chart.timeframe), into: chart, broker: broker)
@@ -93,7 +93,7 @@ extension Workspace {
 
     /// Loads a symbol into a chart, on `timeframe` if given, and (re)subscribes its data.
     func load(_ symbol: String, timeframe: Timeframe? = nil, into chart: ChartModel, broker: Broker) {
-        let s = symbol.trimmingCharacters(in: .whitespaces).uppercased()
+        let s = ForexPair.normalize(symbol)
         guard !s.isEmpty else { return }
         chart.symbol = s
         if let timeframe { chart.timeframe = timeframe }
@@ -179,13 +179,15 @@ struct ChartPane: View {
 
             // "2 LONG 23 322 +452": the orders that opened or added to the open round trip (an order in
             // several fills counts once), the market value in NOK (at cost until there's a quote), and the
-            // P/L in NOK once there's a quote; without a USD.NOK rate, shares and the P/L in dollars.
+            // P/L in NOK once there's a quote; without a USD.NOK rate, shares and the P/L in dollars. A
+            // forex pair's values convert at its currency's dollar rate (none shown until that's in).
             if let p = broker.positions[chart.symbol] {
                 let fills = broker.fills.values.filter { $0.symbol == chart.symbol }
                 let orders = RoundTrip.build(fills: fills, positions: broker.positions).first(where: \.isOpen)?.orderCount ?? 0
                 let last = broker.quote(p.symbol)?.last
-                let valueNOK = broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * $0 }
-                let pnl = last.map { ($0 - p.avgCost) * p.quantity }
+                let usd = broker.usdPerPriceUnit(p.symbol)
+                let valueNOK = usd.flatMap { usd in broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * usd * $0 } }
+                let pnl = last.flatMap { last in usd.map { (last - p.avgCost) * p.quantity * $0 } }
                 HStack(spacing: 4) {
                     Text("\(orders > 0 ? "\(orders) " : "")\(p.quantity > 0 ? "LONG" : "SHORT") \(valueNOK.map { Fmt.nok($0, groupedFrom: 0) } ?? Fmt.shares(abs(p.quantity)))")
                     if let pnl {
@@ -193,7 +195,8 @@ struct ChartPane: View {
                             .foregroundStyle(sideColors.of(pnl >= 0))
                     }
                 }
-                .help("\(orders > 0 ? "\(orders) order\(orders == 1 ? "" : "s") opened or added to it, " : "")\(Fmt.shares(abs(p.quantity))) shares")
+                .help("\(orders > 0 ? "\(orders) order\(orders == 1 ? "" : "s") opened or added to it, " : "")"
+                      + (ForexPair(p.symbol).map { "\(Fmt.shares(abs(p.quantity))) \($0.base)" } ?? "\(Fmt.shares(abs(p.quantity))) shares"))
                 .font(.system(size: 10, weight: .semibold).monospacedDigit())
                 .padding(.horizontal, 5).padding(.vertical, 1)
                 .background(Capsule().fill(sideColors.of(p.quantity > 0).opacity(0.25)))
@@ -377,12 +380,16 @@ struct TradingChart: View {
             },
             hoverPnL: { price in
                 // The open position's if it closed there, else the what-if line's, else a pretend buy
-                // at the last price, sized as Settings says: by buying power or a NOK amount.
-                if let p = broker.positions[chart.symbol], p.quantity != 0 { return (price - p.avgCost) * p.quantity }
-                if let whatIf = workspace.whatIfs[chart.symbol] { return whatIf.pnl(at: price) }
+                // at the last price, sized as Settings says: by buying power or a NOK amount. In dollars
+                // (a forex pair's at its currency's dollar rate).
+                guard let usd = broker.usdPerPriceUnit(chart.symbol) else { return nil }
+                if let p = broker.positions[chart.symbol], p.quantity != 0 { return (price - p.avgCost) * p.quantity * usd }
+                if let whatIf = workspace.whatIfs[chart.symbol] { return whatIf.pnl(at: price) * usd }
                 guard let last = broker.quote(chart.symbol)?.last else { return nil }
-                if hoverSizing == .nok { return broker.shares(forNOK: hoverAmountNOK, at: last).map { (price - last) * $0 } }
-                return broker.hoverSizes[chart.symbol].map { (price - last) * $0.shares }
+                if hoverSizing == .nok {
+                    return broker.shares(forNOK: hoverAmountNOK, of: chart.symbol, at: last).map { (price - last) * $0 * usd }
+                }
+                return broker.hoverSizes[chart.symbol].map { (price - last) * $0.shares * usd }
             },
             onHover: { if hoverSizing == .buyingPower { broker.refreshHoverSize(symbol: chart.symbol) } },
             onCancelOrder: { id in
@@ -548,7 +555,7 @@ struct TradingChart: View {
             // ⌃-clicked with no position: a line at the pretend buy's price, the price on the axis (just
             // left of it where the last price box would cover it) and, in the chart beside it, what it's
             // worth in NOK (80% of what IB's margin allows; "W" until the rate is in); a click on it removes it.
-            let valueNOK = broker.usdNok.map { whatIf.shares * whatIf.price * $0 }
+            let valueNOK = broker.usdPerPriceUnit(chart.symbol).flatMap { usd in broker.usdNok.map { whatIf.shares * whatIf.price * usd * $0 } }
             lines.append(PriceLine(price: whatIf.price, color: Self.whatIfColor, label: "", orderId: WhatIf.lineId,
                                    movesAsideForLastPrice: true, chartText: valueNOK.map(OrderAmount.format) ?? "W",
                                    cancelsOnClick: true))

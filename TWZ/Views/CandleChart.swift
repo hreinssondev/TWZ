@@ -9,7 +9,7 @@
 //  anywhere but an order line; double-clicking an order line cancels that order, and a single click
 //  does for the lines placed by ⌃-click (stop loss, take profit, what-if).
 //  Intraday charts shade the sessions outside regular hours: pre-market and after hours in grey,
-//  overnight in indigo.
+//  overnight in indigo (not forex charts: forex trades round the clock).
 //  Indicators: SMA 9 and SMA 21 on every chart, plus VWAP (from 04:00 ET) on intraday charts;
 //  each can be turned off, and their thickness set, in Settings › Appearance.
 //  Trades (off by default): the day's fills in the symbol, a green ▲ under each buy and a red ▼
@@ -220,7 +220,7 @@ struct CandleChart: View {
 
     private var restOfDay: RestOfDay? {
         let bars = chart.bars
-        guard let seconds = chart.timeframe.barSeconds, let last = bars.last else { return nil }
+        guard let seconds = chart.timeframe.barSeconds, let last = bars.last, !ForexPair.isForex(chart.symbol) else { return nil }
         let from = last.time.addingTimeInterval(seconds)
         let sessions = MarketSession.restOfDay(from: from)
         guard let end = sessions.last?.end else { return nil }
@@ -413,7 +413,8 @@ struct CandleChart: View {
         let (up, down) = candleTheme.colors(customUp: customUp, customDown: customDown)
 
         // Session shading, one band per run of bars from the same session.
-        if chart.timeframe.isIntraday {
+        let forex = ForexPair(chart.symbol)
+        if chart.timeframe.isIntraday, forex == nil {
             var i = start
             while i < end {
                 let phase = bars[i].phase
@@ -441,10 +442,12 @@ struct CandleChart: View {
         }
 
         // Horizontal grid + price labels.
-        // Never finer than a cent (a hundredth of a cent under $1), the smallest step prices show.
-        let ticks = Self.niceTicks(lo: lo, hi: hi, count: max(2, Int(priceRect.height / labelSpacing)),
-                                   minStep: hi < 1 ? 0.0001 : 0.01)
-        let decimals = ticks.count > 1 ? Self.decimals(forStep: ticks[1] - ticks[0], atLeast: hi < 1 ? 4 : 2) : 2
+        // Never finer than a cent (a hundredth of a cent under $1), the smallest step prices show; for a
+        // forex pair, a tenth of a pip.
+        let minStep = forex.map { $0.pip / 10 } ?? (hi < 1 ? 0.0001 : 0.01)
+        let minDecimals = forex.map { $0.decimals - 1 } ?? (hi < 1 ? 4 : 2)
+        let ticks = Self.niceTicks(lo: lo, hi: hi, count: max(2, Int(priceRect.height / labelSpacing)), minStep: minStep)
+        let decimals = ticks.count > 1 ? Self.decimals(forStep: ticks[1] - ticks[0], atLeast: minDecimals) : minDecimals
         for tick in ticks {
             let yy = y(tick)
             var path = Path()
@@ -530,7 +533,7 @@ struct CandleChart: View {
             let lineY = y(line.price)
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed, dotted: line.dotted,
-                     tag: line.label.isEmpty ? Fmt.price(line.price) : "\(line.label) \(Fmt.price(line.price))",
+                     tag: line.label.isEmpty ? Fmt.price(line.price, for: chart.symbol) : "\(line.label) \(Fmt.price(line.price, for: chart.symbol))",
                      tagInside: covered || isOrder(line), chartTag: line.chartText,
                      lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress)
         }
@@ -542,7 +545,7 @@ struct CandleChart: View {
             drawLine(in: &ctx, y: y(last), plot: plot,
                      color: LineColors.resolve(lastPriceHex, default: LineColors.defaultLastPrice), dashed: lastPriceDashed,
                      dotted: lastPriceDashed && lastPriceDots,
-                     tag: Fmt.price(last), tagOpacity: lastPriceOpacity, showsLine: showLastPriceLine)
+                     tag: Fmt.price(last, for: chart.symbol), tagOpacity: lastPriceOpacity, showsLine: showLastPriceLine)
         }
         visibleLines.filter { $0.movesAsideForLastPrice || isOrder($0) }.forEach(draw)
 
@@ -565,7 +568,7 @@ struct CandleChart: View {
                 } else if let modifierTint {
                     tagColor = modifierTint
                 }
-                drawTag(in: &ctx, text: Fmt.price(hoverPrice), y: hover.y, plot: plot, color: tagColor)
+                drawTag(in: &ctx, text: Fmt.price(hoverPrice, for: chart.symbol), y: hover.y, plot: plot, color: tagColor)
                 if let pnl = hoverPnL?(hoverPrice) {
                     drawPnLTag(in: &ctx, pnl: pnl, y: hover.y, plot: plot)
                 }

@@ -165,6 +165,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var fxBid: Double?
     private var fxAsk: Double?
     private var fxSaved = Date.distantPast
+    /// IB's smallest price step per forex pair, from its contract details (see `contractData`).
+    private var minTicks: [String: Double] = [:]
+    private var detailsSymbolByReq: [Int: String] = [:]
+    private var forexRankingScheduled = false
 
     private let accountSummaryReq = 1
     private let pnlReq = 2
@@ -293,7 +297,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if dirty.contains(.protective) { s.protectiveOrders = protectiveOrders }
         if dirty.contains(.orderSources) { s.orderSources = orderSources }
         if dirty.contains(.tickStreams) {
-            s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind == .last }.map(\.symbol))
+            s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind != .bidAsk }.map(\.symbol))
             s.tickLimitedSymbols = tickLimitedSymbols
         }
         if dirty.contains(.shortability) {
@@ -412,6 +416,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         ssrSymbolByReq.removeAll()
         scans.removeAll()
         fxReq = nil
+        detailsSymbolByReq.removeAll()
         fxBid = nil
         fxAsk = nil
         usdNokIsLive = false
@@ -494,6 +499,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private func syncQuoteSubscriptions() {
         var wanted = quoteOwners.values.reduce(into: Set<String>()) { $0.formUnion($1) }
         wanted.formUnion(positions.keys)
+        // A forex pair's values turn into dollars at its quote currency's dollar pair (kroner at USD.NOK).
+        wanted.formUnion(wanted.compactMap { symbol in
+            ForexPair(symbol).flatMap { $0.quote == "NOK" ? nil : ForexPair.dollarPair(for: $0.quote) }
+        })
         guard apiReady else { return }
         for (symbol, reqId) in quoteReqBySymbol where !wanted.contains(symbol) {
             send(2, 2, reqId)                                                      // cancelMktData
@@ -506,7 +515,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             subscribeQuote(symbol)
         }
 
-        let overnightWanted = phase == .overnight ? wanted : []
+        let overnightWanted = phase == .overnight ? wanted.filter { !ForexPair.isForex($0) } : []
         for (symbol, reqId) in overnightReqBySymbol where !overnightWanted.contains(symbol) {
             send(2, 2, reqId)                                                      // cancelMktData
             overnightReqBySymbol[symbol] = nil
@@ -542,7 +551,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 }
                 if now == .overnight {
                     for c in self.charts.values where self.overnightReqByChart[c.id] == nil
-                        && !c.symbol.isEmpty && !c.isLoading && c.timeframe.isIntraday {
+                        && !c.symbol.isEmpty && !c.isLoading && c.timeframe.isIntraday && !ForexPair.isForex(c.symbol) {
                         self.requestOvernightBars(c)
                     }
                 }
@@ -553,9 +562,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// SMART, except during the overnight session, when SMART is frozen at the 20:00 close and
     /// the OVERNIGHT venue's bid/ask/last (where overnight orders go) take over where it has them.
+    /// A forex pair has no trades: its bid/ask mid is its last price, kept while the market is shut.
     private func updateQuote(_ symbol: String) {
         var q = smartQuotes[symbol] ?? Quote()
-        if phase == .overnight, let o = overnightQuotes[symbol] {
+        if ForexPair.isForex(symbol) {
+            if let bid = q.bid, let ask = q.ask, bid > 0, ask > 0 {
+                q.last = (bid + ask) / 2
+                smartQuotes[symbol]?.last = q.last
+            }
+        } else if phase == .overnight, let o = overnightQuotes[symbol] {
             q.bid = o.bid ?? q.bid
             q.ask = o.ask ?? q.ask
             q.last = o.last ?? q.last
@@ -578,7 +593,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             if let seconds = c.timeframe.barSeconds {
                 start = Date(timeIntervalSince1970: (now.timeIntervalSince1970 / seconds).rounded(.down) * seconds)
             } else {
-                guard phase == .regular else { continue }
+                // Forex days run 17:15–17:00 ET: its daily candle moves with IB's bar updates only.
+                guard phase == .regular, !ForexPair.isForex(symbol) else { continue }
                 start = Self.easternCalendar.startOfDay(for: now)
             }
             var bar = c.bars[i]
@@ -615,7 +631,20 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let reqId = makeReqId()
         quoteReqBySymbol[symbol] = reqId
         quoteSymbolByReq[reqId] = symbol
-        sendFields([1, 11, reqId] + contract(symbol) + [false, "236", false, false, ""])   // reqMktData, 236: shortable
+        let forex = ForexPair.isForex(symbol)
+        sendFields([1, 11, reqId] + contract(symbol) + [false, forex ? "" : "236", false, false, ""])   // reqMktData, 236: shortable
+        if forex { requestContractDetails(symbol) }
+    }
+
+    /// A forex pair's contract details, for its smallest price step (see `contractData`).
+    private func requestContractDetails(_ symbol: String) {
+        guard apiReady, minTicks[symbol] == nil, !detailsSymbolByReq.values.contains(symbol) else { return }
+        let reqId = makeReqId()
+        detailsSymbolByReq[reqId] = symbol
+        // reqContractDetails: version 8, reqId, contract, includeExpired, secIdType, secId, issuerId (server ≥ 176)
+        var f: [Any] = [9, 8, reqId] + contract(symbol) + [false, "", ""]
+        if serverVersion >= 176 { f.append("") }
+        sendFields(f)
     }
 
     private func subscribeOvernightQuote(_ symbol: String) {
@@ -655,9 +684,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     // MARK: - Tick-by-tick
 
     /// A tick-by-tick stream: "Last" is every trade IB's own charts count (it leaves out odd lots
-    /// and off-exchange prints that would spike the candles); "BidAsk" every change of the best bid/ask.
+    /// and off-exchange prints that would spike the candles); "BidAsk" every change of the best bid/ask;
+    /// "MidPoint" every change of a forex pair's bid/ask mid, which stands in for its trades.
     private struct TickStream: Hashable {
-        enum Kind: String { case last = "Last", bidAsk = "BidAsk" }
+        enum Kind: String { case last = "Last", bidAsk = "BidAsk", midPoint = "MidPoint" }
         var symbol: String
         var kind: Kind
         var venue: String
@@ -681,17 +711,25 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// bar updates, as do the charts that aren't fast.
     private func syncTickByTick() {
         guard apiReady else { return }
-        let venue = phase == .overnight ? "OVERNIGHT" : "SMART"
+        let stockVenue = phase == .overnight ? "OVERNIGHT" : "SMART"
+        // A forex pair's midpoints build its candles as a stock's trades do.
+        func trades(_ symbol: String) -> TickStream {
+            ForexPair.isForex(symbol) ? TickStream(symbol: symbol, kind: .midPoint, venue: "IDEALPRO")
+                : TickStream(symbol: symbol, kind: .last, venue: stockVenue)
+        }
+        func bidAsk(_ symbol: String) -> TickStream {
+            TickStream(symbol: symbol, kind: .bidAsk, venue: ForexPair.isForex(symbol) ? "IDEALPRO" : stockVenue)
+        }
         var wanted: [TickStream] = []
         if let selected = charts[selectedChartId]?.symbol, !selected.isEmpty {
-            wanted = [TickStream(symbol: selected, kind: .last, venue: venue), TickStream(symbol: selected, kind: .bidAsk, venue: venue)]
+            wanted = [trades(selected), bidAsk(selected)]
         }
         for c in charts.values.sorted(by: { $0.id < $1.id }) where !c.symbol.isEmpty && fastChartIds.contains(c.id) {
-            let stream = TickStream(symbol: c.symbol, kind: .last, venue: venue)
+            let stream = trades(c.symbol)
             if !wanted.contains(stream) { wanted.append(stream) }
         }
         wanted.removeAll { tickRefused.contains($0) }
-        let limited = Set(wanted.dropFirst(tickLimit ?? wanted.count).filter { $0.kind == .last }.map(\.symbol))
+        let limited = Set(wanted.dropFirst(tickLimit ?? wanted.count).filter { $0.kind != .bidAsk }.map(\.symbol))
         if let tickLimit { wanted = Array(wanted.prefix(tickLimit)) }
         if tickLimitedSymbols != limited { tickLimitedSymbols = limited }
 
@@ -720,12 +758,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     }
 
     private func isStreamingTrades(_ symbol: String) -> Bool {
-        tickReqByStream.keys.contains { $0.symbol == symbol && $0.kind == .last }
+        tickReqByStream.keys.contains { $0.symbol == symbol && $0.kind != .bidAsk }
     }
 
     private func tickByTick(_ f: [String]) {
         // reqId, tickType, time, then Last/AllLast: price, size, mask, exchange, conditions
         //                         or BidAsk: bid, ask, bidSize, askSize, mask
+        //                         or MidPoint: midPoint
         guard let stream = tickStreamByReq[f.int(1)] else { return }
         hasLiveQuote = true
         let overnight = stream.venue == "OVERNIGHT"
@@ -747,6 +786,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             if overnight { update(&overnightQuotes[stream.symbol, default: Quote()]) }
             else { update(&smartQuotes[stream.symbol, default: Quote()]) }
             updateQuote(stream.symbol)
+        case 4:
+            // A forex pair's mid, in place of its trades: builds the live candle.
+            let mid = f.double(4)
+            guard mid > 0 else { return }
+            applyTrade(stream.symbol, price: mid, size: 0, time: Date(timeIntervalSince1970: f.double(3)))
         default:
             break
         }
@@ -761,7 +805,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             if let seconds = c.timeframe.barSeconds {
                 start = Date(timeIntervalSince1970: (time.timeIntervalSince1970 / seconds).rounded(.down) * seconds)
             } else {
-                guard phase == .regular else { continue }
+                guard phase == .regular, !ForexPair.isForex(symbol) else { continue }
                 start = Self.easternCalendar.startOfDay(for: time)
             }
             let last = c.bars[lastIndex]
@@ -787,11 +831,17 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         stopScan(owner)
         scanSpecs[owner] = spec
         scans[owner] = nil
+        syncForexList()
         startScan(owner)
     }
 
     private func startScan(_ owner: String) {
         guard apiReady, let spec = scanSpecs[owner] else { return }
+        if spec.kind == .forex {
+            scans[owner] = ScanResult(symbols: Array(rankedForex().prefix(spec.rows)), updated: Date())
+            scheduleForexRanking()
+            return
+        }
         let reqId = makeReqId()
         scanReqByOwner[owner] = reqId
         scanOwnerByReq[reqId] = owner
@@ -812,6 +862,51 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard let reqId = scanReqByOwner.removeValue(forKey: owner) else { return }
         scanOwnerByReq[reqId] = nil
         if apiReady { send(23, 1, reqId) }                                        // cancelScannerSubscription
+    }
+
+    // MARK: - Forex list
+
+    /// IB has no forex scanner: the Forex list is `ForexPair.listed`, ranked here by % change since the
+    /// prior close (pairs without one yet last, in list order), again every few seconds.
+    private static let forexListOwner = "forex-list"
+    private static let forexRankingInterval = 5.0
+
+    /// While any list shows the Forex list, every pair in it is quoted, to rank them.
+    private func syncForexList() {
+        let shown = scanSpecs.values.contains { $0.kind == .forex }
+        guard shown != (quoteOwners[Self.forexListOwner] != nil) else { return }
+        quoteOwners[Self.forexListOwner] = shown ? Set(ForexPair.listed) : nil
+        syncQuoteSubscriptions()
+    }
+
+    private func rankedForex() -> [String] {
+        ForexPair.listed.enumerated().sorted { a, b in
+            switch (quotes[a.element]?.changePercent, quotes[b.element]?.changePercent) {
+            case let (x?, y?) where x != y: x > y
+            case (_?, nil): true
+            case (nil, _?): false
+            default: a.offset < b.offset
+            }
+        }.map(\.element)
+    }
+
+    private func scheduleForexRanking() {
+        guard !forexRankingScheduled else { return }
+        forexRankingScheduled = true
+        let current = session
+        queue.asyncAfter(deadline: .now() + Self.forexRankingInterval) { [weak self] in
+            guard let self else { return }
+            self.forexRankingScheduled = false
+            guard self.session == current, self.apiReady else { return }
+            let owners = self.scanSpecs.filter { $0.value.kind == .forex }
+            guard !owners.isEmpty else { return }
+            let ranked = self.rankedForex()
+            for (owner, spec) in owners {
+                let symbols = Array(ranked.prefix(spec.rows))
+                if self.scans[owner]?.symbols != symbols { self.scans[owner] = ScanResult(symbols: symbols, updated: Date()) }
+            }
+            self.scheduleForexRanking()
+        }
     }
 
     private func requestSessionCloses(_ symbols: [String]) {
@@ -874,7 +969,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// A chart symbol's last few regular-session daily bars, for `ssr`: once a day per symbol.
     private func requestSSRBars(_ symbol: String) {
-        guard apiReady, !symbol.isEmpty, ssrRequested.insert(symbol).inserted else { return }
+        guard apiReady, !symbol.isEmpty, !ForexPair.isForex(symbol), ssrRequested.insert(symbol).inserted else { return }
         let reqId = makeReqId()
         ssrSymbolByReq[reqId] = symbol
         sendFields([20, reqId] + contract(symbol) + [false, "", "1 day", "5 D", 1, "TRADES", 1, false, ""])
@@ -952,14 +1047,16 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         chartByReq[reqId] = id
         reqByChart[id] = reqId
         let tf = c.timeframe
+        let forex = ForexPair.isForex(c.symbol)
         // reqHistoricalData: endDateTime "" + keepUpToDate streams live bar updates.
         // Every chart starts with a short history and skips the OVERNIGHT venue outside the overnight
         // session: a fraction of the data to load for a grid of charts. Its full history loads once
-        // its view reaches the oldest bar (`loadFullHistory`).
+        // its view reaches the oldest bar (`loadFullHistory`). Forex has no trades: its bars are the
+        // bid/ask mid, round the clock.
         sendFields([20, reqId] + contract(c.symbol) + [
-            false, "", tf.barSize, c.duration, tf.isIntraday ? 0 : 1, "TRADES", 2, true, "",
+            false, "", tf.barSize, c.duration, tf.isIntraday || forex ? 0 : 1, forex ? "MIDPOINT" : "TRADES", 2, true, "",
         ])
-        guard tf.isIntraday, c.fullHistory || phase == .overnight else { return }
+        guard tf.isIntraday, !forex, c.fullHistory || phase == .overnight else { return }
         requestOvernightBars(c)
     }
 
@@ -1022,13 +1119,16 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
         // A short sale chasing the bid under SSR goes in as a plain limit.
         let orderType = (chases ? nil : typeOverride) ?? (stop != nil && limit != nil ? "STP LMT" : (limit == nil ? "MKT" : "LMT"))
-        let triggerMethod = stop != nil ? 2 : 0                           // 2 = last trade
+        // Forex trades round the clock on IDEALPRO, and its stops trigger on the mid: it has no trades.
+        let forex = ForexPair.isForex(symbol)
+        let triggerMethod = stop == nil ? 0 : forex ? 8 : 2               // 2 = last trade, 8 = midpoint
+        let fillsOutsideRth = outsideRth && limit != nil && !forex
         var f: [Any] = [3, orderId]
         f += contract(symbol, exchange: exchange)
         f += ["", ""]                                                     // secIdType, secId
         f += [action, quantity, orderType, limit ?? Self.unsetDouble, stop ?? Self.unsetDouble,
               tif.rawValue, ocaGroup, account, "", 0, "TWZ"]
-        f += [true, 0, false, false, 0, triggerMethod, outsideRth && limit != nil, false]  // transmit … hidden
+        f += [true, 0, false, false, 0, triggerMethod, fillsOutsideRth, false]  // transmit … hidden
         f += ["", 0.0, "", "", "", "", ""]                                // sharesAlloc, discretionary, GAT, GTD, FA
         if serverVersion < 177 { f += [""] }                              // faProfile
         f += ["", 0, "", -1, ocaGroup.isEmpty ? 0 : 2, "", "", false, Int.unset, Self.unsetDouble, false, false, Self.unsetDouble]
@@ -1050,13 +1150,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         sendFields(f)
         if whatIf {
             log("WHATIF #\(orderId) \(action) \(Fmt.shares(quantity)) \(symbol) \(orderType)"
-                + (limit.map { " lmt \(Fmt.price($0))" } ?? "") + " — \(why)")
+                + (limit.map { " lmt \(Fmt.price($0, for: symbol))" } ?? "") + " — \(why)")
             return orderId
         }
         logLatency("Order #\(orderId)")
         log("SEND #\(orderId)\(modifying != nil ? " (modify)" : "") \(action) \(Fmt.shares(quantity)) \(symbol) \(orderType)"
-            + (stop.map { " stp \(Fmt.price($0))" } ?? "") + (limit.map { " lmt \(Fmt.price($0))" } ?? "")
-            + " \(tif.rawValue)\(outsideRth && limit != nil ? " outsideRTH" : "") \(exchange)"
+            + (stop.map { " stp \(Fmt.price($0, for: symbol))" } ?? "") + (limit.map { " lmt \(Fmt.price($0, for: symbol))" } ?? "")
+            + " \(tif.rawValue)\(fillsOutsideRth ? " outsideRTH" : "") \(forex ? "IDEALPRO" : exchange)"
             + (ocaGroup.isEmpty ? "" : " oca=\(ocaGroup)") + " — \(why)")
 
         var row = OrderRow(
@@ -1081,7 +1181,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private func describe(_ o: OrderRow?) -> String {
         guard let o else { return "(unknown order)" }
         return "\(o.action) \(Fmt.shares(o.quantity)) \(o.symbol) \(o.orderType)"
-            + (o.auxPrice.map { " stp \(Fmt.price($0))" } ?? "") + (o.limitPrice.map { " lmt \(Fmt.price($0))" } ?? "")
+            + (o.auxPrice.map { " stp \(Fmt.price($0, for: o.symbol))" } ?? "") + (o.limitPrice.map { " lmt \(Fmt.price($0, for: o.symbol))" } ?? "")
             + " [\(o.status)]"
     }
 
@@ -1212,7 +1312,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case .cancelSymbol:
             cancelOrders(for: symbol)
         case .flattenAll:
-            for p in positions.values where p.quantity != 0 {
+            // Forex pairs only once traded today: IB reports currency conversions as forex positions too.
+            let traded = Set(fills.values.map(\.symbol))
+            for p in positions.values where p.quantity != 0 && (!ForexPair.isForex(p.symbol) || traded.contains(p.symbol)) {
                 close(p, fraction: 1, hotkey: hotkey)
             }
         case .closeHalf, .closeAll:
@@ -1234,7 +1336,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                     return
                 }
                 submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
-                       summary: summary, source: Self.source(hotkey, isBuy: isBuy), why: why)
+                       summary: summary, source: Self.source(hotkey, isBuy: isBuy, symbol: symbol), why: why)
             }
             switch hotkey.sizing {
             case .shares:
@@ -1247,7 +1349,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                     lastMessage = "No price for \(symbol) yet"
                     return
                 }
-                send((hotkey.amount / ref).rounded(.down), at: price)
+                guard let usd = usdPerPriceUnit(symbol) else {
+                    lastMessage = "No dollar rate for \(symbol) yet"
+                    return
+                }
+                send((hotkey.amount / (ref * usd)).rounded(.down), at: price)
             case .buyingPower:
                 // Sized at the side of the spread it'll likely fill at, priced once IB has answered.
                 guard let ref = quote(symbol, .cross, isBuy: isBuy) else {
@@ -1273,15 +1379,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let quantity = Self.closeQuantity(p, fraction: fraction)
         guard let price = orderPrice(symbol: p.symbol, action: action, hotkey: hotkey) else { return }
         submit(symbol: p.symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
-               source: Self.source(hotkey, isBuy: action == "BUY"),
+               source: Self.source(hotkey, isBuy: action == "BUY", symbol: p.symbol),
                why: "hotkey \"\(hotkey.label)\" closing \(Int(fraction * 100))% of \(Fmt.shares(p.quantity))")
     }
 
     /// A hotkey order's source label: "Mkt", or the quote its limit is priced off ("Mid", "Last", "Ask", …).
-    private static func source(_ hotkey: Hotkey, isBuy: Bool) -> String {
+    private static func source(_ hotkey: Hotkey, isBuy: Bool, symbol: String) -> String {
         switch hotkey.orderType {
         case .market: "Mkt"
-        case .midprice: MarketSession.phase() == .regular ? "MidPx" : "Mid"
+        case .midprice: MarketSession.phase() == .regular && !ForexPair.isForex(symbol) ? "MidPx" : "Mid"
         case .limit: hotkey.priceReference.label(isBuy: isBuy)
         }
     }
@@ -1299,10 +1405,27 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     // MARK: - Chart orders
 
-    /// Shares a NOK amount buys at `price`, converted at the USD.NOK rate.
-    static func shares(forNOK nok: Double, at price: Double, usdNok: Double?) -> Double? {
-        guard let usdNok, usdNok > 0, price > 0 else { return nil }
-        return (nok / usdNok / price).rounded(.down)
+    /// Shares a NOK amount buys at `price`, converted at the USD.NOK rate; for a forex pair, units of
+    /// its base currency, its price converted to dollars at `usdPerUnit` (see `usdPerPriceUnit`).
+    static func shares(forNOK nok: Double, at price: Double, usdNok: Double?, usdPerUnit: Double? = 1) -> Double? {
+        guard let usdNok, usdNok > 0, let usdPerUnit, usdPerUnit > 0, price > 0 else { return nil }
+        return (nok / usdNok / (price * usdPerUnit)).rounded(.down)
+    }
+
+    /// Dollars per unit of the currency `symbol` is priced in: 1 for a stock; for a forex pair, its
+    /// quote currency's rate, nil until that's quoted.
+    private func usdPerPriceUnit(_ symbol: String) -> Double? {
+        guard let pair = ForexPair(symbol) else { return 1 }
+        return ForexPair.usdPerUnit(of: pair.quote, usdNok: usdNok) { quotes[$0]?.mid }
+    }
+
+    /// A price on `symbol`'s price steps: a forex pair's from IB's contract details (half a pip
+    /// until they're in), else a cent (a hundredth of a cent under $1).
+    private func tickRounded(_ price: Double, for symbol: String) -> Double {
+        guard let pair = ForexPair(symbol) else { return Self.roundToTick(price) }
+        let step = minTicks[symbol] ?? pair.defaultTick
+        let scale = pow(10, Double(pair.decimals + 1))                    // drops the float noise of the multiply
+        return ((price / step).rounded() * step * scale).rounded() / scale
     }
 
     /// What an alt-click order places, decided from the live last trade only (no fallback prices).
@@ -1324,23 +1447,23 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
 
         /// "BUY 45 @ 10.00" or "SELL STP 45 @ 10.00".
-        func label(_ action: String, shares: Double) -> String? {
+        func label(_ action: String, shares: Double, symbol: String) -> String? {
             switch self {
-            case .limit(let p): "\(action) \(Fmt.shares(shares)) @ \(Fmt.price(p))"
-            case .stopLimit(let p): "\(action) STP \(Fmt.shares(shares)) @ \(Fmt.price(p))"
+            case .limit(let p): "\(action) \(Fmt.shares(shares)) @ \(Fmt.price(p, for: symbol))"
+            case .stopLimit(let p): "\(action) STP \(Fmt.shares(shares)) @ \(Fmt.price(p, for: symbol))"
             case .unavailable: nil
             }
         }
     }
 
     private func chartOrder(symbol: String, action: String, clicked: Double) -> ChartOrder {
-        let price = Self.roundToTick(clicked)
+        let price = tickRounded(clicked, for: symbol)
         guard let last = quotes[symbol]?.last, last > 0 else {
             return .unavailable("No live price for \(symbol) yet")
         }
         if action == "BUY" ? price <= last : price >= last { return .limit(price) }
-        // IBKR's overnight venue takes plain limit orders only.
-        if MarketSession.phase() == .overnight { return .unavailable("No stop orders overnight") }
+        // IBKR's overnight venue takes plain limit orders only (forex trades on IDEALPRO all the same).
+        if MarketSession.phase() == .overnight, !ForexPair.isForex(symbol) { return .unavailable("No stop orders overnight") }
         return .stopLimit(price)
     }
 
@@ -1354,12 +1477,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "\(reason), so the order wasn't sent"
             return
         }
-        guard let limit = plan.price, let quantity = Self.shares(forNOK: nok, at: limit, usdNok: usdNok) else {
-            lastMessage = "No USD.NOK rate yet, so the order can't be sized"
+        guard let limit = plan.price,
+              let quantity = Self.shares(forNOK: nok, at: limit, usdNok: usdNok, usdPerUnit: usdPerPriceUnit(symbol)) else {
+            lastMessage = usdNok == nil ? "No USD.NOK rate yet, so the order can't be sized"
+                : "No dollar rate for \(symbol) yet, so the order can't be sized"
             return
         }
-        guard quantity >= 1, let label = plan.label("BUY", shares: quantity) else {
-            lastMessage = "\(OrderAmount.format(nok)) NOK is less than one share of \(symbol) at \(Fmt.price(limit))"
+        guard quantity >= 1, let label = plan.label("BUY", shares: quantity, symbol: symbol) else {
+            lastMessage = "\(OrderAmount.format(nok)) NOK is less than one share of \(symbol) at \(Fmt.price(limit, for: symbol))"
             return
         }
         placeChartOrder(symbol: symbol, action: "BUY", quantity: quantity, plan: plan, tif: .day,
@@ -1378,10 +1503,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             return
         }
         guard let limit = plan.price, limit > 0 else { return }
-        let quantity = (dollars / limit).rounded(.down)
+        guard let usd = usdPerPriceUnit(symbol) else {
+            lastMessage = "No dollar rate for \(symbol) yet, so the order can't be sized"
+            return
+        }
+        let quantity = (dollars / (limit * usd)).rounded(.down)
         let amount = "$" + Int(dollars.rounded()).formatted()
-        guard quantity >= 1, let label = plan.label(action, shares: quantity) else {
-            lastMessage = "\(amount) is less than one share of \(symbol) at \(Fmt.price(limit))"
+        guard quantity >= 1, let label = plan.label(action, shares: quantity, symbol: symbol) else {
+            lastMessage = "\(amount) is less than one share of \(symbol) at \(Fmt.price(limit, for: symbol))"
             return
         }
         placeChartOrder(symbol: symbol, action: action, quantity: quantity, plan: plan, tif: .day,
@@ -1401,7 +1530,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 return
             }
             let plan = chartOrder(symbol: symbol, action: action, clicked: clickedPrice)
-            guard let label = plan.label(action, shares: quantity) else {
+            guard let label = plan.label(action, shares: quantity, symbol: symbol) else {
                 if case .unavailable(let reason) = plan { lastMessage = "\(reason), so the order wasn't sent" }
                 return
             }
@@ -1411,11 +1540,16 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         switch hotkey.action {
         case .buy, .sell:
             let action = hotkey.action == .buy ? "BUY" : "SELL"
-            let price = Self.roundToTick(clickedPrice)
+            let price = tickRounded(clickedPrice, for: symbol)
             guard price > 0 else { return }
             switch hotkey.sizing {
             case .shares: place(action, hotkey.amount.rounded(.down))
-            case .dollars: place(action, (hotkey.amount / price).rounded(.down))
+            case .dollars:
+                guard let usd = usdPerPriceUnit(symbol) else {
+                    lastMessage = "No dollar rate for \(symbol) yet, so the order can't be sized"
+                    return
+                }
+                place(action, (hotkey.amount / (price * usd)).rounded(.down))
             case .buyingPower:
                 sizeFromBuyingPower(hotkey.amount, symbol: symbol, action: action, at: price,
                                     why: "⌥-click \"\(hotkey.label)\"") { shares, note in
@@ -1451,7 +1585,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard let limit = plan.price else { return }
         var price = HotkeyPrice(limit: limit, outsideRth: outsideRth)
         if case .stopLimit(let stop) = plan { price.stop = stop }
-        if MarketSession.phase() == .overnight { price.exchange = "OVERNIGHT" }
+        if MarketSession.phase() == .overnight, !ForexPair.isForex(symbol) { price.exchange = "OVERNIGHT" }
         guard let id = submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: tif,
                               summary: summary, source: "⌥-click", why: "⌥-click \(summary)") else { return }
         chartOrderIds.insert(id)
@@ -1503,7 +1637,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             say("\(symbol) what-if: no price there")
             return
         }
-        let price = Self.roundToTick(clickedPrice)
+        let price = tickRounded(clickedPrice, for: symbol)
         say("\(symbol) what-if: asking IB for the margin…")
         marginLimit(symbol, action: "BUY", price: price, why: why) { result in
             let preview: MarginPreview
@@ -1518,7 +1652,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 say("\(symbol) what-if: no buying power left for a long")
                 return
             }
-            say("\(symbol) what-if: BUY \(Fmt.shares(shares)) @ \(Fmt.price(price)), "
+            say("\(symbol) what-if: BUY \(Fmt.shares(shares)) @ \(Fmt.price(price, for: symbol)), "
                 + "\(Int((fraction * 100).rounded()))% of the \(Fmt.shares(preview.maxShares)) IB's margin allows")
             completion(WhatIfSize(price: price, shares: shares, maxShares: preview.maxShares))
         }
@@ -1541,7 +1675,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "\(symbol): \(held > 0 ? "long" : "short") \(Fmt.shares(abs(held))) — close it before a \(pct) of buying power \(isBuy ? "buy" : "sell")"
             return
         }
-        let price = Self.roundToTick(rawPrice)
+        let price = tickRounded(rawPrice, for: symbol)
         guard price > 0 else { return }
         lastMessage = "\(symbol): asking IB for the buying power for a \(side)…"
         marginLimit(symbol, action: action, price: price, why: "margin preview for \(why)") { [self] result in
@@ -1557,7 +1691,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 lastMessage = "\(symbol): no buying power left for a \(side)"
                 return
             }
-            send(shares, "\(pct) of the \(Fmt.shares(preview.maxShares)) IB's margin allows at \(Fmt.price(price))")
+            send(shares, "\(pct) of the \(Fmt.shares(preview.maxShares)) IB's margin allows at \(Fmt.price(price, for: symbol))")
         }
     }
 
@@ -1568,7 +1702,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// or two later.
     private func marginLimit(_ symbol: String, action: String, price: Double, why: String,
                              _ reply: @escaping (Result<MarginPreview, PreviewFailure>) -> Void) {
-        previewMargin(symbol, action: action, shares: max(1, (1000 / price).rounded(.down)), price: price, why: why) { [self] first in
+        // A $1,000 order first (a forex pair's price converted to dollars).
+        let small = max(1, (1000 / (price * (usdPerPriceUnit(symbol) ?? 1))).rounded(.down))
+        previewMargin(symbol, action: action, shares: small, price: price, why: why) { [self] first in
             guard case .success(let small) = first, small.maxShares >= 1 else { return reply(first) }
             previewMargin(symbol, action: action, shares: max(1, (small.maxShares * 0.95).rounded(.down)),
                           price: price, why: why) { second in
@@ -1679,25 +1815,25 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             return
         }
         guard let kind = Self.protectiveKind(positions[symbol], at: clickedPrice) else { return }
-        let price = Self.roundToTick(clickedPrice)
+        let price = tickRounded(clickedPrice, for: symbol)
         if Self.protectiveFillsNow(positions[symbol], last: quotes[symbol]?.last, kind: kind, at: price),
            let last = quotes[symbol]?.last {
-            lastMessage = "\(symbol): a \(kind == .stopLoss ? "stop loss" : "take profit") at \(Fmt.price(price)) "
-                + "would fill right away (last \(Fmt.price(last))), so it wasn't sent"
+            lastMessage = "\(symbol): a \(kind == .stopLoss ? "stop loss" : "take profit") at \(Fmt.price(price, for: symbol)) "
+                + "would fill right away (last \(Fmt.price(last, for: symbol))), so it wasn't sent"
             return
         }
         placeProtective(kind, symbol: symbol, price: price, why: "⌃-click")
     }
 
-    /// Stop loss: a stop-limit with the limit 1% (at least 2¢) past the stop, so it can fill
-    /// outside regular hours too. Take profit: a limit.
+    /// Stop loss: a stop-limit with the limit 1% (at least 2¢; 0.2% for forex) past the stop, so it
+    /// can fill outside regular hours too. Take profit: a limit.
     private func placeProtective(_ kind: Protective.Kind, symbol: String, price: Double, why: String) {
         guard let qty = positions[symbol]?.quantity, qty != 0 else { return }
         let action = qty > 0 ? "SELL" : "BUY"
         let active = activeProtective(symbol)
         let existing = active.first { $0.value.kind == kind }?.key
         let group = active.first?.value.ocaGroup ?? "TWZ-\(symbol)-\(Int(Date().timeIntervalSince1970))"
-        let (limit, stop) = Self.protectivePrices(kind, action: action, price: price)
+        let (limit, stop) = protectivePrices(kind, symbol: symbol, action: action, price: price)
         guard let id = placeOrder(symbol: symbol, action: action, quantity: abs(qty), limit: limit, stop: stop,
                                   tif: .gtc, outsideRth: true, ocaGroup: group, modifying: existing,
                                   why: "\(kind == .stopLoss ? "stop loss" : "take profit") for \(Fmt.shares(qty)) held (\(why))")
@@ -1705,19 +1841,21 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         protectiveOrders[id] = Protective(symbol: symbol, kind: kind, ocaGroup: group)
         saveProtective()
         recordSource(kind == .stopLoss ? "SL" : "TP", for: id)
-        var message = "\(symbol): \(kind == .stopLoss ? "stop loss" : "take profit") \(action) \(Fmt.shares(abs(qty))) @ \(Fmt.price(price))"
+        var message = "\(symbol): \(kind == .stopLoss ? "stop loss" : "take profit") \(action) \(Fmt.shares(abs(qty))) @ \(Fmt.price(price, for: symbol))"
         if existing != nil { message += " (moved)" }
-        if MarketSession.phase() == .overnight || MarketSession.phase() == .closed {
+        if ForexPair.isForex(symbol) {
+            if !MarketSession.forexIsOpen() { message += "; works from \(MarketSession.forexReopening())" }
+        } else if MarketSession.phase() == .overnight || MarketSession.phase() == .closed {
             message += "; works from 4:00 ET pre-market"
         }
         lastMessage = message
     }
 
-    private static func protectivePrices(_ kind: Protective.Kind, action: String, price: Double)
+    private func protectivePrices(_ kind: Protective.Kind, symbol: String, action: String, price: Double)
         -> (limit: Double, stop: Double?) {
         guard kind == .stopLoss else { return (price, nil) }
-        let cushion = max(0.02, price * 0.01)
-        return (roundToTick(max(0.0001, action == "SELL" ? price - cushion : price + cushion)), price)
+        let cushion = ForexPair.isForex(symbol) ? price * 0.002 : max(0.02, price * 0.01)
+        return (tickRounded(max(0.0001, action == "SELL" ? price - cushion : price + cushion), for: symbol), price)
     }
 
     /// Working stop loss / take profit orders in `symbol`. An order only counts if it still looks
@@ -1776,7 +1914,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             }
             guard o.filled == 0, o.quantity != abs(qty),
                   let price = p.kind == .stopLoss ? o.auxPrice : o.limitPrice else { continue }
-            let (limit, stop) = Self.protectivePrices(p.kind, action: o.action, price: price)
+            let (limit, stop) = protectivePrices(p.kind, symbol: symbol, action: o.action, price: price)
             guard placeOrder(symbol: symbol, action: o.action, quantity: abs(qty), limit: limit, stop: stop,
                              tif: .gtc, outsideRth: true, ocaGroup: p.ocaGroup, modifying: id,
                              why: "resize \(p.kind == .stopLoss ? "stop loss" : "take profit") to the position (\(Fmt.shares(qty)) held)")
@@ -1832,12 +1970,20 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             notes.append("replaced \(replaced.count == 1 ? "the previous order" : "\(replaced.count) orders")")
         }
         if let source = price.fallback, let limit = price.limit {
-            notes.append("no live quote, priced off \(source) → \(Fmt.price(limit))")
+            notes.append("no live quote, priced off \(source) → \(Fmt.price(limit, for: symbol))")
         }
-        switch MarketSession.phase() {
-        case .overnight: notes.append("routed to IBKR overnight")
-        case .closed: notes.append("market closed — works from 4:00 ET pre-market")
-        default: break
+        if ForexPair.isForex(symbol) {
+            if !MarketSession.forexIsOpen() { notes.append("forex closed — works from \(MarketSession.forexReopening())") }
+            if let ref = price.limit ?? quotes[symbol]?.mid, let usd = usdPerPriceUnit(symbol),
+               quantity * ref * usd < ForexPair.minimumUSD {
+                notes.append("an odd lot (under IDEALPRO's $25,000), filled at worse prices")
+            }
+        } else {
+            switch MarketSession.phase() {
+            case .overnight: notes.append("routed to IBKR overnight")
+            case .closed: notes.append("market closed — works from 4:00 ET pre-market")
+            default: break
+            }
         }
         if !notes.isEmpty { lastMessage = "\(symbol): " + notes.joined(separator: "; ") }
         return id
@@ -1868,10 +2014,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case .last: live = valid(q?.last)
         }
         if let live { return (live, nil) }
-        if let last = valid(q?.last) { return (last, "last \(Fmt.price(last))") }
+        if let last = valid(q?.last) { return (last, "last \(Fmt.price(last, for: symbol))") }
         let chart = charts.values.sorted { $0.id < $1.id }.first { $0.symbol == symbol }
         if let bar = valid(chart?.bars.last?.close) {
-            return (bar, "chart close \(Fmt.price(bar))")
+            return (bar, "chart close \(Fmt.price(bar, for: symbol))")
         }
         return nil
     }
@@ -1902,6 +2048,21 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         func missing() -> HotkeyPrice? {
             lastMessage = "No price for \(symbol) at all yet (no quote or chart) — can't price the order"
             return nil
+        }
+        // Forex, any hour it trades: Market is MKT, Midprice a limit at the mid (IBKR's MIDPRICE is for
+        // stocks). The offset counts in pips: a hotkey's cent is a pip.
+        if let pair = ForexPair(symbol) {
+            let offset = hotkey.offset * pair.pip * 100
+            func at(_ reference: PriceReference) -> HotkeyPrice? {
+                guard let ref = quote(symbol, reference, isBuy: isBuy) else { return missing() }
+                return HotkeyPrice(limit: tickRounded(ref.price + sign * offset, for: symbol), outsideRth: false,
+                                   fallback: ref.fallback)
+            }
+            switch hotkey.orderType {
+            case .market: return HotkeyPrice(limit: nil, outsideRth: false)
+            case .midprice: return at(.mid)
+            case .limit: return at(hotkey.priceReference)
+            }
         }
 
         var price: HotkeyPrice
@@ -1949,6 +2110,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case 3: orderStatus(f)
         case 4: errorMessage(f)
         case 5: openOrder(f)
+        case 10: contractData(f)
         case 9:
             nextOrderId = max(nextOrderId ?? 0, f.int(2))
             log("CONNECTED client \(clientId), next order id \(f.str(2))")
@@ -1994,11 +2156,22 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         default: return
         }
         if isOvernight { overnightQuotes[symbol] = q } else { smartQuotes[symbol] = q }
-        if !isOvernight, ssr[symbol] == nil, let last = q.last, let close = q.prevClose, close > 0, last <= close * 0.9 {
+        if !isOvernight, ssr[symbol] == nil, !ForexPair.isForex(symbol),
+           let last = q.last, let close = q.prevClose, close > 0, last <= close * 0.9 {
             ssr[symbol] = "Traded 10% below yesterday's close today (\(Fmt.price(last)) vs \(Fmt.price(close)))"
         }
         updateQuote(symbol)
         if !ssrChase.isEmpty { chaseSSRSells(symbol) }
+    }
+
+    /// A forex pair's contract details: its smallest price step.
+    private func contractData(_ f: [String]) {
+        // [version (server < 164)], reqId, symbol, secType, lastTradeDate, strike, right, exchange,
+        // currency, localSymbol, marketName, tradingClass, conId, minTick, …
+        let i = serverVersion < 164 ? 2 : 1
+        guard let symbol = detailsSymbolByReq.removeValue(forKey: f.int(i)) else { return }
+        let tick = f.double(i + 12)
+        if tick > 0, tick < 1 { minTicks[symbol] = tick }
     }
 
     /// Volume stays SMART's full-day figure; the overnight venue's own volume isn't shown.
@@ -2040,7 +2213,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if changed {
             let why = f.str(10)
             log("STATUS #\(id) \(o.action) \(o.symbol) \(o.status) filled \(Fmt.shares(o.filled))/\(Fmt.shares(o.quantity))"
-                + (o.filled > 0 ? " avg \(Fmt.price(o.avgFillPrice))" : "")
+                + (o.filled > 0 ? " avg \(Fmt.price(o.avgFillPrice, for: o.symbol))" : "")
                 + (f.int(9) != clientId ? " (client \(f.str(9)))" : "") + (why.isEmpty ? "" : " held: \(why)"))
         }
         if !o.isActive, let stop = stopsAwaitingCancel.removeValue(forKey: id) {
@@ -2058,12 +2231,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let id = Self.orderKey(orderId: f.int(1), permId: f.int(25))
         let lmt = f.double(16)
         let aux = f.double(17)
+        let symbol = Self.symbol(f.str(3), secType: f.str(4), currency: f.str(10))
         let before = orders[id]
         var o = orders[id] ?? OrderRow(
-            id: id, symbol: f.str(3), action: f.str(13), quantity: 0,
+            id: id, symbol: symbol, action: f.str(13), quantity: 0,
             orderType: f.str(15), limitPrice: nil, status: "Submitted", usdNok: usdNok
         )
-        o.symbol = f.str(3)
+        o.symbol = symbol
         o.action = f.str(13)
         o.quantity = f.double(14)
         o.orderType = f.str(15)
@@ -2089,7 +2263,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let fill = Fill(
             id: id,
             orderId: f.int(2),
-            symbol: f.str(4),
+            symbol: Self.symbol(f.str(4), secType: f.str(5), currency: f.str(11)),
             side: f.str(18),
             shares: f.double(19),
             price: f.double(20),
@@ -2098,7 +2272,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             commission: commissions[id]
         )
         if fills[fill.id] == nil {
-            log("FILL #\(fill.orderId) \(fill.side) \(Fmt.shares(fill.shares)) \(fill.symbol) @ \(Fmt.price(fill.price)) exec \(fill.id)")
+            log("FILL #\(fill.orderId) \(fill.side) \(Fmt.shares(fill.shares)) \(fill.symbol) @ \(Fmt.price(fill.price, for: fill.symbol)) exec \(fill.id)")
         }
         fills[fill.id] = fill
     }
@@ -2137,6 +2311,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "USD.NOK rate: \(text)" + (usdNok.map { " (using saved \(Fmt.price($0)))" } ?? "")
             return
         }
+        // No contract details: the pair keeps the usual half-pip step.
+        if detailsSymbolByReq.removeValue(forKey: reqId) != nil { return }
 
         // Over IB's tick-by-tick limit: remember how many it allows, so the selected chart keeps
         // its streams. Refused for another reason: that chart keeps IB's regular bar updates.
@@ -2148,7 +2324,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                         + "fast charts past the limit keep IB's regular bar updates"
                 }
                 tickLimit = tickReqByStream.count
-                if stream.kind == .last { tickLimitedSymbols.insert(stream.symbol) }
+                if stream.kind != .bidAsk { tickLimitedSymbols.insert(stream.symbol) }
                 logTickStreams()
             } else {
                 Self.log.notice("Tick-by-tick refused for \(stream.symbol, privacy: .public) \(stream.kind.rawValue, privacy: .public): \(code) \(text, privacy: .public)")
@@ -2328,11 +2504,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     private func position(_ f: [String]) {
         // version, account, conId, symbol, secType, ltd, strike, right, mult, exch, currency, localSym, tradingClass, pos, avgCost
-        guard f.str(2) == account, f.str(5) == "STK" else { return }
-        let symbol = f.str(4)
+        guard f.str(2) == account, f.str(5) == "STK" || f.str(5) == "CASH" else { return }
+        let symbol = Self.symbol(f.str(4), secType: f.str(5), currency: f.str(11))
         let qty = f.double(14)
         let old = positions[symbol]?.quantity ?? 0
-        if old != qty { log("POSITION \(symbol) \(Fmt.shares(old)) → \(Fmt.shares(qty)) avg \(Fmt.price(f.double(15)))") }
+        if old != qty { log("POSITION \(symbol) \(Fmt.shares(old)) → \(Fmt.shares(qty)) avg \(Fmt.price(f.double(15), for: symbol))") }
         if qty == 0 {
             positions[symbol] = nil
         } else {
@@ -2378,9 +2554,17 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return nextReqId
     }
 
+    /// A US stock on `exchange`; a forex pair ("EUR.USD") on IDEALPRO, whatever `exchange` says.
     private func contract(_ symbol: String, exchange: String = "SMART") -> [Any] {
         // conId, symbol, secType, lastTradeDate, strike, right, multiplier, exchange, primaryExch, currency, localSymbol, tradingClass
-        [0, symbol, "STK", "", 0.0, "", "", exchange, "", "USD", "", ""]
+        if let pair = ForexPair(symbol) { return [0, pair.base, "CASH", "", 0.0, "", "", "IDEALPRO", "", pair.quote, "", ""] }
+        return [0, symbol, "STK", "", 0.0, "", "", exchange, "", "USD", "", ""]
+    }
+
+    /// The app's symbol for a contract IB sent: a stock's ticker, or a forex pair ("CASH") as "EUR.USD",
+    /// its base currency then the currency it's priced in.
+    private static func symbol(_ symbol: String, secType: String, currency: String) -> String {
+        secType == "CASH" ? "\(symbol).\(currency)" : symbol
     }
 
     private func send(_ fields: Any...) { sendFields(fields) }

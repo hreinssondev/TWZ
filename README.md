@@ -24,6 +24,10 @@ management in one window built for quick entries and exits.
 - **Scanner lists**: gainers, losers, after-hours gainers and most active by dollar volume, with
   each stock's 5-minute change. One click charts a stock; the load button fills the grid from a list.
 - **Orders, fills and positions** side by side or stacked, with today's round trips and their P/L.
+- **Forex**: the lists' Forex option shows the main currency pairs on IBKR's IDEALPRO (majors,
+  crosses and the NOK / SEK pairs), ranked by % change; a chart takes a pair typed as EUR.USD, EURUSD
+  or EUR/USD. Pairs chart as bid/ask midpoints around the clock and trade like stocks from hotkeys,
+  ⌥ / ⌃-click and ⌘⌫, sized in units of the first currency (hotkey offsets count a cent as a pip).
 - **Short selling info**: shortable status and shares to lend, borrow fees, and the SEC Rule 201
   short sale restriction (from Nasdaq's daily list and IB's prices), with SSR-aware order pricing.
 - **Charts window**: a second grid of the top 18 gainers (or any size you set).
@@ -37,7 +41,8 @@ rate).
 
 - macOS 27 or later.
 - IB Gateway or TWS with the API enabled (Configure › Settings › API: *Enable ActiveX and Socket
-  Clients*), and market data subscriptions for the stocks you trade.
+  Clients*), and market data subscriptions for the stocks you trade. Forex quotes are free; trading
+  pairs needs the Forex trading permission.
 
 ## Building
 

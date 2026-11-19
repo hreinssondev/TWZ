@@ -3,7 +3,8 @@
 //  TWZ
 //
 //  Live IB scanner list (gainers, losers, after-hours gainers, most active by
-//  dollar volume), with each symbol's % change over the last 5 minutes and a green dot after the
+//  dollar volume), or the Forex list (the main currency pairs, ranked by % change, see `ForexPair`),
+//  with each symbol's % change over the last 5 minutes and a green dot after the
 //  symbols traded today. The load button beside the filters makes the chart grid follow the list, in
 //  its order and as it changes, in place of the gainers until the account bar's Reset (see `ChartGrid`). The price columns' widths drag from their header's left edge (double-click
 //  resets) and are kept per list; a list narrower than its columns clips them on the right. Clicking a row loads it into the selected chart, which keeps it until the
@@ -80,7 +81,8 @@ struct ListPanel: View {
                     Image(systemName: "line.3.horizontal.decrease.circle")
                 }
                 .buttonStyle(.borderless)
-                .help("Scanner filters")
+                .disabled(scanner == .forex)
+                .help(scanner == .forex ? "The Forex list has no filters" : "Scanner filters")
                 .popover(isPresented: $showFilter, arrowEdge: .bottom) {
                     ScanFilterEditor(filter: workspace.scanFilter(panel: panelId, scanner), defaults: scanner.defaultFilter) { filter in
                         workspace.setScanFilter(filter, panel: panelId, scanner)
@@ -175,7 +177,7 @@ struct ListPanel: View {
     private var columnHeader: some View {
         HStack(spacing: 4) {
             Text("Symbol").frame(minWidth: Self.minSymbolWidth, maxWidth: .infinity, alignment: .leading)
-            Text("Last").frame(width: lastWidth, alignment: .trailing)
+            Text(scanner == .forex ? "Mid" : "Last").frame(width: lastWidth, alignment: .trailing)
                 .overlay(alignment: .leading) { columnHandle($lastWidth, default: Self.defaultWidths.last) }
             Text(scanner == .afterHours ? "AH %" : "%Chg").frame(width: changeWidth, alignment: .trailing)
                 .overlay(alignment: .leading) { columnHandle($changeWidth, default: Self.defaultWidths.change) }
@@ -208,7 +210,10 @@ struct ListPanel: View {
         } else if let error = scan?.error {
             text = error
         } else if let updated = scan?.updated {
-            text = "\(MarketSession.phase().rawValue) · \(updated.formatted(date: .omitted, time: .standard))"
+            let session = scanner == .forex
+                ? (MarketSession.forexIsOpen() ? "Forex open" : "Forex closed until \(MarketSession.forexReopening())")
+                : MarketSession.phase().rawValue
+            text = "\(session) · \(updated.formatted(date: .omitted, time: .standard))"
         } else {
             text = "Scanning…"
         }
@@ -246,7 +251,7 @@ struct ListPanel: View {
                 }
             }
             .frame(minWidth: Self.minSymbolWidth, maxWidth: .infinity, alignment: .leading)
-            Text(Fmt.price(values?.last)).frame(width: lastWidth, alignment: .trailing)
+            Text(Fmt.price(values?.last, for: symbol)).frame(width: lastWidth, alignment: .trailing)
             Text(Fmt.percent(change))
                 .foregroundStyle(changeColor(change))
                 .frame(width: changeWidth, alignment: .trailing)

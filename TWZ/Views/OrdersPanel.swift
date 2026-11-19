@@ -246,7 +246,8 @@ struct OrdersPanel: View {
     private func workingRow(_ o: OrderRow, tripOrders: Int?) -> some View {
         // Value in NOK of the shares still to fill, at the order's price (the last price for market orders).
         let price = o.limitPrice ?? o.auxPrice ?? broker.quote(o.symbol)?.last
-        let valueNOK = price.flatMap { p in (o.usdNok ?? broker.usdNok).map { (o.quantity - o.filled) * p * $0 } }
+        let usd = broker.usdPerPriceUnit(o.symbol)
+        let valueNOK = price.flatMap { p in usd.flatMap { usd in (o.usdNok ?? broker.usdNok).map { (o.quantity - o.filled) * p * usd * $0 } } }
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
                 symbolButton(o.symbol, onDoubleClick: { workspace.focusOrder(o.symbol, broker: broker) })
@@ -283,7 +284,7 @@ struct OrdersPanel: View {
     /// A done order laid out like a working one, dimmed, with its fill time and average fill price.
     private func filledRow(_ g: FillGroup, tripOrders: Int?) -> some View {
         let f = g.fill
-        let valueNOK = (f.usdNok ?? broker.usdNok).map { f.shares * f.price * $0 }
+        let valueNOK = broker.usdPerPriceUnit(f.symbol).flatMap { usd in (f.usdNok ?? broker.usdNok).map { f.shares * f.price * usd * $0 } }
         let dim = doneOpacity
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
@@ -298,7 +299,7 @@ struct OrdersPanel: View {
             HStack(spacing: 4) {
                 if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(f.side == "BOT")) }
                 if let order = g.order { Text(order.priceSummary) }
-                Text("@ \(Fmt.price(f.price))").fontWeight(.semibold)
+                Text("@ \(Fmt.price(f.price, for: f.symbol))").fontWeight(.semibold)
                 Text(Fmt.shares(f.shares, groupedFrom: Self.groupedFrom)).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 commissionText(f.commission, usdNok: f.usdNok ?? broker.usdNok)
@@ -383,9 +384,11 @@ struct OrdersPanel: View {
         if positions.isEmpty { empty("No positions") }
         ForEach(positions) { p in
             let last = broker.quote(p.symbol)?.last
-            let pnl = last.map { ($0 - p.avgCost) * p.quantity }
+            // In dollars: a forex pair's at its currency's dollar rate.
+            let usd = broker.usdPerPriceUnit(p.symbol)
+            let pnl = last.flatMap { last in usd.map { (last - p.avgCost) * p.quantity * $0 } }
             // Market value in NOK (at cost until there's a quote), under the symbol: green long, red short.
-            let valueNOK = broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * $0 }
+            let valueNOK = usd.flatMap { usd in broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * usd * $0 } }
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
                     // Double-click is told apart from the symbol's single click (loading it into the selected chart).
@@ -401,7 +404,7 @@ struct OrdersPanel: View {
                 }
                 HStack(spacing: 4) {
                     if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(p.quantity > 0)) }
-                    Text("\(Fmt.shares(p.quantity, groupedFrom: Self.groupedFrom)) - \(Fmt.price(p.avgCost))")
+                    Text("\(Fmt.shares(p.quantity, groupedFrom: Self.groupedFrom)) - \(Fmt.price(p.avgCost, for: p.symbol))")
                     Spacer(minLength: 0)
                 }
                 .font(.system(size: 10).monospacedDigit())
@@ -441,12 +444,14 @@ struct OrdersPanel: View {
                         if let pnl { pnlText(pnl.value, inNOK: pnl.inNOK) } else { Text("—").foregroundStyle(.secondary) }
                     }
                     HStack(spacing: 4) {
-                        let prices = "\(t.entryPrice.map { Fmt.price($0) } ?? "earlier") → \(t.exitPrice.map { Fmt.price($0) } ?? "…")"
+                        let prices = "\(t.entryPrice.map { Fmt.price($0, for: t.symbol) } ?? "earlier") → \(t.exitPrice.map { Fmt.price($0, for: t.symbol) } ?? "…")"
                         // The position's value in NOK at the entry price (the exit's for shares held from before today);
                         // in dollars until there's an exchange rate.
-                        let value = (t.entryPrice ?? t.exitPrice).map { p in
-                            (t.usdNok ?? broker.usdNok).map { Fmt.nok(t.entryShares * p * $0, groupedFrom: Self.groupedFrom) } ?? "$" + Int((t.entryShares * p).rounded()).formatted()
-                        }
+                        let usd = broker.usdPerPriceUnit(t.symbol)
+                        let value = (t.entryPrice ?? t.exitPrice).flatMap { p in usd.map { usd in
+                            (t.usdNok ?? broker.usdNok).map { Fmt.nok(t.entryShares * p * usd * $0, groupedFrom: Self.groupedFrom) }
+                                ?? "$" + Int((t.entryShares * p * usd).rounded()).formatted()
+                        } }
                         if details {
                             Text(value.map { "\($0) - \(prices)" } ?? prices)
                         } else if let value {
@@ -518,7 +523,7 @@ struct OrdersPanel: View {
     /// A round trip's P/L in NOK at the trip's rate (the current one for a trip from before there was a
     /// rate), or in dollars without any rate.
     private func tripPnL(_ t: RoundTrip, last: Double?) -> (value: Double, inNOK: Bool)? {
-        guard let usd = t.pnl(last: last) else { return nil }
+        guard let rate = broker.usdPerPriceUnit(t.symbol), let usd = t.pnl(last: last, usdPerUnit: rate) else { return nil }
         return (t.usdNok ?? broker.usdNok).map { (usd * $0, true) } ?? (usd, false)
     }
 
@@ -571,7 +576,7 @@ struct OrdersPanel: View {
 private extension OrderRow {
     /// "LMT 12.30", "STP 12.10", "STP LMT 12.10/12.05", "MKT" …
     var priceSummary: String {
-        let prices = [auxPrice, limitPrice].compactMap { $0 }.map { Fmt.price($0) }
+        let prices = [auxPrice, limitPrice].compactMap { $0 }.map { Fmt.price($0, for: symbol) }
         return prices.isEmpty ? orderType : "\(orderType) \(prices.joined(separator: "/"))"
     }
 }
