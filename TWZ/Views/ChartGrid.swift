@@ -9,8 +9,8 @@
 //  only charts whose stock dropped out load a new one. The selected chart follows too: the
 //  selection moves with it, and stays on it if it gets a new stock.
 //  A chart given a stock by hand (a list, its symbol field) keeps it and its cell until the account
-//  bar's Reset: its stock stands in for the gainer of that cell, which isn't shown, and no other
-//  chart moves. A list's load button makes the grid follow that list (its scanner and filters) in place
+//  bar's Reset, and the gainers skip it: the one that would have been there goes to the next free
+//  cell, and the rest move up one each. A list's load button makes the grid follow that list (its scanner and filters) in place
 //  of the gainers, the same way, until Reset; charts set by hand let go of their stock. A stock shown twice (set by hand, and a gainer in its own cell) is on 5m in the second
 //  chart to show it next to the first's 1m, or 1m next to anything else; both are highlighted while
 //  either is selected (see `ChartPane`).
@@ -146,8 +146,8 @@ extension Workspace {
         }
     }
 
-    /// Shows the top gainers in reading order: cell n shows gainer n, but for a cell set by hand,
-    /// whose own stock stands in for that gainer until Reset, so setting one moves no other chart.
+    /// Shows the top gainers in reading order, skipping the cells set by hand, which keep their own
+    /// stock until Reset: the nth free cell shows gainer n.
     /// A chart whose stock is still wanted moves to its cell instead of reloading, and keeps its
     /// timeframe; the others load theirs on `timeframe`, or on the other of 1m / 5m where a chart set
     /// by hand already shows it. Past the scanner's last row, charts are emptied.
@@ -160,7 +160,7 @@ extension Workspace {
             ranks.append(symbol)
         }
         var wanted: [Int: String] = [:]
-        for cell in following { wanted[cell] = cell < ranks.count ? ranks[cell] : "" }
+        for (rank, cell) in following.enumerated() { wanted[cell] = rank < ranks.count ? ranks[rank] : "" }
 
         // A chart already showing a cell's stock moves there; of two (after Reset), the selected one,
         // or else the one on the grid's timeframe. The rest fill the remaining cells.
