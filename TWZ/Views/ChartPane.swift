@@ -115,7 +115,7 @@ extension Workspace {
 /// fast (⌘↩), a red S if shortable, SSR under the short sale restriction, its short selling and buying
 /// power in NOK and its own timeframe switch over a chart that trades. Clicking it selects it; the selected chart is outlined,
 /// and so, a little fainter, is any other chart showing the same stock, since hotkeys go to that stock
-/// either way. A stock given a color (⌘⇧ and its letter) is outlined in it, inside those outlines.
+/// either way. A stock given a color (⌘⇧ and its letter) is outlined in it instead, thick while selected.
 struct ChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
@@ -162,25 +162,22 @@ struct ChartPane: View {
         }
     }
 
-    /// The selection outline (fainter on another chart of the same stock), and inside it the stock's
-    /// color, so both show; the color alone takes the place of the plain border.
+    /// The selection outline (fainter on another chart of the same stock), else the plain border. A
+    /// stock with a color is outlined in it instead: three times as thick while selected.
     private var outline: some View {
-        let ring: Color? = isSelected ? .accentColor : showsTarget ? Color.accentColor.opacity(0.6) : nil
-        let mark = workspace.stockColors[chart.symbol]?.color
-        let inset = ring == nil ? 0 : outlineWidth
-        return ZStack {
-            if let ring {
-                RoundedRectangle(cornerRadius: 4).strokeBorder(ring, lineWidth: outlineWidth)
-            } else if mark == nil {
-                RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-            }
-            if let mark {
-                RoundedRectangle(cornerRadius: max(1, 4 - inset))
-                    .strokeBorder(mark, lineWidth: outlineWidth)
-                    .padding(inset)
-            }
+        let selected = isSelected || showsTarget
+        let fade = isSelected || !showsTarget ? 1 : 0.6
+        let color: Color, width: Double
+        if let mark = workspace.stockColors[chart.symbol]?.color {
+            (color, width) = (mark.opacity(fade), selected ? outlineWidth * 3 : outlineWidth)
+        } else if selected {
+            (color, width) = (Color.accentColor.opacity(fade), outlineWidth)
+        } else {
+            (color, width) = (Color.primary.opacity(0.12), 1)
         }
-        .allowsHitTesting(false)
+        return RoundedRectangle(cornerRadius: 4)
+            .strokeBorder(color, lineWidth: width)
+            .allowsHitTesting(false)
     }
 
     private var timeframe: Binding<Timeframe> {

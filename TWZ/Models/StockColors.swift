@@ -4,7 +4,8 @@
 //
 //  Colors given to stocks from the keyboard: ⌘⇧ and a color's letter colors the selected chart's
 //  stock, ⌘⇧⌫ takes its color off (see `TradingShortcuts`). Every chart showing the stock is
-//  outlined in its color, inside the selection outline so both show. Kept per stock across relaunches.
+//  outlined in its color, three times as thick in place of the selection outline while it's selected.
+//  Kept per stock across relaunches.
 //
 
 import SwiftUI
