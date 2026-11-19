@@ -1054,7 +1054,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// The view reached the chart's oldest bar: asks for its full history, keeping the bars it shows
     /// until that's in. Skipped if the chart has loaded something else since (`generation`).
     func loadFullHistory(_ id: Int, generation: Int) {
-        guard let c = charts[id], c.generation == generation, !c.fullHistory, !c.symbol.isEmpty, !c.isLoading else { return }
+        guard let c = charts[id], c.generation == generation, !c.fullHistory, !c.symbol.isEmpty, !c.isLoading else {
+            let c = charts[id]
+            Self.log.notice("Full history skipped for chart \(id): generation \(c?.generation ?? -1) vs \(generation), full \(c?.fullHistory ?? false), loading \(c?.isLoading ?? false)")
+            return
+        }
         c.fullHistory = true
         requestChart(id, keepingBars: true)
     }
@@ -1091,6 +1095,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         // session: a fraction of the data to load for a grid of charts. Its full history loads once
         // its view reaches the oldest bar (`loadFullHistory`). Forex has no trades: its bars are the
         // bid/ask mid, round the clock.
+        Self.log.notice("History #\(reqId) \(c.symbol, privacy: .public) \(tf.barSize, privacy: .public) \(c.duration, privacy: .public)\(keepingBars ? " (behind the bars shown)" : "", privacy: .public)")
         sendFields([20, reqId] + contract(c.symbol) + [
             false, "", tf.barSize, c.duration, tf.isIntraday || forex ? 0 : 1, forex ? "MIDPOINT" : "TRADES", 2, true, "",
         ])
@@ -2610,6 +2615,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             return
         }
         guard let id = chartByReq[reqId], let c = charts[id] else { return }
+        Self.log.notice("History #\(reqId) \(c.symbol, privacy: .public): \(bars.count) bars from \(bars.first?.time.description ?? "-", privacy: .public)")
         c.bars = Self.merge(bars, overnightBars[id] ?? [])
         c.isLoading = false
         c.error = c.bars.isEmpty ? "No data" : nil

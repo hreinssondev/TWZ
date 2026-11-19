@@ -9,9 +9,11 @@
 
 import Foundation
 import Observation
+import OSLog
 
 @Observable
 final class Broker {
+    private static let log = Logger(subsystem: "TWZ", category: "broker")
     typealias ConnectionState = TradingEngine.ConnectionState
     typealias Protective = TradingEngine.Protective
 
@@ -234,7 +236,11 @@ final class Broker {
     /// the overnight session) behind the short one it started with. The bars on screen stay until
     /// it's in, and the view stays where it is. Once per load.
     func loadFullHistory(_ chart: ChartModel) {
-        guard state == .connected, !chart.hasFullHistory, !chart.isLoading, !chart.symbol.isEmpty, !chart.bars.isEmpty else { return }
+        guard state == .connected, !chart.hasFullHistory, !chart.isLoading, !chart.symbol.isEmpty, !chart.bars.isEmpty else {
+            Self.log.notice("Full history not asked for \(chart.symbol, privacy: .public): connected \(self.state == .connected), has it \(chart.hasFullHistory), loading \(chart.isLoading), \(chart.bars.count) bars")
+            return
+        }
+        Self.log.notice("Full history wanted for \(chart.symbol, privacy: .public) \(chart.timeframe.rawValue, privacy: .public): \(chart.bars.count) bars on screen")
         chart.hasFullHistory = true
         let (id, generation) = (chart.id, chartGeneration[chart.id] ?? 0)
         engine.perform { $0.loadFullHistory(id, generation: generation) }
