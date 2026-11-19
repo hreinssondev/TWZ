@@ -77,6 +77,11 @@ extension Workspace {
     func loadByHand(_ symbol: String, into chart: ChartModel, broker: Broker) {
         let s = ForexPair.normalize(symbol)
         guard !s.isEmpty else { return }
+        // A chart following the gainers: the stock it showed leaves the grid while it keeps this one, so
+        // no other chart moves.
+        if !manualChartIDs.contains(chart.id), !chart.symbol.isEmpty, mainCharts.contains(where: { $0.id == chart.id }) {
+            handDisplaced[chart.id] = chart.symbol
+        }
         if chart.symbol != s {
             load(s, timeframe: timeframe(showing: s, in: chart, otherwise: chart.timeframe), into: chart, broker: broker)
         }
@@ -87,7 +92,9 @@ extension Workspace {
     /// account bar's timeframe.
     func resetToGainers() {
         manualChartIDs = []
+        handDisplaced = [:]
         secondaryPins = [:]
+        secondaryDisplaced = [:]
         gridScan = nil
         gainerResets += 1
     }

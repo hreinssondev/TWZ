@@ -8,8 +8,8 @@
 //  Each view also has its own Zoom slider: its charts' default zoom, applied as it moves.
 //  A symbol keeps its chart while it stays in the top N (a reshuffle only moves the charts); only
 //  charts whose symbol dropped out load a new one.
-//  A symbol typed into a chart's field stays in that chart and cell, the gainers filling the other
-//  cells around it, until the top bar's Reset, the field emptied, or a smaller grid without that cell.
+//  A symbol typed into a chart's field stays in that chart and cell, the stock it replaced leaving
+//  the charts meanwhile (so nothing else moves) and the gainers filling the other cells around it, until the top bar's Reset, the field emptied, or a smaller grid without that cell.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
@@ -249,16 +249,19 @@ struct SecondaryChartsView: View {
         broker.setScanner(nil, owner: SecondaryCharts.scannerOwner)
         lastGainers = []
         workspace.secondaryPins = [:]
+        workspace.secondaryDisplaced = [:]
         for chart in workspace.secondaryCharts { workspace.clear(chart, broker: broker) }
     }
 
     /// Fills the charts not set by hand with the top gainers, as many as there are cells left around
     /// the ones set by hand; the other charts are emptied.
     private func syncWithGainers() {
-        let gainers = broker.scans[SecondaryCharts.scannerOwner]?.symbols ?? []
+        let pins = workspace.secondaryPins
+        // Less the stocks the charts set by hand replaced.
+        let displaced = Set(pins.keys.compactMap { workspace.secondaryDisplaced[$0] })
+        let gainers = (broker.scans[SecondaryCharts.scannerOwner]?.symbols ?? []).filter { !displaced.contains($0) }
         guard !gainers.isEmpty, gainers != lastGainers else { return }
         lastGainers = gainers
-        let pins = workspace.secondaryPins
         workspace.fill(workspace.secondaryCharts.filter { pins[$0.id] == nil },
                        withTop: count - pins.values.filter { $0 < count }.count, of: gainers, broker: broker)
     }
@@ -328,8 +331,13 @@ struct SecondaryChartPane: View {
                     // Typed by hand: the chart keeps it and its cell; an emptied field gives it back to the gainers.
                     let symbol = ForexPair.normalize(symbolText)
                     if symbol.isEmpty {
+                        workspace.secondaryDisplaced[chart.id] = nil
                         workspace.secondaryPins[chart.id] = nil
                     } else {
+                        // The stock it showed while following the gainers leaves the charts, so nothing else moves.
+                        if workspace.secondaryPins[chart.id] == nil, !chart.symbol.isEmpty {
+                            workspace.secondaryDisplaced[chart.id] = chart.symbol
+                        }
                         if symbol != chart.symbol { workspace.load(symbol, into: chart, broker: broker) }
                         if let cell { workspace.secondaryPins[chart.id] = cell }
                     }

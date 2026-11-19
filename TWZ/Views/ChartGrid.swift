@@ -9,8 +9,9 @@
 //  only charts whose stock dropped out load a new one. The selected chart follows too: the
 //  selection moves with it, and stays on it if it gets a new stock.
 //  A chart given a stock by hand (a list, its symbol field) keeps it and its cell until the account
-//  bar's Reset, and the gainers skip it: the one that would have been there goes to the next free
-//  cell, and the rest move up one each. A list's load button makes the grid follow that list (its scanner and filters) in place
+//  bar's Reset, and the gainers skip it. The stock it showed leaves the grid meanwhile, so setting it
+//  moves no other chart; later, a gainer that would have been in its cell goes to the next free cell,
+//  and the rest move up one each. A list's load button makes the grid follow that list (its scanner and filters) in place
 //  of the gainers, the same way, until Reset; charts set by hand let go of their stock. A stock shown twice (set by hand, and a gainer in its own cell) is on 5m in the second
 //  chart to show it next to the first's 1m, or 1m next to anything else; both are highlighted while
 //  either is selected (see `ChartPane`).
@@ -139,6 +140,7 @@ extension Workspace {
         for chart in mainCharts where !shown.contains(chart.id) {
             clear(chart, broker: broker)
             manualChartIDs.remove(chart.id)
+            handDisplaced[chart.id] = nil
         }
         if !shown.contains(selectedChartID) {
             selectedChartID = mainCells[0]
@@ -155,8 +157,10 @@ extension Workspace {
         guard !gainers.isEmpty else { return }
         var cells = mainCells
         let following = cells.indices.filter { !manualChartIDs.contains(cells[$0]) }
+        let displaced = displacedGainers
         var ranks: [String] = []
-        for symbol in gainers where !symbol.isEmpty && !ranks.contains(symbol) && ranks.count < cells.count {
+        for symbol in gainers where !symbol.isEmpty && !ranks.contains(symbol) && !displaced.contains(symbol)
+            && ranks.count < cells.count {
             ranks.append(symbol)
         }
         var wanted: [Int: String] = [:]
@@ -203,6 +207,7 @@ extension Workspace {
         gridScan = spec
         broker.setScanner(spec, owner: MainGrid.scannerOwner)
         manualChartIDs = []
+        handDisplaced = [:]
         followGainers(symbols, timeframe: timeframe, broker: broker)
     }
 

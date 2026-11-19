@@ -88,6 +88,9 @@ nonisolated struct MainGridPin: Codable, Equatable {
     var row: Int
     var symbol: String
     var timeframe: Timeframe
+    /// The gainer the chart showed before it was set by hand, kept off the grid meanwhile (see
+    /// `Workspace.handDisplaced`).
+    var displaced: String?
 }
 
 @Observable
@@ -128,6 +131,15 @@ final class Workspace {
     /// keeps: the gainers fill the other cells around them, until the top bar's Reset, an emptied field,
     /// or a smaller grid without that cell (see `SecondaryChartsView`).
     var secondaryPins: [Int: Int] = [:]
+    /// The stock a main-window chart following the gainers showed when it was given one by hand, by chart
+    /// id: it leaves the grid while that chart keeps its own stock, so no other chart moves (see
+    /// `followGainers`). Reset, or the chart letting go, brings it back.
+    var handDisplaced: [Int: String] = [:]
+    /// The same for the Charts window's charts set by hand (see `secondaryPins`).
+    var secondaryDisplaced: [Int: String] = [:]
+
+    /// The stocks kept off the main grid: those the charts still set by hand replaced.
+    var displacedGainers: Set<String> { Set(manualChartIDs.compactMap { handDisplaced[$0] }) }
     /// Round trips double-clicked in the Round trips tab, by symbol: their fills' arrows and entry / exit
     /// lines show on the symbol's charts until the row, or one of those charts, is double-clicked.
     var shownTrips: [String: String] = [:]
@@ -260,6 +272,7 @@ final class Workspace {
             chart.timeframe = pin.timeframe
             countLoad(of: chart)
             manualChartIDs.insert(chart.id)
+            handDisplaced[chart.id] = pin.displaced
         }
     }
 
@@ -282,7 +295,7 @@ final class Workspace {
         mainCells.enumerated().compactMap { index, id in
             guard manualChartIDs.contains(id), let chart = chart(id: id), !chart.symbol.isEmpty else { return nil }
             return MainGridPin(column: index % mainColumns, row: index / mainColumns,
-                               symbol: chart.symbol, timeframe: chart.timeframe)
+                               symbol: chart.symbol, timeframe: chart.timeframe, displaced: handDisplaced[id])
         }
     }
 
