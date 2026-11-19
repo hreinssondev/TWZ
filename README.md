@@ -28,6 +28,8 @@ management in one window built for quick entries and exits.
   crosses and the NOK / SEK pairs), ranked by % change; a chart takes a pair typed as EUR.USD, EURUSD
   or EUR/USD. Pairs chart as bid/ask midpoints around the clock and trade like stocks from hotkeys,
   ⌥ / ⌃-click and ⌘⌫, sized in units of the first currency (hotkey offsets count a cent as a pip).
+  Orders go as forex CFDs, leveraged the way IBKR's European accounts trade currencies, or as
+  IDEALPRO spot (Settings › Trading).
 - **Short selling info**: shortable status and shares to lend, borrow fees, and the SEC Rule 201
   short sale restriction (from Nasdaq's daily list and IB's prices), with SSR-aware order pricing.
 - **Charts window**: a second grid of the top 18 gainers (or any size you set).
@@ -42,7 +44,7 @@ rate).
 - macOS 27 or later.
 - IB Gateway or TWS with the API enabled (Configure › Settings › API: *Enable ActiveX and Socket
   Clients*), and market data subscriptions for the stocks you trade. Forex quotes are free; trading
-  pairs needs the Forex trading permission.
+  pairs needs the CFD trading permission (or Forex, for spot orders).
 
 ## Building
 

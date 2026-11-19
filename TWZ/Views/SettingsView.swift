@@ -170,6 +170,7 @@ private struct TradingSettings: View {
     @AppStorage(HoverPnLSize.storageKey) private var hoverSizing: HoverPnLSize = .buyingPower
     @AppStorage(HoverPnLSize.percentKey) private var hoverPercent = HoverPnLSize.defaultPercent
     @AppStorage(HoverPnLSize.amountKey) private var hoverAmount = HoverPnLSize.defaultAmount
+    @AppStorage(ForexOrders.storageKey) private var forexOrders: ForexOrders = ForexOrders.defaultValue
 
     private let shortcuts: [(String, String)] = [
         ("⌘⇧↩", "Send the selected hotkey"),
@@ -231,6 +232,18 @@ private struct TradingSettings: View {
                 Text(hoverSizing == .buyingPower
                      ? "Hovering a chart shows the P/L of buying that percent (1–100) of the largest long IB's margin allows at the last price, asked from IB as the pointer comes over the chart (a second or two, then kept a few minutes)."
                      : "Hovering a chart shows the P/L of buying the shares this amount buys at the last price, at the current USD.NOK rate.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Forex") {
+                Picker("Orders go to IB as", selection: $forexOrders) {
+                    ForEach(ForexOrders.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.radioGroup)
+                Text((forexOrders == .cfd
+                      ? "Leveraged, the way IBKR's European accounts trade currencies (needs the CFD trading permission). Positions shown are the pairs' CFDs."
+                      : "Leveraged only with IBKR's leveraged forex permission; without it IB takes just the trades that convert currency the account holds. Positions shown are IDEALPRO's, conversions included.")
+                     + " Quotes and charts come from IDEALPRO either way. Applies from the next Connect.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

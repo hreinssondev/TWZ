@@ -30,6 +30,8 @@ nonisolated struct ForexPair: Hashable, Sendable {
 
     static func isForex(_ symbol: String) -> Bool { ForexPair(symbol) != nil }
 
+    static func isCurrency(_ code: String) -> Bool { currencies.contains(code) }
+
     /// The Forex list: the majors, the main crosses and the Scandinavian pairs.
     static let listed = [
         "EUR.USD", "GBP.USD", "USD.JPY", "USD.CHF", "AUD.USD", "USD.CAD", "NZD.USD",
@@ -37,8 +39,8 @@ nonisolated struct ForexPair: Hashable, Sendable {
         "USD.NOK", "EUR.NOK", "NOK.SEK", "USD.SEK", "EUR.SEK",
     ]
 
-    /// Currencies a typed "EURUSD" or "EUR/USD" is read as a pair of.
-    private static let currencies: Set<String> = [
+    /// Currencies a typed "EURUSD" or "EUR/USD" is read as a pair of, and a CFD on one as a forex pair.
+    static let currencies: Set<String> = [
         "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "NOK", "SEK", "DKK",
         "PLN", "HUF", "CZK", "MXN", "ZAR", "SGD", "HKD", "CNH", "TRY", "ILS",
     ]
@@ -78,4 +80,17 @@ nonisolated struct ForexPair: Hashable, Sendable {
         guard let pair = dollarPair(for: currency), let m = mid(pair), m > 0 else { return nil }
         return pair.hasPrefix("USD.") ? 1 / m : m
     }
+}
+
+/// What forex orders go to IB as (Settings › Trading): CFDs, the way IBKR's European accounts trade
+/// currencies with leverage, or spot on IDEALPRO, leveraged only with IBKR's leveraged forex permission
+/// (otherwise just conversions of currency held). Quotes and charts come from IDEALPRO either way.
+/// Read on connecting.
+nonisolated enum ForexOrders: String, CaseIterable, Identifiable {
+    case cfd = "CFD"
+    case spot = "Spot (IDEALPRO)"
+    var id: String { rawValue }
+
+    static let storageKey = "forexOrders"
+    static let defaultValue = ForexOrders.cfd
 }

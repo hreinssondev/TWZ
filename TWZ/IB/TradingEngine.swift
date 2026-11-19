@@ -169,6 +169,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var minTicks: [String: Double] = [:]
     private var detailsSymbolByReq: [Int: String] = [:]
     private var forexRankingScheduled = false
+    /// Forex orders and positions are CFDs rather than IDEALPRO spot (`ForexOrders`, read on connecting).
+    private var forexCFD = ForexOrders.defaultValue == .cfd
+    /// Pairs IB has no CFD for, found from their contract details.
+    private var pairsWithoutCFD: Set<String> = []
 
     private let accountSummaryReq = 1
     private let pnlReq = 2
@@ -360,6 +364,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard state == .disconnected else { return }
         resetSession()
         self.clientId = clientId
+        forexCFD = (defaults.string(forKey: ForexOrders.storageKey).flatMap(ForexOrders.init(rawValue:)) ?? ForexOrders.defaultValue) == .cfd
         state = .connecting
         statusText = "Connecting to \(host):\(port)…"
         socket.connect(host: host, port: port)
@@ -417,6 +422,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         scans.removeAll()
         fxReq = nil
         detailsSymbolByReq.removeAll()
+        pairsWithoutCFD.removeAll()
         fxBid = nil
         fxAsk = nil
         usdNokIsLive = false
@@ -636,13 +642,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if forex { requestContractDetails(symbol) }
     }
 
-    /// A forex pair's contract details, for its smallest price step (see `contractData`).
+    /// The contract details of what a forex pair's orders go to (its CFD, or IDEALPRO spot), for its
+    /// smallest price step (see `contractData`).
     private func requestContractDetails(_ symbol: String) {
         guard apiReady, minTicks[symbol] == nil, !detailsSymbolByReq.values.contains(symbol) else { return }
         let reqId = makeReqId()
         detailsSymbolByReq[reqId] = symbol
         // reqContractDetails: version 8, reqId, contract, includeExpired, secIdType, secId, issuerId (server ≥ 176)
-        var f: [Any] = [9, 8, reqId] + contract(symbol) + [false, "", ""]
+        var f: [Any] = [9, 8, reqId] + orderContract(symbol, exchange: "SMART") + [false, "", ""]
         if serverVersion >= 176 { f.append("") }
         sendFields(f)
     }
@@ -1124,7 +1131,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let triggerMethod = stop == nil ? 0 : forex ? 8 : 2               // 2 = last trade, 8 = midpoint
         let fillsOutsideRth = outsideRth && limit != nil && !forex
         var f: [Any] = [3, orderId]
-        f += contract(symbol, exchange: exchange)
+        f += orderContract(symbol, exchange: exchange)
         f += ["", ""]                                                     // secIdType, secId
         f += [action, quantity, orderType, limit ?? Self.unsetDouble, stop ?? Self.unsetDouble,
               tif.rawValue, ocaGroup, account, "", 0, "TWZ"]
@@ -1312,9 +1319,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case .cancelSymbol:
             cancelOrders(for: symbol)
         case .flattenAll:
-            // Forex pairs only once traded today: IB reports currency conversions as forex positions too.
+            // Spot forex pairs only once traded today: IB reports currency conversions as forex positions too.
             let traded = Set(fills.values.map(\.symbol))
-            for p in positions.values where p.quantity != 0 && (!ForexPair.isForex(p.symbol) || traded.contains(p.symbol)) {
+            for p in positions.values where p.quantity != 0
+                && (forexCFD || !ForexPair.isForex(p.symbol) || traded.contains(p.symbol)) {
                 close(p, fraction: 1, hotkey: hotkey)
             }
         case .closeHalf, .closeAll:
@@ -1974,7 +1982,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         if ForexPair.isForex(symbol) {
             if !MarketSession.forexIsOpen() { notes.append("forex closed — works from \(MarketSession.forexReopening())") }
-            if let ref = price.limit ?? quotes[symbol]?.mid, let usd = usdPerPriceUnit(symbol),
+            if !forexCFD, let ref = price.limit ?? quotes[symbol]?.mid, let usd = usdPerPriceUnit(symbol),
                quantity * ref * usd < ForexPair.minimumUSD {
                 notes.append("an odd lot (under IDEALPRO's $25,000), filled at worse prices")
             }
@@ -2318,8 +2326,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             lastMessage = "USD.NOK rate: \(text)" + (usdNok.map { " (using saved \(Fmt.price($0)))" } ?? "")
             return
         }
-        // No contract details: the pair keeps the usual half-pip step.
-        if detailsSymbolByReq.removeValue(forKey: reqId) != nil { return }
+        // No contract details: the pair keeps the usual half-pip step. With CFD orders, IB has no CFD for it.
+        if let symbol = detailsSymbolByReq.removeValue(forKey: reqId) {
+            if forexCFD, code == 200, pairsWithoutCFD.insert(symbol).inserted {
+                lastMessage = "IB has no CFD for \(pairsWithoutCFD.sorted().joined(separator: ", ")): no orders in "
+                    + (pairsWithoutCFD.count == 1 ? "it" : "them") + " with Settings › Trading's CFD forex orders"
+            }
+            return
+        }
 
         // Over IB's tick-by-tick limit: remember how many it allows, so the selected chart keeps
         // its streams. Refused for another reason: that chart keeps IB's regular bar updates.
@@ -2511,7 +2525,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     private func position(_ f: [String]) {
         // version, account, conId, symbol, secType, ltd, strike, right, mult, exch, currency, localSym, tradingClass, pos, avgCost
-        guard f.str(2) == account, f.str(5) == "STK" || f.str(5) == "CASH" else { return }
+        // Forex positions of the kind its orders go as: CFDs, or spot (where conversions show up too).
+        let secType = f.str(5)
+        guard f.str(2) == account,
+              secType == "STK" || (Self.isPair(f.str(4), secType: secType) && secType == (forexCFD ? "CFD" : "CASH")) else { return }
         let symbol = Self.symbol(f.str(4), secType: f.str(5), currency: f.str(11))
         let qty = f.double(14)
         let old = positions[symbol]?.quantity ?? 0
@@ -2568,10 +2585,20 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return [0, symbol, "STK", "", 0.0, "", "", exchange, "", "USD", "", ""]
     }
 
-    /// The app's symbol for a contract IB sent: a stock's ticker, or a forex pair ("CASH") as "EUR.USD",
-    /// its base currency then the currency it's priced in.
+    /// What orders go to: `contract`, except that with CFD forex orders a pair trades as its CFD.
+    private func orderContract(_ symbol: String, exchange: String) -> [Any] {
+        if forexCFD, let pair = ForexPair(symbol) { return [0, pair.base, "CFD", "", 0.0, "", "", "SMART", "", pair.quote, "", ""] }
+        return contract(symbol, exchange: exchange)
+    }
+
+    /// The app's symbol for a contract IB sent: a stock's ticker, or a forex pair (spot "CASH", or a
+    /// "CFD" on a currency) as "EUR.USD", its base currency then the currency it's priced in.
     private static func symbol(_ symbol: String, secType: String, currency: String) -> String {
-        secType == "CASH" ? "\(symbol).\(currency)" : symbol
+        isPair(symbol, secType: secType) ? "\(symbol).\(currency)" : symbol
+    }
+
+    private static func isPair(_ symbol: String, secType: String) -> Bool {
+        secType == "CASH" || (secType == "CFD" && ForexPair.isCurrency(symbol))
     }
 
     private func send(_ fields: Any...) { sendFields(fields) }
