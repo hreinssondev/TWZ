@@ -87,6 +87,7 @@ extension Workspace {
     /// account bar's timeframe.
     func resetToGainers() {
         manualChartIDs = []
+        secondaryPins = [:]
         gridScan = nil
         gainerResets += 1
     }

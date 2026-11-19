@@ -124,6 +124,10 @@ final class Workspace {
     /// instead of following the gainers, until Reset (see `ChartGrid`). Saved with their stock
     /// (see `mainGridPins`).
     var manualChartIDs: Set<Int> = []
+    /// Charts window charts given a stock by hand (their symbol field), by chart id, with the cell each
+    /// keeps: the gainers fill the other cells around them, until the top bar's Reset, an emptied field,
+    /// or a smaller grid without that cell (see `SecondaryChartsView`).
+    var secondaryPins: [Int: Int] = [:]
     /// Round trips double-clicked in the Round trips tab, by symbol: their fills' arrows and entry / exit
     /// lines show on the symbol's charts until the row, or one of those charts, is double-clicked.
     var shownTrips: [String: String] = [:]

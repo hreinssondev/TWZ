@@ -8,6 +8,8 @@
 //  Each view also has its own Zoom slider: its charts' default zoom, applied as it moves.
 //  A symbol keeps its chart while it stays in the top N (a reshuffle only moves the charts); only
 //  charts whose symbol dropped out load a new one.
+//  A symbol typed into a chart's field stays in that chart and cell, the gainers filling the other
+//  cells around it, until the top bar's Reset, the field emptied, or a smaller grid without that cell.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
@@ -135,11 +137,11 @@ struct SecondaryChartsView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                SplitGrid(columns: columns, rows: rows,
-                          items: workspace.ranked(workspace.secondaryCharts, by: lastGainers),
+                let items = self.items
+                SplitGrid(columns: columns, rows: rows, items: items,
                           gap: Self.gap, inset: Self.gap,
                           columnSplits: $columnSplits, rowSplits: $rowSplits) { chart in
-                    SecondaryChartPane(chart: chart)
+                    SecondaryChartPane(chart: chart, cell: items.firstIndex { $0.id == chart.id })
                 }
             }
         }
@@ -163,7 +165,13 @@ struct SecondaryChartsView: View {
             if paused { stop() } else { start() }
         }
         // Charts still in the new top N stay put; the rest are emptied (smaller grid) or filled (larger).
+        // A chart set by hand whose cell is gone lets go of its stock.
         .onChange(of: count) {
+            workspace.secondaryPins = workspace.secondaryPins.filter { $0.value < count }
+            if !isPaused { lastGainers = []; syncWithGainers() }
+        }
+        // A chart set or let go by hand, or Reset: the gainers fill the cells around the ones set by hand.
+        .onChange(of: workspace.secondaryPins) {
             if !isPaused { lastGainers = []; syncWithGainers() }
         }
         .onChange(of: layout) { applyZoom() }
@@ -240,15 +248,30 @@ struct SecondaryChartsView: View {
     private func stop() {
         broker.setScanner(nil, owner: SecondaryCharts.scannerOwner)
         lastGainers = []
+        workspace.secondaryPins = [:]
         for chart in workspace.secondaryCharts { workspace.clear(chart, broker: broker) }
     }
 
-    /// Fills the charts with the top N gainers (the grid's count); the other charts are emptied.
+    /// Fills the charts not set by hand with the top gainers, as many as there are cells left around
+    /// the ones set by hand; the other charts are emptied.
     private func syncWithGainers() {
         let gainers = broker.scans[SecondaryCharts.scannerOwner]?.symbols ?? []
         guard !gainers.isEmpty, gainers != lastGainers else { return }
         lastGainers = gainers
-        workspace.fill(workspace.secondaryCharts, withTop: count, of: gainers, broker: broker)
+        let pins = workspace.secondaryPins
+        workspace.fill(workspace.secondaryCharts.filter { pins[$0.id] == nil },
+                       withTop: count - pins.values.filter { $0 < count }.count, of: gainers, broker: broker)
+    }
+
+    /// The charts in grid order: one set by hand in its own cell, the others in gainer rank order around them.
+    private var items: [ChartModel] {
+        let pins = workspace.secondaryPins
+        let pinned = Dictionary(pins.map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        var rest = workspace.ranked(workspace.secondaryCharts.filter { pins[$0.id] == nil }, by: lastGainers)[...]
+        return (0..<workspace.secondaryCharts.count).compactMap { cell in
+            if let id = pinned[cell], let chart = workspace.secondaryCharts.first(where: { $0.id == id }) { return chart }
+            return rest.popFirst()
+        }
     }
 }
 
@@ -259,6 +282,8 @@ struct SecondaryChartPane: View {
     @Environment(\.sideColors) private var sideColors
     @Environment(Workspace.self) private var workspace
     let chart: ChartModel
+    /// Its place in the grid, which a symbol typed into it keeps.
+    var cell: Int?
 
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @State private var symbolText = ""
@@ -300,7 +325,14 @@ struct SecondaryChartPane: View {
                 .frame(width: 70)
                 .focused($symbolFocused)
                 .onSubmit {
-                    workspace.load(symbolText, into: chart, broker: broker)
+                    // Typed by hand: the chart keeps it and its cell; an emptied field gives it back to the gainers.
+                    let symbol = ForexPair.normalize(symbolText)
+                    if symbol.isEmpty {
+                        workspace.secondaryPins[chart.id] = nil
+                    } else {
+                        if symbol != chart.symbol { workspace.load(symbol, into: chart, broker: broker) }
+                        if let cell { workspace.secondaryPins[chart.id] = cell }
+                    }
                     symbolText = chart.symbol
                     symbolFocused = false
                 }
