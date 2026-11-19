@@ -125,7 +125,8 @@ struct OrdersPanel: View {
     }
 
     private var positionsColumn: some View {
-        column("Positions", count: broker.positions.count, onEmptyClick: deselectChart, onHeaderClick: toggleStacked) { positionRows }
+        column("Positions", count: broker.positions.count + broker.simPositions.count, onEmptyClick: deselectChart,
+               onHeaderClick: toggleStacked) { positionRows }
     }
 
     private func toggleStacked() {
@@ -450,7 +451,7 @@ struct OrdersPanel: View {
     @ViewBuilder private var positionRows: some View {
         let positions = broker.positions.values.sorted { $0.symbol < $1.symbol }
         let openTripOrders = tripOrders.open
-        if positions.isEmpty { empty("No positions") }
+        if positions.isEmpty, broker.simPositions.isEmpty { empty("No positions") }
         ForEach(positions) { p in
             let last = broker.quote(p.symbol)?.last
             // In dollars: a forex pair's at its currency's dollar rate.
@@ -483,6 +484,52 @@ struct OrdersPanel: View {
             .help("Double-click to show \(p.symbol)'s chart")
             .rowStyle()
         }
+        ForEach(broker.simPositions.values.sorted { $0.symbol < $1.symbol }) { simRow($0) }
+    }
+
+    /// A what-if trade (simulated, see `SimTrades.swift`) laid out like a position, marked SIM in the
+    /// what-if line's color: its P/L and value in NOK, shares and average price, its simulated stop loss
+    /// and take profit, and IB's estimate of its commissions in and out (twice the way in's). ✕ takes it
+    /// off without a fill.
+    private func simRow(_ sim: SimPosition) -> some View {
+        let symbol = sim.symbol
+        let last = broker.quote(symbol)?.last
+        let pnl = last.flatMap { broker.simPnLNOK(sim, at: $0) }
+        let valueNOK = broker.usdPerPriceUnit(symbol).flatMap { usd in
+            broker.usdNok.map { abs(sim.quantity) * (last ?? sim.avgCost) * usd * $0 }
+        }
+        let fees = sim.entryCommission.map { OrderPreview.Commission(min: $0.min * 2, max: $0.max * 2, currency: $0.currency) }
+        let exits = [sim.stopLoss.map { "SL \(Fmt.price($0, for: symbol))" }, sim.takeProfit.map { "TP \(Fmt.price($0, for: symbol))" }]
+            .compactMap { $0 }
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                symbolButton(symbol, onDoubleClick: { workspace.focusPosition(symbol, broker: broker) })
+                Text("SIM").foregroundStyle(TradingChart.whatIfColor).font(.system(size: 10, weight: .semibold))
+                Spacer(minLength: 2)
+                Text(pnl.map { Fmt.nok($0, signed: true, groupedFrom: Self.groupedFrom) } ?? "—")
+                    .foregroundStyle(sideColors.of((pnl ?? 0) >= 0))
+                Button {
+                    broker.removeSim(symbol)
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Take the what-if trade off (⌘⌫ on its chart closes it at market instead)")
+            }
+            HStack(spacing: 4) {
+                if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(sim.isLong)) }
+                Text("\(Fmt.shares(sim.quantity, groupedFrom: Self.groupedFrom)) - \(Fmt.price(sim.avgCost, for: symbol))")
+                if !exits.isEmpty { Text(exits.joined(separator: " ")).foregroundStyle(.secondary) }
+                Spacer(minLength: 0)
+                if let fees { Text(commissionRange(fees)).foregroundStyle(.secondary) }
+            }
+            .font(.system(size: 10).monospacedDigit())
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { workspace.focusPosition(symbol, broker: broker) }
+        .help("What-if trade in \(symbol), simulated and never sent to IB; fees are IB's estimate in and out. "
+              + "Double-click to show its chart.")
+        .rowStyle()
     }
 
     /// Today's round trips, newest first; the header sums the closed ones.

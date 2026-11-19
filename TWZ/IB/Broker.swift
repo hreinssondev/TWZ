@@ -99,6 +99,10 @@ final class Broker {
     private(set) var protectiveOrders: [Int: Protective] = [:]
     /// What placed each order this app sent ("Mid", "Mkt", "⌥-click", "SL", …), by order id.
     private(set) var orderSources: [Int: String] = [:]
+    /// What-if trades: simulated positions by symbol, never sent to IB (see `SimTrades.swift`). Saved.
+    var simPositions: [String: SimPosition] = SimPosition.saved() {
+        didSet { simPositionsChanged(from: oldValue) }
+    }
     /// The largest new long and new short IB's margin allows per symbol at about the last price, for
     /// the chart header's buying and short selling power and the hover P/L's pretend buy (see
     /// `refreshMarginSize`).
@@ -172,6 +176,7 @@ final class Broker {
         ssrList.onChange = { symbols in engine.perform { $0.setNasdaqSSR(symbols) } }
         let checks = hideRestricted
         engine.perform { $0.setChecksRestrictions(checks) }
+        setQuoteSymbols(Array(simPositions.keys), owner: Self.simQuoteOwner)
     }
 
     // MARK: - Commands
@@ -247,13 +252,33 @@ final class Broker {
 
     /// ⌥< and the Cancel Symbol hotkey: every working order in `symbol`, stop loss and take profit included.
     func cancelOrders(for symbol: String) {
+        removeSimProtective(symbol.uppercased())
         order { $0.cancelOrders(for: symbol) }
     }
 
     /// ⌘⌫: cancels every order in `symbol`, stop loss and take profit included, then closes the whole
-    /// position at market.
+    /// position at market; with no position but a what-if trade, closes that.
     func closePosition(_ symbol: String) {
+        let s = symbol.uppercased()
+        if positions[s].map({ $0.quantity == 0 }) ?? true, simPositions[s] != nil { return closeSimAtMarket(s) }
         order { $0.closePosition(symbol) }
+    }
+
+    /// Shows `message` in the status line and the message history, as the engine's own messages show.
+    func say(_ message: String) {
+        engine.perform { $0.say(message) }
+    }
+
+    /// The largest new `action` (BUY: long, SELL: short) IB's margin allows in `symbol` at `price`,
+    /// asked now: `completion` gets the price asked at and the shares (nil when IB can't size it) a
+    /// second or two later, or never while not connected.
+    func askMaxNew(_ action: String, symbol: String, at price: Double,
+                   completion: @escaping @MainActor @Sendable (_ price: Double, _ shares: Double?) -> Void) {
+        engine.perform { engine in
+            engine.maxNew(action, symbol: symbol, at: price) { price, shares in
+                Task { @MainActor in completion(price, shares) }
+            }
+        }
     }
 
     func cancelAllOrders() {
@@ -481,6 +506,7 @@ final class Broker {
         if let v = s.quotes {
             quotes = v
             for (symbol, box) in quoteBoxes where box.quote != v[symbol] { box.quote = v[symbol] }
+            if !simPositions.isEmpty { checkSimExits() }
         }
         if let v = s.unavailableQuotes { update(\.unavailableQuotes, v) }
         if let v = s.scans { rawScans = v }

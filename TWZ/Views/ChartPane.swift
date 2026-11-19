@@ -226,6 +226,26 @@ struct ChartPane: View {
                 .background(Capsule().fill(sideColors.of(p.quantity > 0).opacity(0.25)))
             }
 
+            // A what-if trade (simulated, see `SimTrades.swift`): "SIM LONG 23 322 +452", its value and
+            // P/L in NOK like a position's, outlined in the what-if color.
+            if let sim = broker.simPositions[chart.symbol] {
+                let last = broker.quote(sim.symbol)?.last
+                let usd = broker.usdPerPriceUnit(sim.symbol)
+                let valueNOK = usd.flatMap { usd in broker.usdNok.map { abs(sim.quantity) * (last ?? sim.avgCost) * usd * $0 } }
+                let pnl = last.flatMap { broker.simPnLNOK(sim, at: $0) }
+                HStack(spacing: 4) {
+                    Text("SIM \(sim.isLong ? "LONG" : "SHORT") \(valueNOK.map { Fmt.nok($0, groupedFrom: 0) } ?? Fmt.shares(abs(sim.quantity)))")
+                    if let pnl {
+                        Text(Fmt.nok(pnl, signed: true, groupedFrom: 0)).foregroundStyle(sideColors.of(pnl >= 0))
+                    }
+                }
+                .help("What-if trade, simulated and never sent to IB: \(Fmt.shares(abs(sim.quantity))) @ "
+                      + "\(Fmt.price(sim.avgCost, for: sim.symbol)). ⌃-click the chart for its stop loss or take profit; ⌘⌫ closes it.")
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .overlay(Capsule().strokeBorder(TradingChart.whatIfColor.opacity(0.8)))
+            }
+
             // Tick-by-tick: a fast chart (⌘↩, filled ⚡) streams its trades; the selected chart its
             // trades and bid/ask (outlined ⚡ unless also fast). Lit while trades stream, dim offline
             // or refused; a red circle instead once IB's limit leaves it out.
@@ -411,6 +431,9 @@ struct TradingChart: View {
                 onTrade()
                 if hasPosition {
                     broker.placeProtective(symbol: chart.symbol, at: price)
+                } else if broker.simPositions[chart.symbol] != nil {
+                    // A what-if trade: its simulated stop loss or take profit.
+                    broker.placeSimProtective(symbol: chart.symbol, at: price)
                 } else {
                     // No position: a what-if buy at the clicked price, sized from IB's margin preview.
                     let symbol = chart.symbol
@@ -432,6 +455,9 @@ struct TradingChart: View {
                 return true
             },
             controlClickColor: { price in
+                if !hasPosition, broker.simPositions[chart.symbol] != nil {
+                    return broker.simProtectiveKind(chart.symbol, at: price).map(protectiveColor)
+                }
                 guard hasPosition else { return Self.whatIfColor }
                 guard let kind = broker.protectiveKind(symbol: chart.symbol, at: price),
                       !broker.protectiveFillsNow(symbol: chart.symbol, kind: kind, at: price) else { return nil }
@@ -443,6 +469,7 @@ struct TradingChart: View {
                 // (a forex pair's at its currency's dollar rate).
                 guard let usd = broker.usdPerPriceUnit(chart.symbol) else { return nil }
                 if let p = broker.positions[chart.symbol], p.quantity != 0 { return (price - p.avgCost) * p.quantity * usd }
+                if let sim = broker.simPositions[chart.symbol] { return sim.pnl(at: price) * usd }
                 if let whatIf = workspace.whatIfs[chart.symbol] { return whatIf.pnl(at: price) * usd }
                 guard let last = broker.quote(chart.symbol)?.last else { return nil }
                 if hoverSizing == .nok {
@@ -454,6 +481,9 @@ struct TradingChart: View {
             onCancelOrder: { id in
                 if id == WhatIf.lineId {
                     workspace.whatIfs[chart.symbol] = nil
+                } else if id == SimPosition.stopLossLineId || id == SimPosition.takeProfitLineId {
+                    broker.removeSimProtective(chart.symbol, stopLoss: id == SimPosition.stopLossLineId,
+                                               takeProfit: id == SimPosition.takeProfitLineId)
                 } else {
                     broker.cancelOrder(id, why: "chart: clicked the order line")
                 }
@@ -609,6 +639,19 @@ struct TradingChart: View {
             // Avg cost: number only on the axis (just left of it when the last price box would cover it).
             lines.append(PriceLine(price: p.avgCost, color: LineColors.resolve(avgCostHex, default: LineColors.defaultAvgCost),
                                    label: "", dashed: avgCostDashed, dotted: avgCostDashed && avgCostDots, movesAsideForLastPrice: true))
+        }
+        if let sim = broker.simPositions[chart.symbol] {
+            // A what-if trade: its average price in the what-if color, SIM beside it, and its simulated stop
+            // loss and take profit in their colors, dotted; a click on one takes it off.
+            lines.append(PriceLine(price: sim.avgCost, color: Self.whatIfColor, label: "SIM", movesAsideForLastPrice: true))
+            if let stop = sim.stopLoss {
+                lines.append(PriceLine(price: stop, color: protectiveColor(.stopLoss), label: "SIM", dotted: true,
+                                       orderId: SimPosition.stopLossLineId, cancelsOnClick: true))
+            }
+            if let target = sim.takeProfit {
+                lines.append(PriceLine(price: target, color: protectiveColor(.takeProfit), label: "SIM", dotted: true,
+                                       orderId: SimPosition.takeProfitLineId, cancelsOnClick: true))
+            }
         }
         if let whatIf = workspace.whatIfs[chart.symbol] {
             // ⌃-clicked with no position: a line at the pretend buy's price, the price on the axis (just

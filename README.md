@@ -24,6 +24,9 @@ management in one window built for quick entries and exits.
 - **Hotkeys**: a grid of configurable buttons (buy, sell, close half / all, cancel, flatten) priced
   off the bid, ask, mid, last or market, each with an optional keyboard shortcut. ⌘⌫ cancels the
   symbol's orders and closes the position at market.
+- **What-if trades**: ⌥⇧1–4 buys (⌃⌥⇧1–4 shorts) $1,000 / $2,000 / $3,000 / 85% of the buying power
+  of the selected chart's stock, simulated and never sent to IB. It shows like a position, marked SIM,
+  with its P/L and IB's commission estimate, and ⌃-click gives it a simulated stop loss or take profit.
 - **Scanner lists**: gainers, losers, after-hours gainers and most active by dollar volume, with
   each stock's 5-minute change. One click charts a stock; the load button fills the grid from a list.
 - **Orders, fills and positions** side by side or stacked, with today's round trips and their P/L.

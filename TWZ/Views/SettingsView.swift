@@ -181,6 +181,9 @@ private struct TradingSettings: View {
         ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included"),
         ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
+        ("⌥⇧1 2 3 4", "What-if trade: buy $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
+            + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),
+        ("⌃⌥⇧1 2 3 4", "The same what-if trade, selling (short)"),
         ("Own shortcut", "Send that hotkey (set in the hotkey editor)"),
     ]
 

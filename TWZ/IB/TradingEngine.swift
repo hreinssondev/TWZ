@@ -1269,6 +1269,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             : "Cancelling \(working.count) order\(working.count == 1 ? "" : "s") in \(symbol)"
     }
 
+    /// A message from the UI for the status line (a what-if trade's, say).
+    func say(_ message: String) {
+        lastMessage = message
+    }
+
     func cancelAllOrders() {
         guard apiReady else { return }
         send(58, 1)                                                       // reqGlobalCancel

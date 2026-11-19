@@ -15,6 +15,9 @@
 //  (R, G, B, Y, O, P, M, W, K black, I pink) colors the stock (see `StockColor`), ⌘⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
+//  ⌥⇧1 / 2 / 3 / 4 buys a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 / $3,000 /
+//  85% of the buying power in the selected chart's symbol; ⌃⌥⇧1–4 sells (shorts) the same. Matched by
+//  key, number row or keypad, whatever the keyboard layout types there.
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
 //
@@ -52,6 +55,17 @@ struct TradingShortcuts: ViewModifier {
                             broker.run(hotkey, symbol: workspace.targetSymbol)
                         } else {
                             NSSound.beep()
+                        }
+                        return nil
+                    }
+                    // ⌥⇧1–4 buys, ⌃⌥⇧1–4 sells a what-if trade in the selected chart's symbol.
+                    if inMainWindow, modifiers == [.option, .shift] || modifiers == [.control, .option, .shift],
+                       let size = SimSize(keyCode: event.keyCode) {
+                        let symbol = workspace.targetSymbol
+                        if symbol.isEmpty {
+                            NSSound.beep()
+                        } else {
+                            broker.placeSim(modifiers.contains(.control) ? "SELL" : "BUY", size, symbol: symbol)
                         }
                         return nil
                     }
@@ -135,6 +149,9 @@ extension KeyShortcut {
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }
         if option, !command, !control, k == "z" || k == "<" { return "\(display) cancels orders" }
+        if option, shift, !command, SimSize.keyCodes.contains(keyCode) {
+            return "\(display) \(control ? "sells" : "buys") a what-if trade"
+        }
         return nil
     }
 
