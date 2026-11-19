@@ -139,6 +139,10 @@ final class Workspace {
     var gridScan: ScanSpec? {
         didSet { defaults.set(gridScan.flatMap { try? JSONEncoder().encode($0) }, forKey: MainGrid.scanKey) }
     }
+    /// Colors given to stocks with ⌘⇧ and a color's letter, by symbol (see `StockColor`). Saved.
+    var stockColors: [String: StockColor] {
+        didSet { defaults.set(stockColors.mapValues(\.rawValue), forKey: StockColor.storageKey) }
+    }
     /// Saved layouts, in the order saved (see `Layouts`).
     var layouts: [SavedLayout] {
         didSet { defaults.set(try? JSONEncoder().encode(layouts), forKey: Layouts.storageKey) }
@@ -213,6 +217,9 @@ final class Workspace {
         }
 
         fastChartIDs = Set(defaults.array(forKey: "fastChartIDs") as? [Int] ?? Array(0..<4))
+
+        stockColors = (defaults.dictionary(forKey: StockColor.storageKey) as? [String: String] ?? [:])
+            .compactMapValues(StockColor.init(rawValue:))
 
         layouts = defaults.data(forKey: Layouts.storageKey)
             .flatMap { try? JSONDecoder().decode([SavedLayout].self, from: $0) } ?? []

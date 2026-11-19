@@ -115,7 +115,7 @@ extension Workspace {
 /// fast (⌘↩), a red S if shortable, SSR under the short sale restriction, its short selling and buying
 /// power in NOK and its own timeframe switch over a chart that trades. Clicking it selects it; the selected chart is outlined,
 /// and so, a little fainter, is any other chart showing the same stock, since hotkeys go to that stock
-/// either way.
+/// either way. A stock given a color (⌘⇧ and its letter) is outlined in it, inside those outlines.
 struct ChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
@@ -139,11 +139,7 @@ struct ChartPane: View {
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(isSelected ? Color.accentColor : showsTarget ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.12),
-                              lineWidth: isSelected || showsTarget ? outlineWidth : 1)
-        )
+        .overlay { outline }
         .simultaneousGesture(TapGesture().onEnded { workspace.selectedChartID = chart.id })
         .onAppear {
             symbolText = chart.symbol
@@ -164,6 +160,27 @@ struct ChartPane: View {
         .onChange(of: symbolFocused) { _, focused in
             if !focused { symbolText = chart.symbol }
         }
+    }
+
+    /// The selection outline (fainter on another chart of the same stock), and inside it the stock's
+    /// color, so both show; the color alone takes the place of the plain border.
+    private var outline: some View {
+        let ring: Color? = isSelected ? .accentColor : showsTarget ? Color.accentColor.opacity(0.6) : nil
+        let mark = workspace.stockColors[chart.symbol]?.color
+        let inset = ring == nil ? 0 : outlineWidth
+        return ZStack {
+            if let ring {
+                RoundedRectangle(cornerRadius: 4).strokeBorder(ring, lineWidth: outlineWidth)
+            } else if mark == nil {
+                RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+            }
+            if let mark {
+                RoundedRectangle(cornerRadius: max(1, 4 - inset))
+                    .strokeBorder(mark, lineWidth: outlineWidth)
+                    .padding(inset)
+            }
+        }
+        .allowsHitTesting(false)
     }
 
     private var timeframe: Binding<Timeframe> {

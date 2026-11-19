@@ -11,7 +11,8 @@ management in one window built for quick entries and exits.
 ## Features
 
 - **Chart grid** from 2×2 up to 8×4 that follows the top gainers in rank order, or a list you load
-  into it. Any chart can be given a stock by hand, and the top bar's Reset hands it back.
+  into it. Any chart can be given a stock by hand, and the top bar's Reset hands it back. ⌘⇧ and a
+  color's letter outlines the selected chart's stock in that color on every chart (⌘⇧⌫ takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom, 1m to daily,
   pre-market, after hours and overnight shading, VWAP and SMA 9 / 21, volume, tick-by-tick trades on
   the selected chart.

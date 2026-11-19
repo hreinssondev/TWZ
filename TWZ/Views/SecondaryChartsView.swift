@@ -260,6 +260,7 @@ struct SecondaryChartPane: View {
     @Environment(Workspace.self) private var workspace
     let chart: ChartModel
 
+    @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
 
@@ -271,7 +272,14 @@ struct SecondaryChartPane: View {
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
+        .overlay {
+            // The stock's color (⌘⇧ and its letter in the main window), else the plain border.
+            if let mark = workspace.stockColors[chart.symbol]?.color {
+                RoundedRectangle(cornerRadius: 4).strokeBorder(mark, lineWidth: outlineWidth).allowsHitTesting(false)
+            } else {
+                RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12))
+            }
+        }
         .simultaneousGesture(TapGesture().onEnded {
             if !chart.symbol.isEmpty { workspace.loadIntoSelectedChart(chart.symbol, broker: broker) }
         })
