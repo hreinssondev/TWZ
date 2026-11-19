@@ -1627,42 +1627,53 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// Sizes a ⌃-click what-if buy from IB's margin previews (see `marginLimit`). Takes a second or
     /// two; `completion` runs on the engine queue, and not at all if IB can't size it (`lastMessage` says why).
-    /// `quiet` (the hover P/L's sizing) leaves `lastMessage` alone.
-    func sizeWhatIf(symbol rawSymbol: String, at clickedPrice: Double, fraction: Double, quiet: Bool = false,
+    func sizeWhatIf(symbol rawSymbol: String, at clickedPrice: Double, fraction: Double,
                     completion: @escaping @Sendable (WhatIfSize) -> Void) {
         let symbol = rawSymbol.uppercased()
-        func say(_ message: String) { if !quiet { lastMessage = message } }
-        let why = quiet ? "margin preview for the hover P/L" : "margin preview for a ⌃-click what-if"
         guard apiReady else {
-            say("Not connected to IB Gateway")
+            lastMessage = "Not connected to IB Gateway"
             return
         }
         guard !symbol.isEmpty else {
-            say("Load a symbol into the chart first")
+            lastMessage = "Load a symbol into the chart first"
             return
         }
         guard clickedPrice > 0 else {
-            say("\(symbol) what-if: no price there")
+            lastMessage = "\(symbol) what-if: no price there"
             return
         }
         let price = tickRounded(clickedPrice, for: symbol)
-        say("\(symbol) what-if: asking IB for the margin…")
-        marginLimit(symbol, action: "BUY", price: price, why: why) { result in
+        lastMessage = "\(symbol) what-if: asking IB for the margin…"
+        marginLimit(symbol, action: "BUY", price: price, why: "margin preview for a ⌃-click what-if") { [self] result in
             let preview: MarginPreview
             switch result {
             case .success(let p): preview = p
             case .failure(let failure):
-                say("\(symbol) what-if: \(failure.reason)")
+                lastMessage = "\(symbol) what-if: \(failure.reason)"
                 return
             }
             let shares = (preview.maxShares * fraction).rounded(.down)
             guard shares >= 1 else {
-                say("\(symbol) what-if: no buying power left for a long")
+                lastMessage = "\(symbol) what-if: no buying power left for a long"
                 return
             }
-            say("\(symbol) what-if: BUY \(Fmt.shares(shares)) @ \(Fmt.price(price, for: symbol)), "
-                + "\(Int((fraction * 100).rounded()))% of the \(Fmt.shares(preview.maxShares)) IB's margin allows")
+            lastMessage = "\(symbol) what-if: BUY \(Fmt.shares(shares)) @ \(Fmt.price(price, for: symbol)), "
+                + "\(Int((fraction * 100).rounded()))% of the \(Fmt.shares(preview.maxShares)) IB's margin allows"
             completion(WhatIfSize(price: price, shares: shares, maxShares: preview.maxShares))
+        }
+    }
+
+    /// The largest long IB's margin allows in `symbol` at `price`, asked quietly (`lastMessage` stays
+    /// as it is) for the hover P/L and the chart header's buying power. `completion` gets the price
+    /// asked at and the shares (0 with no buying power left), or nil shares when IB can't size it, on
+    /// the engine queue a second or two later; it isn't called while not connected.
+    func maxLong(symbol rawSymbol: String, at rawPrice: Double,
+                 completion: @escaping @Sendable (_ price: Double, _ shares: Double?) -> Void) {
+        let symbol = rawSymbol.uppercased()
+        guard apiReady, !symbol.isEmpty, rawPrice > 0 else { return }
+        let price = tickRounded(rawPrice, for: symbol)
+        marginLimit(symbol, action: "BUY", price: price, why: "margin preview for the chart's buying power") { result in
+            completion(price, try? result.get().maxShares)
         }
     }
 

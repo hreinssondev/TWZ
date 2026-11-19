@@ -230,7 +230,7 @@ private struct TradingSettings: View {
                 }
                 .disabled(hoverSizing != .nok)
                 Text(hoverSizing == .buyingPower
-                     ? "Hovering a chart shows the P/L of buying that percent (1–100) of the largest long IB's margin allows at the last price, asked from IB as the pointer comes over the chart (a second or two, then kept a few minutes)."
+                     ? "Hovering a chart shows the P/L of buying that percent (1–100) of the largest long IB's margin allows at the last price, asked from IB as the pointer comes over the chart (a second or two, then kept a minute: the same answer as the chart header's buying power)."
                      : "Hovering a chart shows the P/L of buying the shares this amount buys at the last price, at the current USD.NOK rate.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

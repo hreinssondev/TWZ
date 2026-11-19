@@ -81,15 +81,20 @@ final class Broker {
     private(set) var protectiveOrders: [Int: Protective] = [:]
     /// What placed each order this app sent ("Mid", "Mkt", "⌥-click", "SL", …), by order id.
     private(set) var orderSources: [Int: String] = [:]
-    /// The hover P/L's pretend buy per symbol when sized by buying power: Settings' share of the
-    /// largest long IB's margin allows at the last price (see `refreshHoverSize`).
-    private(set) var hoverSizes: [String: HoverSize] = [:]
-    @ObservationIgnored private var hoverSizeAsked: [String: Date] = [:]
+    /// The largest long IB's margin allows per symbol at about the last price, for the chart header's
+    /// buying power and the hover P/L's pretend buy (see `refreshMarginSize`).
+    private(set) var marginSizes: [String: MarginSize] = [:]
+    @ObservationIgnored private var marginSizeAsked: [String: Date] = [:]
+    /// When a position last opened, changed or closed: that moves the buying power, so a size asked
+    /// before then is stale.
+    @ObservationIgnored private var positionsChanged = Date.distantPast
+    private static let marginSizeLifetime: TimeInterval = 60
 
-    struct HoverSize {
+    struct MarginSize {
         var price: Double
-        var shares: Double
-        var fraction: Double
+        /// The largest long IB's margin allows at `price`.
+        var maxShares: Double
+        /// When IB was asked.
         var time: Date
     }
 
@@ -251,29 +256,44 @@ final class Broker {
     /// ⌃-click on a chart with no position: sizes a what-if buy at the clicked price from IB's margin
     /// preview, `fraction` of the largest long allowed. `completion` gets it a second or two later,
     /// or never if IB can't size it (`lastMessage` says why).
-    func sizeWhatIf(symbol: String, at price: Double, fraction: Double, quiet: Bool = false,
+    func sizeWhatIf(symbol: String, at price: Double, fraction: Double,
                     completion: @escaping @MainActor @Sendable (TradingEngine.WhatIfSize) -> Void) {
         engine.perform { engine in
-            engine.sizeWhatIf(symbol: symbol, at: price, fraction: fraction, quiet: quiet) { size in
+            engine.sizeWhatIf(symbol: symbol, at: price, fraction: fraction) { size in
                 Task { @MainActor in completion(size) }
             }
         }
     }
 
-    /// Sizes the hover P/L's pretend buy at the last price, quietly, unless the size in `hoverSizes`
-    /// is still fresh: under 3 minutes old, sized within 5% of the last price, at Settings' share.
-    func refreshHoverSize(symbol: String) {
-        guard state == .connected, !symbol.isEmpty, let last = quote(symbol)?.last, last > 0 else { return }
-        let now = Date(), fraction = HoverPnLSize.fraction
-        if let size = hoverSizes[symbol], size.fraction == fraction, now.timeIntervalSince(size.time) < 180,
-           abs(last / size.price - 1) < 0.05 { return }
+    /// Asks IB's margin preview, quietly, for the largest long in `symbol` at the last price, unless
+    /// the one in `marginSizes` is still fresh: under a minute old, asked within 5% of the last price
+    /// and since the positions last changed. Not while short: IB's preview of a buy then closes it.
+    func refreshMarginSize(symbol: String) {
+        guard state == .connected, !symbol.isEmpty, (positions[symbol]?.quantity ?? 0) >= 0,
+              let last = quote(symbol)?.last, last > 0 else { return }
+        let now = Date()
+        if let size = marginSizes[symbol], now.timeIntervalSince(size.time) < Self.marginSizeLifetime,
+           size.time > positionsChanged, abs(last / size.price - 1) < 0.05 { return }
         // IB answers in a second or two, or never (no completion): ask again after 15 s.
-        if let asked = hoverSizeAsked[symbol], now.timeIntervalSince(asked) < 15 { return }
-        hoverSizeAsked[symbol] = now
-        sizeWhatIf(symbol: symbol, at: last, fraction: fraction, quiet: true) { [weak self] size in
-            self?.hoverSizes[symbol] = HoverSize(price: size.price, shares: size.shares, fraction: fraction, time: Date())
-            self?.hoverSizeAsked[symbol] = nil
+        if let asked = marginSizeAsked[symbol], now.timeIntervalSince(asked) < 15 { return }
+        marginSizeAsked[symbol] = now
+        let answered: @MainActor @Sendable (Double, Double?) -> Void = { [weak self] price, shares in
+            self?.marginSizes[symbol] = shares.map { MarginSize(price: price, maxShares: $0, time: now) }
+            self?.marginSizeAsked[symbol] = nil
         }
+        engine.perform { engine in
+            engine.maxLong(symbol: symbol, at: last) { price, shares in
+                Task { @MainActor in answered(price, shares) }
+            }
+        }
+    }
+
+    /// The most a new long in `symbol` can be worth in NOK now, by IB's margin (see
+    /// `refreshMarginSize`): the shares it allows at the price asked at, which moves little with the
+    /// price. nil while not connected, before IB answers, or when it can't size one.
+    func buyingPowerNOK(_ symbol: String) -> Double? {
+        guard state == .connected, let size = marginSizes[symbol], let usd = usdPerPriceUnit(symbol), let usdNok else { return nil }
+        return size.maxShares * size.price * usd * usdNok
     }
 
     /// Order commands are timed from here until they reach the socket.
@@ -380,7 +400,10 @@ final class Broker {
             update(\.usdNok, st.usdNok)
             update(\.usdNokIsLive, st.usdNokIsLive)
         }
-        if let v = s.positions { update(\.positions, v) }
+        if let v = s.positions, v != positions {
+            positions = v
+            positionsChanged = Date()
+        }
         if let v = s.orders { update(\.orders, v) }
         if let v = s.fills { update(\.fills, v) }
         if let v = s.quotes {
