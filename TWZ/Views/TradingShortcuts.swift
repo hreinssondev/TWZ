@@ -11,7 +11,7 @@
 //  selected chart fast or not, so it keeps tick-by-tick trades once deselected (see
 //  `Workspace.fastChartIDs`); ⌘A, like ⌥<,
 //  cancels every order in the symbol, stop loss and take profit included; ⌘⌫ does too, then closes
-//  the whole position at market; ⌘Z, like ⌥Z, cancels the last order placed; ⌥⇧ and a color's letter
+//  the whole position at market; both also remove the symbol's ⌃-click what-if, and ⌘⇧⌫ removes just that; ⌘Z, like ⌥Z, cancels the last order placed; ⌥⇧ and a color's letter
 //  (R, G, B, Y, O, P, M, W, K black, I pink, N brown, T turquoise) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
@@ -71,6 +71,13 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
+                    // ⌘⇧⌫ takes the selected chart's ⌃-click what-if off (as ⌘A and ⌘⌫ also do).
+                    if modifiers == [.command, .shift], inMainWindow, event.keyCode == 51 {
+                        if event.window?.firstResponder is NSTextView { return event }
+                        let symbol = workspace.targetSymbol
+                        if symbol.isEmpty || workspace.whatIfs.removeValue(forKey: symbol) == nil { NSSound.beep() }
+                        return nil
+                    }
                     // ⌘⇧ and a list's letter shows that list and loads it into the chart grid.
                     if inMainWindow, modifiers == [.command, .shift],
                        let kind = ScannerKind.forShortcut(event.charactersIgnoringModifiers?.lowercased() ?? "") {
@@ -101,10 +108,20 @@ struct TradingShortcuts: ViewModifier {
                         switch event.keyCode == 51 ? "⌫" : event.charactersIgnoringModifiers?.lowercased() {
                         case "a":
                             if typing { return event }
-                            if symbol.isEmpty { NSSound.beep() } else { broker.cancelOrders(for: symbol) }
+                            if symbol.isEmpty {
+                                NSSound.beep()
+                            } else {
+                                workspace.whatIfs[symbol] = nil
+                                broker.cancelOrders(for: symbol)
+                            }
                         case "⌫":
                             if typing { return event }
-                            if symbol.isEmpty { NSSound.beep() } else { broker.closePosition(symbol) }
+                            if symbol.isEmpty {
+                                NSSound.beep()
+                            } else {
+                                workspace.whatIfs[symbol] = nil
+                                broker.closePosition(symbol)
+                            }
                         case "z":
                             if typing { return event }
                             broker.cancelLastOrder()
@@ -155,7 +172,7 @@ extension KeyShortcut {
                 return shift ? "⌘⇧↩ sends the selected hotkey" : "⌘↩ keeps the selected chart's tick-by-tick on or off"
             }
             if k == "a" { return "⌘A cancels the symbol's orders" }
-            if keyCode == 51 { return "⌘⌫ closes the position" }
+            if keyCode == 51 { return shift ? "⌘⇧⌫ removes the what-if" : "⌘⌫ closes the position" }
             if k == "z" { return "⌘Z cancels the last order" }
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }

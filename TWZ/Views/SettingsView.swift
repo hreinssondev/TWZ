@@ -178,8 +178,9 @@ private struct TradingSettings: View {
         ("⌘⇧↩", "Send the selected hotkey"),
         ("⌘↩", "Keep the selected chart's tick-by-tick trades on or off once it's deselected (⚡ while on, "
             + "a red circle once IB's limit leaves it out); the selected chart always gets trades and bid/ask"),
-        ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included"),
-        ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market"),
+        ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if)"),
+        ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market; removes its ⌃-click what-if too"),
+        ("⌘⇧⌫", "Remove the chart's ⌃-click what-if (so does double-clicking anywhere on the chart)"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
         ("⌥⇧1 2 3 4", "What-if trade: buy $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
             + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),

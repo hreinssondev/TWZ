@@ -498,9 +498,12 @@ struct TradingChart: View {
             },
             onClick: { dismissedTrip = closedTrip?.id ?? dismissedTrip },
             // Hides the round trip shown from the Round trips tab.
+            // Takes a ⌃-click what-if off, the view staying as it is; without one the view resets. Hides
+            // the round trip shown from the Round trips tab either way.
             onDoubleClick: {
                 workspace.shownTrips[chart.symbol] = nil
                 workspace.shownOrderFills[chart.symbol] = nil
+                return workspace.whatIfs.removeValue(forKey: chart.symbol) != nil
             },
             shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? [])
         )

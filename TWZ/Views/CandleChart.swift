@@ -6,7 +6,8 @@
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
 //  around the cursor; a diagonal swipe does both. Mouse: wheel zooms, shift-wheel pans.
 //  Drag pans freely, in time and price. Right-click resets the view, as does double-clicking
-//  anywhere but an order line; double-clicking an order line cancels that order, and a single click
+//  anywhere but an order line (unless `onDoubleClick` takes it: with a ⌃-click what-if on the chart,
+//  that comes off instead); double-clicking an order line cancels that order, and a single click
 //  does for the lines placed by ⌃-click (stop loss, take profit, what-if).
 //  Intraday charts shade the sessions outside regular hours: pre-market and after hours in grey,
 //  overnight in indigo (not forex charts: forex trades round the clock).
@@ -18,8 +19,8 @@
 //  With Settings › Trading's dollar ⌥ / ⌘-click on, ⌥-click buys and ⌘-click sells a fixed dollar
 //  amount at the clicked price, the hover line and price tag green / red while the key is held.
 //  Hovering the price area shows, left of the price tag, the P/L at the hovered price (see `hoverPnL`).
-//  ⌃-clicking with no position open places a what-if buy at that price (see `WhatIf`), and
-//  ⌃-clicking its line removes it.
+//  ⌃-clicking with no position open places a what-if buy at that price (see `WhatIf`); ⌃-clicking its
+//  line, or double-clicking anywhere on the chart, removes it.
 //
 
 import SwiftUI
@@ -88,8 +89,9 @@ struct CandleChart: View {
     var onCancelOrder: ((Int) -> Void)?
     /// Any left click on the chart, modified or not (it still pans, zooms or places orders as usual).
     var onClick: (() -> Void)?
-    /// Double-click anywhere but an order line (it still resets the view).
-    var onDoubleClick: (() -> Void)?
+    /// Double-click anywhere but an order line; true when it took the double-click, so the view stays
+    /// as it is (otherwise it resets).
+    var onDoubleClick: (() -> Bool)?
     /// Fills drawn as arrows even with Trades off (a round trip shown from the Round trips tab).
     var shownFillIds: Set<String> = []
 
@@ -151,9 +153,8 @@ struct CandleChart: View {
             .onTapGesture(count: 2) { location in
                 if let id = orderLine(near: location, size: geo.size) {
                     onCancelOrder?(id)
-                } else {
+                } else if onDoubleClick?() != true {
                     resetView()
-                    onDoubleClick?()
                 }
             }
             .onTapGesture { location in
