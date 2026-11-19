@@ -60,7 +60,7 @@ struct TradingShortcuts: ViewModifier {
                         let color = StockColor(key: event.charactersIgnoringModifiers?.lowercased() ?? "")
                         if color != nil || event.keyCode == 51 {
                             let symbol = workspace.targetSymbol
-                            if symbol.isEmpty { NSSound.beep() } else { workspace.stockColors[symbol] = color }
+                            if symbol.isEmpty { NSSound.beep() } else { workspace.setColor(color, of: symbol) }
                             return nil
                         }
                     }

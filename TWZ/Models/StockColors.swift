@@ -6,7 +6,8 @@
 //  stock, ⌘⇧⌫ takes its color off (see `TradingShortcuts`). Every chart showing the stock is
 //  outlined in its color, as thick as the selection outline in its place while it's selected, a third
 //  of that otherwise.
-//  Kept per stock across relaunches.
+//  One stock per color: giving a color to another stock takes it from the first. Kept per stock, also
+//  while it's off the charts and across relaunches.
 //
 
 import SwiftUI

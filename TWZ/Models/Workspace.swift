@@ -139,9 +139,18 @@ final class Workspace {
     var gridScan: ScanSpec? {
         didSet { defaults.set(gridScan.flatMap { try? JSONEncoder().encode($0) }, forKey: MainGrid.scanKey) }
     }
-    /// Colors given to stocks with ⌘⇧ and a color's letter, by symbol (see `StockColor`). Saved.
-    var stockColors: [String: StockColor] {
+    /// Colors given to stocks with ⌘⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
+    /// stock that leaves the charts has its color again when it comes back. Set with `setColor`.
+    private(set) var stockColors: [String: StockColor] {
         didSet { defaults.set(stockColors.mapValues(\.rawValue), forKey: StockColor.storageKey) }
+    }
+
+    /// Gives `symbol` a color, or takes its color off (nil). A color marks one stock: the stock that
+    /// had it before loses it, on the charts or not.
+    func setColor(_ color: StockColor?, of symbol: String) {
+        var colors = color.map { color in stockColors.filter { $0.value != color } } ?? stockColors
+        colors[symbol] = color
+        stockColors = colors
     }
     /// Saved layouts, in the order saved (see `Layouts`).
     var layouts: [SavedLayout] {
