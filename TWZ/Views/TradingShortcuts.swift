@@ -18,7 +18,7 @@
 //  ⌥⇧1 / 2 / 3 / 4 buys a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 / $3,000 /
 //  85% of the buying power in the selected chart's symbol; ⌃⌥⇧1–4 sells (shorts) the same. Matched by
 //  key, number row or keypad, whatever the keyboard layout types there.
-//  ⌘⇧ and a list's letter (T Top Gainers, L Top Losers, H AH Gainers, M or A Most Active $, F Forex)
+//  ⌘⇧ and a list's letter (T or S Top Gainers, L Top Losers, H AH Gainers, M or A Most Active $, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
