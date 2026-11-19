@@ -115,7 +115,7 @@ extension Workspace {
 /// fast (⌘↩), a red S if shortable, SSR under the short sale restriction, its short selling and buying
 /// power in NOK and its own timeframe switch over a chart that trades. Clicking it selects it; the selected chart is outlined,
 /// and so, a little fainter, is any other chart showing the same stock, since hotkeys go to that stock
-/// either way. A stock given a color (⌘⇧ and its letter) is outlined in it instead, thick while selected.
+/// either way. A stock given a color (⌥⇧ and its letter) is outlined in it instead, thick while selected.
 struct ChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace

@@ -133,7 +133,7 @@ final class Workspace {
     var shownOrderFills: [String: Set<String>] = [:]
     /// What each list panel on screen shows, by panel id (the lists keep it up to date).
     var shownLists: [String: ScannerKind] = [:]
-    /// ⌥⇧ + a list's letter (see `ScannerKind.forShortcut`): the list to show and load into the chart grid,
+    /// ⌘⇧ + a list's letter (see `ScannerKind.forShortcut`): the list to show and load into the chart grid,
     /// taken up by the list panels (see `ListPanel`). A new one each press, so the same key works again.
     var listShortcut: ListShortcut?
 
@@ -149,7 +149,7 @@ final class Workspace {
     var gridScan: ScanSpec? {
         didSet { defaults.set(gridScan.flatMap { try? JSONEncoder().encode($0) }, forKey: MainGrid.scanKey) }
     }
-    /// Colors given to stocks with ⌘⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
+    /// Colors given to stocks with ⌥⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
     /// stock that leaves the charts has its color again when it comes back. Set with `setColor`.
     private(set) var stockColors: [String: StockColor] {
         didSet { defaults.set(stockColors.mapValues(\.rawValue), forKey: StockColor.storageKey) }

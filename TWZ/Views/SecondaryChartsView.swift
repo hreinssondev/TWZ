@@ -273,7 +273,7 @@ struct SecondaryChartPane: View {
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay {
-            // The stock's color (⌘⇧ and its letter in the main window), else the plain border.
+            // The stock's color (⌥⇧ and its letter in the main window), else the plain border.
             if let mark = workspace.stockColors[chart.symbol]?.color {
                 RoundedRectangle(cornerRadius: 4).strokeBorder(mark, lineWidth: outlineWidth).allowsHitTesting(false)
             } else {

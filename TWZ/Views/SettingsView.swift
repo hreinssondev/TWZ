@@ -184,7 +184,7 @@ private struct TradingSettings: View {
         ("⌥⇧1 2 3 4", "What-if trade: buy $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
             + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),
         ("⌃⌥⇧1 2 3 4", "The same what-if trade, selling (short)"),
-        ("⌥⇧T L H M/A F", "Show that list and load it into the chart grid: Top Gainers, Top Losers, AH Gainers, "
+        ("⌘⇧T L H M/A F", "Show that list and load it into the chart grid: Top Gainers, Top Losers, AH Gainers, "
             + "Most Active $ (M or A), Forex"),
         ("Own shortcut", "Send that hotkey (set in the hotkey editor)"),
     ]

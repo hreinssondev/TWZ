@@ -165,7 +165,7 @@ struct ListPanel: View {
         }
     }
 
-    /// ⌥⇧ + a list's letter: a list already showing it loads into the chart grid, as its load button
+    /// ⌘⇧ + a list's letter: a list already showing it loads into the chart grid, as its load button
     /// does; with none, the left list (the one list while they're merged) switches to it and loads.
     private func takeUp(_ request: Workspace.ListShortcut?) {
         guard let kind = request?.kind else { return }
@@ -329,7 +329,7 @@ private struct ScanFilterEditor: View {
 }
 
 extension ScannerKind {
-    /// ⌥⇧ + a letter shows that list and loads it into the chart grid (see `TradingShortcuts`): T Top
+    /// ⌘⇧ + a letter shows that list and loads it into the chart grid (see `TradingShortcuts`): T Top
     /// Gainers, L Top Losers, H AH Gainers, M or A Most Active $, F Forex.
     static func forShortcut(_ key: String) -> ScannerKind? {
         switch key {
@@ -342,6 +342,6 @@ extension ScannerKind {
         }
     }
 
-    static let shortcutHelp = "⌥⇧T Top Gainers · ⌥⇧L Top Losers · ⌥⇧H AH Gainers · ⌥⇧M or ⌥⇧A Most Active $ · ⌥⇧F Forex: "
+    static let shortcutHelp = "⌘⇧T Top Gainers · ⌘⇧L Top Losers · ⌘⇧H AH Gainers · ⌘⇧M or ⌘⇧A Most Active $ · ⌘⇧F Forex: "
         + "shows the list and loads it into the chart grid"
 }

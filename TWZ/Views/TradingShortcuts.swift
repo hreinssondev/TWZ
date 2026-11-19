@@ -11,14 +11,14 @@
 //  selected chart fast or not, so it keeps tick-by-tick trades once deselected (see
 //  `Workspace.fastChartIDs`); ⌘A, like ⌥<,
 //  cancels every order in the symbol, stop loss and take profit included; ⌘⌫ does too, then closes
-//  the whole position at market; ⌘Z, like ⌥Z, cancels the last order placed; ⌘⇧ and a color's letter
-//  (R, G, B, Y, O, P, M, W, K black, I pink) colors the stock (see `StockColor`), ⌘⇧⌫ takes it off.
+//  the whole position at market; ⌘Z, like ⌥Z, cancels the last order placed; ⌥⇧ and a color's letter
+//  (R, G, B, Y, O, P, M, W, K black, I pink) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  ⌥⇧1 / 2 / 3 / 4 buys a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 / $3,000 /
 //  85% of the buying power in the selected chart's symbol; ⌃⌥⇧1–4 sells (shorts) the same. Matched by
 //  key, number row or keypad, whatever the keyboard layout types there.
-//  ⌥⇧ and a list's letter (T Top Gainers, L Top Losers, H AH Gainers, M or A Most Active $, F Forex)
+//  ⌘⇧ and a list's letter (T Top Gainers, L Top Losers, H AH Gainers, M or A Most Active $, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
@@ -71,14 +71,14 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    // ⌥⇧ and a list's letter shows that list and loads it into the chart grid.
-                    if inMainWindow, modifiers == [.option, .shift],
+                    // ⌘⇧ and a list's letter shows that list and loads it into the chart grid.
+                    if inMainWindow, modifiers == [.command, .shift],
                        let kind = ScannerKind.forShortcut(event.charactersIgnoringModifiers?.lowercased() ?? "") {
                         workspace.listShortcut = Workspace.ListShortcut(kind: kind)
                         return nil
                     }
-                    // ⌘⇧ and a color's letter colors the selected chart's stock; ⌘⇧⌫ takes its color off.
-                    if modifiers == [.command, .shift], inMainWindow {
+                    // ⌥⇧ and a color's letter colors the selected chart's stock; ⌥⇧⌫ takes its color off.
+                    if modifiers == [.option, .shift], inMainWindow {
                         let color = StockColor(key: event.charactersIgnoringModifiers?.lowercased() ?? "")
                         if color != nil || event.keyCode == 51 {
                             let symbol = workspace.targetSymbol
@@ -144,8 +144,11 @@ extension KeyShortcut {
     /// Why this shortcut can't be used, if it's one the app or macOS already uses.
     var reservedFor: String? {
         let k = key.lowercased()
-        if command, shift, !option, !control, keyCode == 51 || StockColor(key: k) != nil {
-            return keyCode == 51 ? "⌘⇧⌫ takes the stock's color off" : "\(display) colors the stock"
+        if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
+            return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
+        }
+        if command, shift, !option, !control, let kind = ScannerKind.forShortcut(k) {
+            return "\(display) shows the \(kind.rawValue) list"
         }
         if command, !option, !control {
             if keyCode == 36 || keyCode == 76 {
@@ -157,9 +160,6 @@ extension KeyShortcut {
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }
         if option, !command, !control, k == "z" || k == "<" { return "\(display) cancels orders" }
-        if option, shift, !command, !control, let kind = ScannerKind.forShortcut(k) {
-            return "\(display) shows the \(kind.rawValue) list"
-        }
         if option, shift, !command, SimSize.keyCodes.contains(keyCode) {
             return "\(display) \(control ? "sells" : "buys") a what-if trade"
         }

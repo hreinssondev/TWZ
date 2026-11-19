@@ -2,8 +2,8 @@
 //  StockColors.swift
 //  TWZ
 //
-//  Colors given to stocks from the keyboard: ⌘⇧ and a color's letter colors the selected chart's
-//  stock, ⌘⇧⌫ takes its color off (see `TradingShortcuts`). Every chart showing the stock is
+//  Colors given to stocks from the keyboard: ⌥⇧ and a color's letter colors the selected chart's
+//  stock, ⌥⇧⌫ takes its color off (see `TradingShortcuts`). Every chart showing the stock is
 //  outlined in its color, as thick as the selection outline in its place while it's selected, a third
 //  of that otherwise.
 //  One stock per color: giving a color to another stock takes it from the first. Kept per stock, also
@@ -17,7 +17,7 @@ nonisolated enum StockColor: String, CaseIterable, Sendable {
 
     static let storageKey = "stockColors"
 
-    /// The letter giving it with ⌘⇧: its first, but for black's K and pink's I (B is blue's, P purple's).
+    /// The letter giving it with ⌥⇧: its first, but for black's K and pink's I (B is blue's, P purple's).
     var key: String {
         switch self {
         case .black: "k"
