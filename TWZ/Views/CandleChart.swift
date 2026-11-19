@@ -450,6 +450,17 @@ struct CandleChart: View {
             }
         }
 
+        // Forex: a thin line where each trading day starts (17:00 New York, the FX rollover).
+        if chart.timeframe.isIntraday, forex != nil {
+            var separators = Path()
+            for i in max(start, 1)..<end where Self.forexDay(bars[i].time) != Self.forexDay(bars[i - 1].time) {
+                let xx = x(i) - barWidth / 2
+                separators.move(to: CGPoint(x: xx, y: plot.minY))
+                separators.addLine(to: CGPoint(x: xx, y: plot.maxY))
+            }
+            plotCtx.stroke(separators, with: .color(Color.primary.opacity(0.25)), lineWidth: 0.5)
+        }
+
         // Horizontal grid + price labels.
         // Never finer than a cent (a hundredth of a cent under $1), the smallest step prices show; for a
         // forex pair, a tenth of a pip.
@@ -470,7 +481,7 @@ struct CandleChart: View {
 
         // Vertical grid + time labels, roughly every 90px.
         let labelEvery = max(1, Int((90 / barWidth).rounded(.up)))
-        let labelSpacing = Double(labelEvery) * (chart.timeframe.barSeconds ?? 86_400)
+        let timeLabelSpan = Double(labelEvery) * (chart.timeframe.barSeconds ?? 86_400)
         for i in start..<end where i % labelEvery == 0 {
             let xx = x(i)
             var path = Path()
@@ -478,7 +489,7 @@ struct CandleChart: View {
             path.addLine(to: CGPoint(x: xx, y: plot.maxY))
             plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
             let previous = i >= labelEvery ? bars[i - labelEvery].time : nil
-            plotCtx.draw(Text(timeLabel(bars[i].time, previous: previous, spacing: labelSpacing)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
+            plotCtx.draw(Text(timeLabel(bars[i].time, previous: previous, spacing: timeLabelSpan)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
                      at: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1))
         }
         if let rest = v.rest {
@@ -490,7 +501,7 @@ struct CandleChart: View {
                 path.addLine(to: CGPoint(x: xx, y: plot.maxY))
                 plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
                 let time = rest.from.addingTimeInterval(Double(k) * rest.barSeconds)
-                plotCtx.draw(Text(timeLabel(time, previous: time.addingTimeInterval(-labelSpacing), spacing: labelSpacing)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
+                plotCtx.draw(Text(timeLabel(time, previous: time.addingTimeInterval(-timeLabelSpan), spacing: timeLabelSpan)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
                              at: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1))
             }
         }
@@ -792,6 +803,14 @@ struct CandleChart: View {
               previous.map({ Calendar.current.isDate($0, inSameDayAs: date) }) ?? true
         else { return Self.dayFormatter.string(from: date) }
         return Self.timeFormatter.string(from: date)
+    }
+
+    private static let newYork = TimeZone(identifier: "America/New_York")!
+
+    /// The forex trading day a time falls in, counted in days: each starts at 17:00 New York.
+    private static func forexDay(_ time: Date) -> Int {
+        let local = time.timeIntervalSince1970 + Double(newYork.secondsFromGMT(for: time))
+        return Int(((local + 7 * 3600) / 86_400).rounded(.down))
     }
 
     private static let timeFormatter: DateFormatter = {
