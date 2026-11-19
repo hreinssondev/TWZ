@@ -1694,16 +1694,18 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
     }
 
-    /// The largest long IB's margin allows in `symbol` at `price`, asked quietly (`lastMessage` stays
-    /// as it is) for the hover P/L and the chart header's buying power. `completion` gets the price
-    /// asked at and the shares (0 with no buying power left), or nil shares when IB can't size it, on
-    /// the engine queue a second or two later; it isn't called while not connected.
-    func maxLong(symbol rawSymbol: String, at rawPrice: Double,
-                 completion: @escaping @Sendable (_ price: Double, _ shares: Double?) -> Void) {
+    /// The largest new `action` (BUY: long, SELL: short) IB's margin allows in `symbol` at `price`,
+    /// asked quietly (`lastMessage` stays as it is) for the hover P/L and the chart header's buying
+    /// and short selling power. `completion` gets the price asked at and the shares (0 with no
+    /// margin left), or nil shares when IB can't size it, on the engine queue a second or two later;
+    /// it isn't called while not connected.
+    func maxNew(_ action: String, symbol rawSymbol: String, at rawPrice: Double,
+                completion: @escaping @Sendable (_ price: Double, _ shares: Double?) -> Void) {
         let symbol = rawSymbol.uppercased()
         guard apiReady, !symbol.isEmpty, rawPrice > 0 else { return }
         let price = tickRounded(rawPrice, for: symbol)
-        marginLimit(symbol, action: "BUY", price: price, why: "margin preview for the chart's buying power") { result in
+        let why = "margin preview for the chart's \(action == "BUY" ? "buying" : "short selling") power"
+        marginLimit(symbol, action: action, price: price, why: why) { result in
             completion(price, try? result.get().maxShares)
         }
     }

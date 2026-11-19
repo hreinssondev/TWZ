@@ -112,8 +112,8 @@ extension Workspace {
 }
 
 /// A main-window chart: its symbol field, position (the header green while long, red while short), ⚡ while
-/// fast (⌘↩), a red S if shortable, SSR under the short sale restriction, its buying power in NOK and its
-/// own timeframe switch over a chart that trades. Clicking it selects it; the selected chart is outlined,
+/// fast (⌘↩), a red S if shortable, SSR under the short sale restriction, its short selling and buying
+/// power in NOK and its own timeframe switch over a chart that trades. Clicking it selects it; the selected chart is outlined,
 /// and so, a little fainter, is any other chart showing the same stock, since hotkeys go to that stock
 /// either way.
 struct ChartPane: View {
@@ -152,8 +152,8 @@ struct ChartPane: View {
         .onChange(of: chart.symbol) { _, new in
             if !symbolFocused { symbolText = new }
         }
-        // Keeps the header's buying power current: IB is asked only once it's stale (see
-        // `Broker.refreshMarginSize`).
+        // Keeps the header's buying and short selling power current: IB is asked only once they're
+        // stale (see `Broker.refreshMarginSize`).
         .task(id: chart.symbol) {
             while !Task.isCancelled {
                 broker.refreshMarginSize(symbol: chart.symbol)
@@ -255,11 +255,13 @@ struct ChartPane: View {
 
             Spacer(minLength: 4)
 
-            // The buying power, then the timeframe switch. A chart too narrow for both (a big grid) gets
-            // a menu showing its timeframe instead of the switch, then drops the buying power.
+            // The short selling and buying power, then the timeframe switch. A chart too narrow for them
+            // (a big grid) gets a menu showing its timeframe instead of the switch, then drops the
+            // short selling power, then the buying power.
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 4) { buyingPower; timeframeSwitch }
-                HStack(spacing: 4) { buyingPower; timeframeMenu }
+                HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeSwitch }
+                HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeMenu }
+                HStack(spacing: 4) { marginPower(.long); timeframeMenu }
                 timeframeMenu
             }
         }
@@ -268,18 +270,22 @@ struct ChartPane: View {
         .background(broker.positionTint(chart.symbol, colors: sideColors))
     }
 
-    /// The most a new long in the stock can be worth in NOK now, by IB's margin (see
-    /// `Broker.buyingPowerNOK`), styled as an unselected timeframe. None while short.
-    @ViewBuilder private var buyingPower: some View {
-        if (broker.positions[chart.symbol]?.quantity ?? 0) >= 0, let nok = broker.buyingPowerNOK(chart.symbol),
-           let size = broker.marginSizes[chart.symbol] {
+    /// The most a new long (buying power) or short (short selling power) in the stock can be worth
+    /// in NOK now, by IB's margin (see `Broker.marginPowerNOK`), styled as an unselected timeframe.
+    /// None against the position: no buying power while short, no short selling power while long.
+    @ViewBuilder private func marginPower(_ side: Broker.MarginSide) -> some View {
+        let held = broker.positions[chart.symbol]?.quantity ?? 0
+        if side == .long ? held >= 0 : held <= 0, let nok = broker.marginPowerNOK(chart.symbol, side),
+           let shares = broker.maxNewShares(chart.symbol, side), let size = broker.marginSize(chart.symbol, side) {
             let units = ForexPair(chart.symbol).map { " \($0.base)" } ?? " shares"
+            let lendLimited = side == .short && shares < (size.maxShares ?? 0)
             Text(Fmt.nok(nok, groupedFrom: 0))
                 .font(.system(size: 10, weight: .regular).monospacedDigit())
                 .foregroundStyle(Color.secondary.opacity(0.7))
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .help("Buying power: IB's margin allows a long of up to \(Fmt.shares(size.maxShares ?? 0))\(units) "
+                .help((side == .long ? "Buying power: IB's margin allows a long" : "Short selling power: IB's margin allows a short")
+                      + " of up to \(Fmt.shares(shares))\(units)\(lendLimited ? " (the shares IB has to lend)" : "") "
                       + "at \(Fmt.price(size.price, for: chart.symbol)), \(Fmt.nok(nok, groupedFrom: 0)) NOK "
                       + "(asked again each minute, and after a position changes)")
         }
@@ -421,9 +427,9 @@ struct TradingChart: View {
                 if hoverSizing == .nok {
                     return broker.shares(forNOK: hoverAmountNOK, of: chart.symbol, at: last).map { (price - last) * $0 * usd }
                 }
-                return broker.marginSizes[chart.symbol]?.maxShares.map { (price - last) * ($0 * HoverPnLSize.fraction).rounded(.down) * usd }
+                return broker.marginSize(chart.symbol, .long)?.maxShares.map { (price - last) * ($0 * HoverPnLSize.fraction).rounded(.down) * usd }
             },
-            onHover: { if hoverSizing == .buyingPower { broker.refreshMarginSize(symbol: chart.symbol) } },
+            onHover: { if hoverSizing == .buyingPower { broker.refreshMarginSize(symbol: chart.symbol, sides: [.long]) } },
             onCancelOrder: { id in
                 if id == WhatIf.lineId {
                     workspace.whatIfs[chart.symbol] = nil

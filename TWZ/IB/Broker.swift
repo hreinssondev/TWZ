@@ -99,10 +99,19 @@ final class Broker {
     private(set) var protectiveOrders: [Int: Protective] = [:]
     /// What placed each order this app sent ("Mid", "Mkt", "⌥-click", "SL", …), by order id.
     private(set) var orderSources: [Int: String] = [:]
-    /// The largest long IB's margin allows per symbol at about the last price, for the chart header's
-    /// buying power and the hover P/L's pretend buy (see `refreshMarginSize`).
-    private(set) var marginSizes: [String: MarginSize] = [:]
-    @ObservationIgnored private var marginSizeAsked: [String: Date] = [:]
+    /// The largest new long and new short IB's margin allows per symbol at about the last price, for
+    /// the chart header's buying and short selling power and the hover P/L's pretend buy (see
+    /// `refreshMarginSize`).
+    private(set) var marginSizes: [MarginKey: MarginSize] = [:]
+    @ObservationIgnored private var marginSizeAsked: [MarginKey: Date] = [:]
+
+    /// A new long (a buy) or a new short (a sell).
+    enum MarginSide { case long, short }
+
+    struct MarginKey: Hashable {
+        var symbol: String
+        var side: MarginSide
+    }
     /// When a position last opened, changed or closed: that moves the buying power, so a size asked
     /// before then is stale.
     @ObservationIgnored private var positionsChanged = Date.distantPast
@@ -287,34 +296,61 @@ final class Broker {
         }
     }
 
-    /// Asks IB's margin preview, quietly, for the largest long in `symbol` at the last price, unless
-    /// the one in `marginSizes` is still fresh: under a minute old, asked within 5% of the last price
-    /// and since the positions last changed. Not while short: IB's preview of a buy then closes it.
-    func refreshMarginSize(symbol: String) {
-        guard state == .connected, !symbol.isEmpty, (positions[symbol]?.quantity ?? 0) >= 0,
-              let last = quote(symbol)?.last, last > 0 else { return }
-        let now = Date()
-        if let size = marginSizes[symbol], now.timeIntervalSince(size.time) < Self.marginSizeLifetime,
-           size.time > positionsChanged, abs(last / size.price - 1) < 0.05 { return }
-        // IB answers in a second or two, or never (no completion): ask again after 15 s.
-        if let asked = marginSizeAsked[symbol], now.timeIntervalSince(asked) < 15 { return }
-        marginSizeAsked[symbol] = now
-        let answered: @MainActor @Sendable (Double, Double?) -> Void = { [weak self] price, shares in
-            self?.marginSizes[symbol] = MarginSize(price: price, maxShares: shares, time: now)
-            self?.marginSizeAsked[symbol] = nil
-        }
-        engine.perform { engine in
-            engine.maxLong(symbol: symbol, at: last) { price, shares in
-                Task { @MainActor in answered(price, shares) }
+    func marginSize(_ symbol: String, _ side: MarginSide) -> MarginSize? {
+        marginSizes[MarginKey(symbol: symbol, side: side)]
+    }
+
+    /// Asks IB's margin preview, quietly, for the largest new long and / or short in `symbol` at the
+    /// last price, unless the one in `marginSizes` is still fresh: under a minute old, asked within
+    /// 5% of the last price and since the positions last changed. Not against the position (a long
+    /// while short, a short while long): IB's preview of that order closes it first. No short of a
+    /// stock IB says can't be shorted.
+    func refreshMarginSize(symbol: String, sides: [MarginSide] = [.long, .short]) {
+        guard state == .connected, !symbol.isEmpty, let last = quote(symbol)?.last, last > 0 else { return }
+        let held = positions[symbol]?.quantity ?? 0, now = Date()
+        for side in sides {
+            if side == .long ? held < 0 : held > 0 { continue }
+            if side == .short, Self.cantShort(shortability[symbol], symbol) { continue }
+            let key = MarginKey(symbol: symbol, side: side)
+            if let size = marginSizes[key], now.timeIntervalSince(size.time) < Self.marginSizeLifetime,
+               size.time > positionsChanged, abs(last / size.price - 1) < 0.05 { continue }
+            // IB answers in a second or two, or never (no completion): ask again after 15 s.
+            if let asked = marginSizeAsked[key], now.timeIntervalSince(asked) < 15 { continue }
+            marginSizeAsked[key] = now
+            let answered: @MainActor @Sendable (Double, Double?) -> Void = { [weak self] price, shares in
+                self?.marginSizes[key] = MarginSize(price: price, maxShares: shares, time: now)
+                self?.marginSizeAsked[key] = nil
+            }
+            let action = side == .long ? "BUY" : "SELL"
+            engine.perform { engine in
+                engine.maxNew(action, symbol: symbol, at: last) { price, shares in
+                    Task { @MainActor in answered(price, shares) }
+                }
             }
         }
     }
 
-    /// The most a new long in `symbol` can be worth in NOK now, by IB's margin (see
-    /// `refreshMarginSize`): the shares it allows at the price asked at, which moves little with the
-    /// price. nil while not connected, before IB answers, or when it can't size one.
-    func buyingPowerNOK(_ symbol: String) -> Double? {
-        guard state == .connected, let size = marginSizes[symbol], let shares = size.maxShares,
+    /// IB's shortable tick says the stock can't be shorted (see `shortability`).
+    private static func cantShort(_ level: Double?, _ symbol: String) -> Bool {
+        !ForexPair.isForex(symbol) && (level.map { $0 <= 1.5 } ?? false)
+    }
+
+    /// The most shares (a forex pair's base units) a new long or short in `symbol` can be now: IB's
+    /// margin preview's (see `refreshMarginSize`), a short's also no more than the shares IB has to
+    /// lend. nil before IB answers, when it can't size one, or for a short of a stock that can't be shorted.
+    func maxNewShares(_ symbol: String, _ side: MarginSide) -> Double? {
+        guard var shares = marginSize(symbol, side)?.maxShares else { return nil }
+        if side == .short {
+            if Self.cantShort(shortability[symbol], symbol) { return nil }
+            if let lendable = shortableShares[symbol], lendable > 0 { shares = min(shares, lendable) }
+        }
+        return shares
+    }
+
+    /// The most a new long or short in `symbol` can be worth in NOK now (see `maxNewShares`), at
+    /// the price IB was asked at: the amount moves little with the price. nil while not connected too.
+    func marginPowerNOK(_ symbol: String, _ side: MarginSide) -> Double? {
+        guard state == .connected, let shares = maxNewShares(symbol, side), let size = marginSize(symbol, side),
               let usd = usdPerPriceUnit(symbol), let usdNok else { return nil }
         return shares * size.price * usd * usdNok
     }
