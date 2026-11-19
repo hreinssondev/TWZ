@@ -34,6 +34,7 @@ management in one window built for quick entries and exits.
   short sale restriction (from Nasdaq's daily list and IB's prices), with SSR-aware order pricing.
 - **Charts window**: a second grid of the top 18 gainers (or any size you set).
 - **Appearance**: candle and line colors, line styles, presets and saved window layouts.
+- **Confetti** over every screen when a LIVE trade opens (Settings › Trading).
 
 Account values and order amounts are shown in your account's base currency; the NOK amounts in
 the order entry box and ⌥-click sizing assume a NOK base currency (converted at the live USD/NOK

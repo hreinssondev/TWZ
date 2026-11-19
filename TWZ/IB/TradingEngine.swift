@@ -177,6 +177,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// IB has sent every position / open order since connecting (positionEnd, openOrderEnd).
     private var positionsLoaded = false
     private var openOrdersLoaded = false
+    /// Symbols whose position opened since the last snapshot: from flat, or flipped to the other
+    /// side, after the positions IB sends on connecting (see `position`). The trades entered.
+    private var entries: [String] = []
     private var fxReq: Int?
     private var fxBid: Double?
     private var fxAsk: Double?
@@ -221,6 +224,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         static let tickStreams = Dirty(rawValue: 1 << 11)
         static let shortability = Dirty(rawValue: 1 << 12)
         static let restricted = Dirty(rawValue: 1 << 13)
+        static let entries = Dirty(rawValue: 1 << 14)
     }
 
     /// One display frame at 120 Hz (ProMotion): the UI never gets more snapshots than it can show.
@@ -320,6 +324,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if dirty.contains(.chartOrders) { s.chartOrderIds = chartOrderIds }
         if dirty.contains(.protective) { s.protectiveOrders = protectiveOrders }
         if dirty.contains(.orderSources) { s.orderSources = orderSources }
+        if dirty.contains(.entries) {
+            s.entries = entries
+            entries.removeAll()
+        }
         if dirty.contains(.restricted) { s.restricted = restricted.mapValues(\.reason) }
         if dirty.contains(.tickStreams) {
             s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind != .bidAsk }.map(\.symbol))
@@ -2647,6 +2655,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let symbol = Self.symbol(f.str(4), secType: f.str(5), currency: f.str(11))
         let qty = f.double(14)
         let old = positions[symbol]?.quantity ?? 0
+        if positionsLoaded, qty != 0, old == 0 || (old > 0) != (qty > 0) {
+            entries.append(symbol)
+            changed(.entries)
+        }
         if old != qty { log("POSITION \(symbol) \(Fmt.shares(old)) → \(Fmt.shares(qty)) avg \(Fmt.price(f.double(15), for: symbol))") }
         if qty == 0 {
             positions[symbol] = nil
@@ -2861,6 +2873,8 @@ nonisolated struct EngineSnapshot: Sendable {
     var ssr: [String: String]?
     /// Stocks IB won't let this account open a position in, with IB's reason.
     var restricted: [String: String]?
+    /// Symbols whose position opened since the last snapshot (see `TradingEngine.entries`).
+    var entries: [String]?
     var charts: [ChartPatch] = []
 }
 

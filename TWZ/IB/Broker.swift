@@ -22,6 +22,8 @@ final class Broker {
     var clientId: Int { didSet { defaults.set(clientId, forKey: "ib.clientId") } }
 
     var isLivePort: Bool { port == 4001 || port == 7496 }
+    /// A live port and a live account (IB's paper account ids start with D).
+    var isLiveAccount: Bool { isLivePort && !account.isEmpty && !account.hasPrefix("D") }
 
     // MARK: Published state (copied from the engine)
 
@@ -425,6 +427,7 @@ final class Broker {
             positions = v
             positionsChanged = Date()
         }
+        if let v = s.entries, !v.isEmpty, isLiveAccount, Confetti.isEnabled { Confetti.fire() }
         if let v = s.orders { update(\.orders, v) }
         if let v = s.fills { update(\.fills, v) }
         if let v = s.quotes {

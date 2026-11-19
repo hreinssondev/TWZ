@@ -172,6 +172,7 @@ private struct TradingSettings: View {
     @AppStorage(HoverPnLSize.percentKey) private var hoverPercent = HoverPnLSize.defaultPercent
     @AppStorage(HoverPnLSize.amountKey) private var hoverAmount = HoverPnLSize.defaultAmount
     @AppStorage(ForexOrders.storageKey) private var forexOrders: ForexOrders = ForexOrders.defaultValue
+    @AppStorage(Confetti.enabledKey) private var confetti = Confetti.defaultEnabled
 
     private let shortcuts: [(String, String)] = [
         ("⌘⇧↩", "Send the selected hotkey"),
@@ -253,6 +254,17 @@ private struct TradingSettings: View {
                      + " Quotes and charts come from IDEALPRO either way. Applies from the next Connect.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            Section("Confetti") {
+                Toggle("Confetti when a LIVE trade opens", isOn: $confetti)
+                HStack {
+                    Text("Over every screen as a position opens, from flat or flipping sides, on a LIVE account. Adding to a position doesn't fire it, nor does paper trading. Clicks and keys go straight through it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Preview") { Confetti.fire() }
+                        .controlSize(.small)
+                }
             }
             Section("Keyboard shortcuts (selected chart's symbol)") {
                 ForEach(shortcuts, id: \.0) { keys, action in
