@@ -74,6 +74,7 @@ struct ListPanel: View {
                 }
                 .labelsHidden()
                 .controlSize(.small)
+                .help(ScannerKind.shortcutHelp)
 
                 Button {
                     showFilter.toggle()
@@ -137,16 +138,20 @@ struct ListPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
         .onAppear {
+            workspace.shownLists[panelId] = scanner
             broker.setScanner(scanSpec, owner: panelId)
             broker.setQuoteSymbols(symbols, owner: panelId)
         }
         // Gone while the lists are merged into one, or split again (see `ContentView`): no scanner
         // or quotes meanwhile.
         .onDisappear {
+            workspace.shownLists[panelId] = nil
             broker.setScanner(nil, owner: panelId)
             broker.setQuoteSymbols([], owner: panelId)
         }
         .onChange(of: scanSpec) { _, new in broker.setScanner(new, owner: panelId) }
+        .onChange(of: scanner) { _, new in workspace.shownLists[panelId] = new }
+        .onChange(of: workspace.listShortcut) { _, request in takeUp(request) }
         .onChange(of: symbols) { _, new in
             broker.setQuoteSymbols(new, owner: panelId)
             refreshRows()
@@ -158,6 +163,21 @@ struct ListPanel: View {
                 try? await Task.sleep(for: Self.refreshInterval)
             }
         }
+    }
+
+    /// ⌥⇧ + a list's letter: a list already showing it loads into the chart grid, as its load button
+    /// does; with none, the left list (the one list while they're merged) switches to it and loads.
+    private func takeUp(_ request: Workspace.ListShortcut?) {
+        guard let kind = request?.kind else { return }
+        let shown = workspace.shownLists
+        let target = shown.filter { $0.value == kind }.keys.sorted().first
+            ?? (shown["list-single"] != nil ? "list-single" : "list-left")
+        guard target == panelId else { return }
+        let spec = ScanSpec(kind: kind, filter: workspace.scanFilter(panel: panelId, kind))
+        // A list just switched has no rows yet: the grid follows its own scan of the list as that comes in.
+        let rows = scanner == kind ? symbols : []
+        scanner = kind
+        workspace.loadList(rows, scan: spec, timeframe: gridTimeframe, broker: broker)
     }
 
     private func refreshRows() {
@@ -306,4 +326,22 @@ private struct ScanFilterEditor: View {
         .frame(width: 210)
         .padding(12)
     }
+}
+
+extension ScannerKind {
+    /// ⌥⇧ + a letter shows that list and loads it into the chart grid (see `TradingShortcuts`): T Top
+    /// Gainers, L Top Losers, H AH Gainers, M or A Most Active $, F Forex.
+    static func forShortcut(_ key: String) -> ScannerKind? {
+        switch key {
+        case "t": .gainers
+        case "l": .losers
+        case "h": .afterHours
+        case "m", "a": .dollarVolume
+        case "f": .forex
+        default: nil
+        }
+    }
+
+    static let shortcutHelp = "⌥⇧T Top Gainers · ⌥⇧L Top Losers · ⌥⇧H AH Gainers · ⌥⇧M or ⌥⇧A Most Active $ · ⌥⇧F Forex: "
+        + "shows the list and loads it into the chart grid"
 }

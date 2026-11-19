@@ -131,6 +131,16 @@ final class Workspace {
     /// and average fill price show on the symbol's charts in place of a shown round trip, until the
     /// row, or one of those charts, is double-clicked.
     var shownOrderFills: [String: Set<String>] = [:]
+    /// What each list panel on screen shows, by panel id (the lists keep it up to date).
+    var shownLists: [String: ScannerKind] = [:]
+    /// ⌥⇧ + a list's letter (see `ScannerKind.forShortcut`): the list to show and load into the chart grid,
+    /// taken up by the list panels (see `ListPanel`). A new one each press, so the same key works again.
+    var listShortcut: ListShortcut?
+
+    struct ListShortcut: Equatable {
+        var kind: ScannerKind
+        var id = UUID()
+    }
     /// Counts the account bar's Resets: every main-window chart follows the gainers again, on the
     /// top bar's timeframe.
     var gainerResets = 0
