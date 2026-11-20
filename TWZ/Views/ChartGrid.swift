@@ -336,13 +336,33 @@ extension Workspace {
             broker.say("Nothing saved as view set \(slot) yet: ⇧-click its number in the top bar to save every chart's zoom and place")
             return
         }
+        putBack(set, broker: broker)
+        activeViewSet = slot
+        broker.say("View set \(slot): every chart's zoom and place on every timeframe as saved")
+    }
+
+    /// Every main chart's zoom and place on every timeframe as `set` has them.
+    private func putBack(_ set: ViewSet, broker: Broker) {
         broker.replaceMainChartViews(with: set.views)
         for chart in mainCharts {
             chart.zooms = set.zooms[chart.id] ?? [:]
             broker.restoreView(of: chart)
         }
-        activeViewSet = slot
-        broker.say("View set \(slot): every chart's zoom and place on every timeframe as saved")
+    }
+
+    /// ⌘R: the charts back to the lit number as saved: a view set puts every chart's zoom and place back,
+    /// a scale gives every chart its view, own zoom included (dropping the zoom set by hand and the charts
+    /// adjusted by hand). False with no number lit.
+    func reapplyNumber(broker: Broker) -> Bool {
+        if NumberButtons.areScales {
+            guard let slot = activeScale, gridScale(slot) != nil else { return false }
+            manualZoom = nil
+            broker.forgetChartAdjustments(of: mainCharts)
+            return applyScale(slot, sparingAdjusted: false)
+        }
+        guard let slot = activeViewSet, let set = viewSets[slot] else { return false }
+        putBack(set, broker: broker)
+        return true
     }
 
     /// ⇧ and a number with a chart selected, with the numbers as view sets: just that chart goes back to
