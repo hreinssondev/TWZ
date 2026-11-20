@@ -29,13 +29,10 @@
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  ⌘⌥ and 1–9 sends a Mode order of 10–90% of the buying power at the mid (see `OrderKeys`), with the
 //  order shortcuts on.
-//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off; on, ⌘1–9 are for hotkeys) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
+//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⇧1–6 outside a text field, ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off; on, ⌘1–9 are for hotkeys) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
-//  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field does what clicking
-//  that number in the top bar does with view sets (see `Workspace.pickViewSet`); with the numbers as
-//  scales, it gives the selected chart that scale (see `Workspace.applyScale(_:to:broker:)`), or with no
-//  chart selected every chart (see `Workspace.pickScale`).
+//  place and price scale (see `Workspace.matchViews`).
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
 //
@@ -174,21 +171,6 @@ struct TradingShortcuts: ViewModifier {
                             return nil
                         }
                     }
-                    // ⌥1–6 sets the account bar's timeframe; ChartGrid follows it. Set again too, so a chart
-                    // whose own switch was changed goes back to it.
-                    // ⇧1–5 outside a text field: the selected chart takes that saved scale; with no chart
-                    // selected, every chart does, as clicking its number in the top bar would.
-                    if modifiers == .shift, inMainWindow, let slot = ChartScale.slot(keyCode: event.keyCode) {
-                        if event.window?.firstResponder is NSTextView { return event }
-                        let selected = workspace.isChartSelected ? workspace.chart(id: workspace.selectedChartID) : nil
-                        switch (NumberButtons.areScales, selected.flatMap { $0.symbol.isEmpty ? nil : $0 }) {
-                        case (true, let chart?): workspace.applyScale(slot, to: chart, broker: broker)
-                        case (true, nil): workspace.pickScale(slot, byClick: false, broker: broker)
-                        // View sets: as clicking the number in the top bar.
-                        case (false, _): workspace.pickViewSet(slot, broker: broker)
-                        }
-                        return nil
-                    }
                     // ⌥0, or ⇧A outside a text field: the other charts take the selected chart's view.
                     let matchKey = modifiers == .option && (event.keyCode == 29 || event.keyCode == 82)
                         || modifiers == .shift && event.charactersIgnoringModifiers?.lowercased() == "a"
@@ -215,9 +197,12 @@ struct TradingShortcuts: ViewModifier {
                         broker.say("\(KeyShortcut(event).display) has no hotkey (KEYS ON: ⌘1–9 are for hotkeys)")
                         return nil
                     }
-                    // ⌥1–6 or ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off: the account bar's timeframe.
-                    if modifiers == .option || modifiers == [.option, .shift] || modifiers == .command, inMainWindow,
-                       let timeframe = Timeframe(keyCode: event.keyCode) {
+                    // ⌥1–6, ⇧1–6 (outside a text field) or ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off: the
+                    // account bar's timeframe; ChartGrid follows it. Set again too, so a chart whose own switch
+                    // was changed goes back to it.
+                    if modifiers == .option || modifiers == .shift || modifiers == [.option, .shift] || modifiers == .command,
+                       inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
+                        if modifiers == .shift, event.window?.firstResponder is NSTextView { return event }
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
                         workspace.setMainTimeframe(timeframe, broker: broker)
                         return nil
@@ -339,16 +324,13 @@ extension KeyShortcut {
         if option, !shift, !command, !control, keyCode == 29 || keyCode == 82 {
             return "⌥0 gives every chart the selected chart's view"
         }
-        if shift, !option, !command, !control, ChartScale.slot(keyCode: keyCode) != nil {
-            return "\(display) picks a saved scale"
-        }
         if shift, !option, !command, !control, k == "a" {
             return "⇧A gives every chart the selected chart's view"
         }
         if command, option, !shift, !control, let number = OrderKeys.number(keyCode: keyCode) {
             return "\(display) sends a MID order of \(number * 10)% of the buying power"
         }
-        if option, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
+        if option || shift, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
             return "\(display) sets every chart to \(timeframe.rawValue)"
         }
         if control, option, shift, !command, SimSize.keyCodes.contains(keyCode) {

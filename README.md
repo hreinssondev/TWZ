@@ -18,7 +18,7 @@ management in one window built for quick entries and exits.
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
   as you scroll back), 1m to daily, pre-market, after hours and overnight shading, VWAP and SMA 9 / 21,
-  volume, tick-by-tick trades on the selected chart. ⌥1–6 or ⌥⇧1–6 (or ⌘1–6 while the order shortcuts are off) switches every chart (1m, 5m, 15m, 30m, 1h, D),
+  volume, tick-by-tick trades on the selected chart. ⌥1–6, ⇧1–6 or ⌥⇧1–6 (or ⌘1–6 while the order shortcuts are off) switches every chart (1m, 5m, 15m, 30m, 1h, D),
   keeping each chart's view: the same time on screen, only the candles change (or, with that off in
   Settings › Appearance, each timeframe going back to its own zoom and place).
 - **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the
@@ -26,7 +26,7 @@ management in one window built for quick entries and exits.
   moves the top bar's Zoom slider, zooming every chart (⌘⇧-swipe squeezes or stretches one chart's
   price axis); ⌥0 or ⇧A gives every chart the selected one's zoom,
   place and price scale. ⇧-clicking 1–5 in the top bar saves every chart's zoom and place on every
-  timeframe as a view set, and clicking one (or ⇧ and its number) puts them back;
+  timeframe as a view set, and clicking one puts them back;
   with Settings › Appearance's "Top bar numbers are scales" on, ⇧-click saves the selected chart's view
   as a scale instead, and picking one gives it to every chart (and those loading another stock). ⌘R
   puts the charts back to the lit number as saved. The bars

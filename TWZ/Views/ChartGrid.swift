@@ -18,7 +18,7 @@
 //  Every chart trades like any other (see `ChartPane`); clicking one selects it, so hotkeys and order
 //  shortcuts go to its symbol. A chart that loses its cell to a smaller grid is emptied; if it was
 //  selected, no chart is selected.
-//  The account bar's timeframe switch (or ⌥1–6, ⌥⇧1–6, ⌘1–6 with the order shortcuts off) sets every chart; a chart's own switch changes just that one,
+//  The account bar's timeframe switch (or ⌥1–6, ⇧1–6, ⌥⇧1–6, ⌘1–6 with the order shortcuts off) sets every chart; a chart's own switch changes just that one,
 //  until it gets a new gainer, Reset or the account bar's switch. The Zoom slider sets every chart's
 //  default zoom, and Reset puts every chart's view back to it (as double-clicking a chart does).
 //  Switching a chart's timeframe keeps its view, only the candles change: as much time on screen, the
@@ -278,7 +278,7 @@ extension Workspace {
         return true
     }
 
-    /// Clicking scale button `slot` (`byClick`), or ⇧ and its number: lit, it goes off; otherwise the
+    /// Clicking scale button `slot` (`byClick`): lit, it goes off; otherwise the
     /// charts take it and it lights (see `applyScale`).
     /// Either way the scale's own zoom replaces the one set with the Zoom slider or ⇧-swipe
     /// (`manualZoom`). A click also resets the charts adjusted by hand (`ChartModel.adjustedByHand`, also
@@ -369,19 +369,6 @@ extension Workspace {
         putBack(set, broker: broker)
         activeViewSet = slot
         return true
-    }
-
-    /// ⇧1–5 with a chart selected: just that chart takes the scale saved under `slot`, its own zoom
-    /// included, and counts as adjusted by hand from then on (see `ChartModel.adjustedByHand`).
-    func applyScale(_ slot: Int, to chart: ChartModel, broker: Broker) {
-        guard let scale = gridScale(slot) else {
-            NSSound.beep()
-            broker.say("Nothing saved as scale \(slot) yet: ⇧-click its number in the top bar to save the selected chart's view")
-            return
-        }
-        scale.apply(to: chart)
-        chart.adjustedByHand = true
-        broker.say("\(chart.symbol): scale \(slot) (just this chart; click the number in the top bar for every chart)")
     }
 
     /// The scale saved under button `slot`, if any.
