@@ -54,7 +54,9 @@ management in one window built for quick entries and exits.
   each stock's 5-minute change. One click charts a stock; the load button fills the grid from a list.
 - **Orders, fills and positions** side by side or stacked, with today's round trips and their P/L.
   Clicking the Positions header switches it between real positions and what-if trades, and the
-  charts' trade arrows with it.
+  charts' trade arrows with it. Double-clicking a position, order or round trip selects its stock's
+  chart; with none on screen, the grid goes back to where it last showed the stock (its list, as ⌘⇧
+  and the list's letter loads it, and its cell) instead of replacing a chart you're looking at.
 - **Forex**: the lists' Forex option shows the main currency pairs on IBKR's IDEALPRO (majors,
   crosses and the NOK / SEK pairs), ranked by % change; a chart takes a pair typed as EUR.USD, EURUSD
   or EUR/USD. Pairs chart as bid/ask midpoints around the clock and trade like stocks from hotkeys,

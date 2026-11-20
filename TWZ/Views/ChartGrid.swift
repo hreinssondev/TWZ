@@ -214,6 +214,8 @@ extension Workspace {
         }
         // After a list switch, charts that kept their stock take this list's view of it.
         broker.adoptList(cells.compactMap(chart(id:)))
+        notePlaces()
+        showPendingFocus(broker: broker)
     }
 
     /// A list's load button: the grid follows the list's scanner in place of the gainers, until Reset,
@@ -223,6 +225,8 @@ extension Workspace {
     func loadList(_ symbols: [String], scan: ScanSpec, timeframe: Timeframe, broker: Broker) {
         // The grid's scanner switches first, so the gainers it still holds don't follow in meanwhile.
         let spec = ScanSpec(kind: scan.kind, filter: scan.filter, rows: ScannerKind.maxRowCount)
+        // A double-click waiting for another list gives up (see `showChart`).
+        if pendingFocus?.place.list != Self.listKey(spec) { pendingFocus = nil }
         gridScan = spec
         // The list's own views, lit scale and zoom set by hand, before its charts load.
         syncGridScale(to: broker)

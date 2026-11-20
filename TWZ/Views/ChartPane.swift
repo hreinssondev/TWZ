@@ -54,14 +54,68 @@ extension Workspace {
         showChart(symbol, broker: broker)
     }
 
-    /// Selects the grid's chart showing `symbol` (the first, in reading order), or with none, loads it
-    /// into the grid's 6th chart in reading order (the last, in a smaller grid) and selects that.
+    /// Selects the grid's chart showing `symbol` (the first, in reading order). With none, goes back to
+    /// where the grid last showed it (see `gridPlaces`), so the charts on screen stay as they are: on the
+    /// grid's list, it loads by hand into the cell it was in; on another list, that list shows and loads
+    /// into the grid, as ⌘⇧ and its letter do, and once its rows are in, the stock is shown there (see
+    /// `showPendingFocus`). A stock the grid never showed loads into the grid's 6th chart in reading order
+    /// (the last, in a smaller grid).
     private func showChart(_ symbol: String, broker: Broker) {
         if selectChart(showing: symbol) { return }
+        if let place = gridPlaces[symbol], let kind = ScannerKind(rawValue: place.list) {
+            if place.list == gridListKey {
+                show(symbol, at: place, broker: broker)
+            } else {
+                pendingFocus = PendingFocus(symbol: symbol, place: place, until: Date().addingTimeInterval(15))
+                listShortcut = ListShortcut(kind: kind)
+                broker.say("\(symbol): back to \(kind.rawValue), where it was shown")
+            }
+            return
+        }
         if let id = mainCells.count >= 6 ? mainCells[5] : mainCells.last, let chart = chart(id: id) {
             loadByHand(symbol, into: chart, broker: broker)
             selectedChartID = id
         }
+    }
+
+    /// The grid has followed its list: a double-click waiting for it (see `showChart`) shows its stock.
+    func showPendingFocus(broker: Broker) {
+        guard let pending = pendingFocus, pending.place.list == gridListKey else { return }
+        pendingFocus = nil
+        if Date() < pending.until { show(pending.symbol, at: pending.place, broker: broker) }
+    }
+
+    /// Selects the chart showing `symbol`, or else the one in the cell it was in (the last, in a grid
+    /// smaller now), which loads it; either way it's kept on it as if set by hand, so a fresher ranking
+    /// of the list doesn't take it away.
+    private func show(_ symbol: String, at place: GridPlace, broker: Broker) {
+        guard !mainCells.isEmpty else { return }
+        let id = mainCells.first { chart(id: $0)?.symbol == symbol } ?? mainCells[min(place.cell, mainCells.count - 1)]
+        guard let chart = chart(id: id) else { return }
+        loadByHand(symbol, into: chart, broker: broker)
+        selectedChartID = id
+    }
+
+    /// Keeps where the grid shows its stocks, on its list (see `gridPlaces`): every chart's, or with
+    /// `id`, just that chart's. A stock shown twice is kept in its first cell, in reading order.
+    func notePlaces(only id: Int? = nil) {
+        let list = gridListKey
+        var places = gridPlaces
+        var seen: Set<String> = []
+        var changed = false
+        for (cell, chartID) in mainCells.enumerated() {
+            guard let symbol = chart(id: chartID)?.symbol, !symbol.isEmpty, seen.insert(symbol).inserted,
+                  id == nil || id == chartID else { continue }
+            if let old = places[symbol], old.list == list, old.cell == cell { continue }
+            placeKeeps += 1
+            places[symbol] = GridPlace(list: list, cell: cell, kept: placeKeeps)
+            changed = true
+        }
+        guard changed else { return }
+        while places.count > GridPlace.capacity, let oldest = places.min(by: { $0.value.kept < $1.value.kept })?.key {
+            places[oldest] = nil
+        }
+        gridPlaces = places
     }
 
     /// Selects the grid's first chart showing `symbol`; false when none does.
@@ -86,6 +140,7 @@ extension Workspace {
             load(s, timeframe: timeframe(showing: s, in: chart, otherwise: chart.timeframe), into: chart, broker: broker)
         }
         manualChartIDs.insert(chart.id)
+        notePlaces(only: chart.id)
     }
 
     /// Every main-window chart follows the grid's list again (the gainers, or the list last loaded

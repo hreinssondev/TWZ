@@ -122,6 +122,19 @@ nonisolated struct MainGridPin: Codable, Equatable {
     var displaced: String?
 }
 
+/// Where a stock was last shown in the main grid: the list the grid followed (see
+/// `Workspace.gridListKey`) and its cell in reading order. Double-clicking a position, order or round
+/// trip whose stock no chart shows goes back there (see `Workspace.showChart`).
+nonisolated struct GridPlace: Codable, Equatable {
+    var list: String
+    var cell: Int
+    /// When it last moved, counted across stocks: past `capacity`, the one that moved longest ago goes.
+    var kept: Int
+
+    static let storageKey = "gridPlaces"
+    static let capacity = 500
+}
+
 @Observable
 final class Workspace {
     /// The main window's charts, one for each cell of the largest grid (see `ChartGrid`).
@@ -187,6 +200,21 @@ final class Workspace {
     var shownOrderFills: [String: Set<String>] = [:]
     /// What each list panel on screen shows, by panel id (the lists keep it up to date).
     var shownLists: [String: ScannerKind] = [:]
+    /// Where the main grid last showed each stock, by symbol (see `GridPlace`, `notePlaces`). Saved.
+    @ObservationIgnored var gridPlaces: [String: GridPlace] = [:] {
+        didSet { defaults.set(try? JSONEncoder().encode(gridPlaces), forKey: GridPlace.storageKey) }
+    }
+    /// The places kept so far (see `GridPlace.kept`).
+    @ObservationIgnored var placeKeeps = 0
+    /// A double-click on a stock shown on another list, waiting for that list's rows (see `showChart`).
+    @ObservationIgnored var pendingFocus: PendingFocus?
+
+    struct PendingFocus {
+        var symbol: String
+        var place: GridPlace
+        /// Given up after this, should the list's rows not come in.
+        var until: Date
+    }
     /// ⌘⇧ + a list's letter (see `ScannerKind.forShortcut`): the list to show and load into the chart grid,
     /// taken up by the list panels (see `ListPanel`). A new one each press, so the same key works again.
     var listShortcut: ListShortcut?
@@ -362,6 +390,9 @@ final class Workspace {
             .flatMap { try? JSONDecoder().decode([Int: ViewSet].self, from: $0) } ?? [:]
         activeViewSet = (defaults.object(forKey: ViewSet.activeKey) as? Int).flatMap { viewSets[$0] != nil ? $0 : nil }
         lastViewSet = activeViewSet
+        gridPlaces = defaults.data(forKey: GridPlace.storageKey)
+            .flatMap { try? JSONDecoder().decode([String: GridPlace].self, from: $0) } ?? [:]
+        placeKeeps = gridPlaces.values.map(\.kept).max() ?? 0
         listScaleStates = defaults.data(forKey: "listScaleStates")
             .flatMap { try? JSONDecoder().decode([String: ListScaleState].self, from: $0) } ?? [:]
 
