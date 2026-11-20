@@ -13,9 +13,10 @@
 //  overnight in indigo (not forex charts: forex trades round the clock).
 //  Indicators: SMA 9 and SMA 21 on every chart, plus VWAP (from 04:00 ET) on intraday charts;
 //  each can be turned off, and their thickness set, in Settings › Appearance.
-//  Trades (off by default): the day's fills in the symbol, a green ▲ under each buy and a red ▼
-//  over each sell, tip at the fill price, on the bar the fill came in; a round trip double-clicked in
-//  the Round trips tab shows its fills' arrows either way.
+//  Trades (off by default): the day's fills in the symbol, an arrow pointing right at each, green for a
+//  buy and red for a sell, its tip at the fill price just left of the bar the fill came in (as a
+//  what-if trade's fills always show, in its pink); a round trip double-clicked in the Round trips tab
+//  shows its fills' arrows either way.
 //  With Settings › Trading's dollar ⌥ / ⌘-click on, ⌥-click buys and ⌘-click sells a fixed dollar
 //  amount at the clicked price, the hover line and price tag green / red while the key is held.
 //  Hovering the price area shows, left of the price tag, the P/L at the hovered price (see `hoverPnL`).
@@ -552,7 +553,9 @@ struct CandleChart: View {
         plotCtx.fill(downBodies, with: .color(down))
 
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
-        if showTrades || !shownFillIds.isEmpty { drawTrades(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y) }
+        if showTrades || !shownFillIds.isEmpty {
+            drawTrades(in: &plotCtx, bars: bars, start: start, end: end, bodyWidth: bodyWidth, x: x, y: y)
+        }
         if !pointers.isEmpty {
             drawPointers(in: &plotCtx, bars: bars, start: start, end: end, bodyWidth: bodyWidth, x: x, y: y)
         }
@@ -651,7 +654,7 @@ struct CandleChart: View {
     }
 
     /// The day's fills in this chart's symbol, on the visible bars.
-    private func drawTrades(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int,
+    private func drawTrades(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, bodyWidth: CGFloat,
                             x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
         let fills = broker.fills.values.filter { $0.symbol == chart.symbol && (showTrades || shownFillIds.contains($0.id)) }
         guard !fills.isEmpty else { return }
@@ -669,44 +672,34 @@ struct CandleChart: View {
             g.shares > 0 ? TradeMarker(bar: g.bar, isBuy: g.isBuy, price: g.cost / g.shares) : nil
         }
 
-        let head: CGFloat = 7, halfWidth: CGFloat = 5, stem: CGFloat = 7, stemHalf: CGFloat = 1.25
         for m in markers {
-            let tip = CGPoint(x: x(m.bar), y: y(m.price))
-            let dir: CGFloat = m.isBuy ? 1 : -1      // buys point up from below, sells down from above
-            var arrow = Path()
-            arrow.move(to: tip)
-            arrow.addLine(to: CGPoint(x: tip.x + halfWidth, y: tip.y + dir * head))
-            arrow.addLine(to: CGPoint(x: tip.x + stemHalf, y: tip.y + dir * head))
-            arrow.addLine(to: CGPoint(x: tip.x + stemHalf, y: tip.y + dir * (head + stem)))
-            arrow.addLine(to: CGPoint(x: tip.x - stemHalf, y: tip.y + dir * (head + stem)))
-            arrow.addLine(to: CGPoint(x: tip.x - stemHalf, y: tip.y + dir * head))
-            arrow.addLine(to: CGPoint(x: tip.x - halfWidth, y: tip.y + dir * head))
-            arrow.closeSubpath()
-            ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
-            ctx.fill(arrow, with: .color(sideColors.of(m.isBuy)))
+            Self.drawPointer(at: CGPoint(x: x(m.bar) - bodyWidth / 2 - 1, y: y(m.price)), color: sideColors.of(m.isBuy), in: &ctx)
         }
     }
 
-    /// `pointers` on the visible bars: arrows pointing right, the size of the trade arrows, their tips
-    /// just left of the candle.
+    /// An arrow pointing right, its tip at `tip`, outlined dark: a fill's (see `drawTrades`, `drawPointers`).
+    private static func drawPointer(at tip: CGPoint, color: Color, in ctx: inout GraphicsContext) {
+        let head: CGFloat = 7, halfWidth: CGFloat = 5, stem: CGFloat = 7, stemHalf: CGFloat = 1.25
+        var arrow = Path()
+        arrow.move(to: tip)
+        arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y - halfWidth))
+        arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y - stemHalf))
+        arrow.addLine(to: CGPoint(x: tip.x - head - stem, y: tip.y - stemHalf))
+        arrow.addLine(to: CGPoint(x: tip.x - head - stem, y: tip.y + stemHalf))
+        arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y + stemHalf))
+        arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y + halfWidth))
+        arrow.closeSubpath()
+        ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+        ctx.fill(arrow, with: .color(color))
+    }
+
+    /// `pointers` on the visible bars, like the trade arrows, their tips just left of the candle.
     private func drawPointers(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, bodyWidth: CGFloat,
                               x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
-        let head: CGFloat = 7, halfWidth: CGFloat = 5, stem: CGFloat = 7, stemHalf: CGFloat = 1.25
         for p in pointers {
             guard let bar = Self.barIndex(of: p.time, in: bars, barSeconds: chart.timeframe.barSeconds),
                   bar >= start, bar < end else { continue }
-            let tip = CGPoint(x: x(bar) - bodyWidth / 2 - 1, y: y(p.price))
-            var arrow = Path()
-            arrow.move(to: tip)
-            arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y - halfWidth))
-            arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y - stemHalf))
-            arrow.addLine(to: CGPoint(x: tip.x - head - stem, y: tip.y - stemHalf))
-            arrow.addLine(to: CGPoint(x: tip.x - head - stem, y: tip.y + stemHalf))
-            arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y + stemHalf))
-            arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y + halfWidth))
-            arrow.closeSubpath()
-            ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
-            ctx.fill(arrow, with: .color(p.color))
+            Self.drawPointer(at: CGPoint(x: x(bar) - bodyWidth / 2 - 1, y: y(p.price)), color: p.color, in: &ctx)
         }
     }
 
