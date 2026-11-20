@@ -59,6 +59,8 @@ struct AccountBar: View {
                 }
                 .buttonStyle(.plain)
                 .help("Every chart follows the list loaded into the grid in order again (the top gainers unless another list was loaded), on the timeframe beside it and at the Zoom slider's zoom; charts set by hand let go of their stock")
+
+                ScaleButtons()
             }
 
             Spacer()
@@ -108,6 +110,51 @@ struct AccountBar: View {
         }
         .font(.system(size: 10).monospacedDigit())
         .offset(y: 1)
+    }
+}
+
+/// The saved scales (see `ChartScale`), styled like the timeframe switch: a click gives every chart the
+/// view saved under that number, ⇧-click saves the selected chart's view there. The one last saved or
+/// picked is lit; numbers with nothing saved are dimmer.
+private struct ScaleButtons: View {
+    @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(ChartScale.slots, id: \.self) { slot in
+                let lit = workspace.activeScale == slot
+                let saved = workspace.chartScales[slot] != nil
+                Button {
+                    pick(slot)
+                } label: {
+                    Text("\(slot)")
+                        .font(.system(size: 10, weight: lit ? .semibold : .regular).monospacedDigit())
+                        .foregroundStyle(lit ? Color.primary : Color.secondary.opacity(saved ? 0.7 : 0.35))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(lit ? 0.12 : 0)))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(saved ? "Every chart takes scale \(slot): its zoom, place and price scale. ⇧-click saves the selected chart's view here instead"
+                            : "⇧-click saves the selected chart's view (zoom, place and price scale) as scale \(slot)")
+            }
+        }
+    }
+
+    private func pick(_ slot: Int) {
+        if NSEvent.modifierFlags.contains(.shift) {
+            if workspace.saveScale(slot), let symbol = workspace.chart(id: workspace.selectedChartID)?.symbol {
+                broker.say("Scale \(slot) saved from \(symbol)'s view")
+            } else {
+                NSSound.beep()
+                broker.say("Select a chart to save its view as scale \(slot)")
+            }
+        } else if !workspace.applyScale(slot) {
+            NSSound.beep()
+            broker.say("Nothing saved as scale \(slot) yet: ⇧-click it to save the selected chart's view")
+        }
     }
 }
 

@@ -231,7 +231,8 @@ private struct TradingSettings: View {
         ("⌘⇧T/S L H M/A F", "Show that list and load it into the chart grid: Most Active $ (T or S), Top Losers, AH Gainers, "
             + "Top Gainers (M or A), Forex"),
         ("⌥1 2 3 4 5", "Every chart's timeframe: 1m / 5m / 15m / 1h / D"),
-        ("⌥0", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes)"),
+        ("⌥0  /  ⇧A", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes); ⇧A not while typing"),
+        ("1 2 3 (top bar)", "Click: every chart takes that saved scale (zoom, place and price scale). ⇧-click: save the selected chart's view as it"),
         ("Own shortcut", "Send that hotkey (set in the hotkey editor)"),
     ]
 

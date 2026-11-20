@@ -17,8 +17,9 @@ management in one window built for quick entries and exits.
   chart's stock in that color on every chart, one stock per color, kept while it's off the charts (⌥⇧⌫
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
-  as you scroll back; ⇧-swipe moves the top bar's Zoom slider, zooming every chart; ⌥0 gives every
-  chart the selected one's zoom, place and price scale), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D; each timeframe
+  as you scroll back; ⇧-swipe moves the top bar's Zoom slider, zooming every chart; ⌥0 or ⇧A gives every
+  chart the selected one's zoom, place and price scale; ⇧-clicking 1, 2 or 3 in the top bar saves it as
+  a scale, and clicking one gives it to every chart), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D; each timeframe
   keeps its own zoom, and each stock where its view was left, also after switching lists or a
   relaunch, until Reset or a right-click on the chart;
   the bars a chart showed, on every timeframe, stay in memory, so coming back to them shows at once),

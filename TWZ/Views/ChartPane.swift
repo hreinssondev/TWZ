@@ -91,6 +91,7 @@ extension Workspace {
     /// Every main-window chart follows the grid's list again (the gainers, or the list last loaded
     /// into it), on the account bar's timeframe.
     func resetToGainers() {
+        activeScale = nil
         manualChartIDs = []
         handDisplaced = [:]
         secondaryPins = [:]

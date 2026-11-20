@@ -236,6 +236,24 @@ extension Workspace {
         setTimeframe(timeframe, of: mainCharts.filter { !mainCells.contains($0.id) }, broker: broker)
     }
 
+    /// ⇧-clicking a scale button in the top bar: the selected chart's view, saved under `slot`; false
+    /// with no chart selected.
+    func saveScale(_ slot: Int) -> Bool {
+        guard isChartSelected, let chart = chart(id: selectedChartID), !chart.symbol.isEmpty else { return false }
+        chartScales[slot] = ChartScale(of: chart)
+        activeScale = slot
+        return true
+    }
+
+    /// Clicking a scale button: every chart in the grid takes the view saved under `slot`; false while
+    /// none is.
+    func applyScale(_ slot: Int) -> Bool {
+        guard let scale = chartScales[slot] else { return false }
+        for chart in mainCells.compactMap(chart(id:)) where !chart.symbol.isEmpty { scale.apply(to: chart) }
+        activeScale = slot
+        return true
+    }
+
     /// ⌥0: every other chart in the grid takes `source`'s view: as much time on screen (as many bars on
     /// its timeframe), its right edge at the same time (or as far past the latest bar, while `source`'s
     /// is there), and its prices moved and squeezed alike. A stock with fewer bars ends up as far back as
@@ -246,8 +264,7 @@ extension Workspace {
         let edge: Date? = source.scrollBack > 0 && !bars.isEmpty
             ? bars[min(bars.count - 1, max(0, Int((Double(bars.count) - source.scrollBack).rounded()) - 1))].time : nil
         for chart in mainCells.compactMap(chart(id:)) where chart !== source && !chart.symbol.isEmpty {
-            // Bars of one timeframe in the other's; daily bars count as they are.
-            let ratio = source.timeframe.barSeconds.flatMap { s in chart.timeframe.barSeconds.map { s / $0 } } ?? 1
+            let ratio = ChartScale.barRatio(from: source.timeframe, to: chart.timeframe)
             chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, source.visibleBars * ratio))
             if let edge, let first = chart.bars.first {
                 let i = CandleChart.barIndex(of: edge, in: chart.bars, barSeconds: chart.timeframe.barSeconds)
@@ -264,6 +281,41 @@ extension Workspace {
     /// The second chart of a stock: 5m next to 1m, 1m next to anything else.
     private static func timeframe(nextTo first: Timeframe) -> Timeframe {
         first == .m1 ? .m5 : .m1
+    }
+}
+
+/// A chart view saved under one of the top bar's scale buttons: its zoom, how far back from the latest
+/// bar (so it's as useful later), and its prices moved and squeezed, on its timeframe; a chart on
+/// another one takes as much time (see `Workspace.applyScale`).
+struct ChartScale: Codable, Equatable {
+    var timeframe: Timeframe
+    var visibleBars: Double
+    var scrollBack: Double
+    var priceShift: Double
+    var priceScale: Double
+
+    static let storageKey = "chartScales"
+    static let slots = [1, 2, 3]
+
+    init(of chart: ChartModel) {
+        timeframe = chart.timeframe
+        visibleBars = chart.visibleBars
+        scrollBack = chart.scrollBack
+        priceShift = chart.priceShift
+        priceScale = chart.priceScale
+    }
+
+    func apply(to chart: ChartModel) {
+        let ratio = Self.barRatio(from: timeframe, to: chart.timeframe)
+        chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, visibleBars * ratio))
+        chart.scrollBack = scrollBack * ratio
+        chart.priceShift = priceShift
+        chart.priceScale = priceScale
+    }
+
+    /// Bars of one timeframe in the other's; daily bars count as they are.
+    static func barRatio(from: Timeframe, to: Timeframe) -> Double {
+        from.barSeconds.flatMap { s in to.barSeconds.map { s / $0 } } ?? 1
     }
 }
 

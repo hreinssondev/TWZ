@@ -195,6 +195,12 @@ final class Workspace {
     var gridScan: ScanSpec? {
         didSet { defaults.set(gridScan.flatMap { try? JSONEncoder().encode($0) }, forKey: MainGrid.scanKey) }
     }
+    /// The top bar's saved scales by number (see `ChartScale`). Saved.
+    var chartScales: [Int: ChartScale] = [:] {
+        didSet { defaults.set(try? JSONEncoder().encode(chartScales), forKey: ChartScale.storageKey) }
+    }
+    /// The scale last saved or picked, lit in the top bar; Reset clears it.
+    var activeScale: Int?
     /// Colors given to stocks with ⌥⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
     /// stock that leaves the charts has its color again when it comes back. Set with `setColor`.
     private(set) var stockColors: [String: StockColor] {
@@ -290,6 +296,8 @@ final class Workspace {
             .flatMap { try? JSONDecoder().decode([SavedLayout].self, from: $0) } ?? []
 
         gridScan = defaults.data(forKey: MainGrid.scanKey).flatMap { try? JSONDecoder().decode(ScanSpec.self, from: $0) }
+        chartScales = defaults.data(forKey: ChartScale.storageKey)
+            .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
 
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
