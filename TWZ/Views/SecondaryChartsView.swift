@@ -76,12 +76,10 @@ extension Workspace {
         }
     }
 
-    /// Sets the charts' default zoom and zooms them to it, on every timeframe and stock (the zooms they
-    /// were left at are dropped).
+    /// Sets the charts' default zoom and zooms them to it. The zooms they were left at on other stocks
+    /// and timeframes stay (see `ChartViews`); Reset forgets those.
     func setZoom(_ zoom: Double, of charts: [ChartModel], broker: Broker) {
-        broker.forgetChartZooms(of: charts)
         for chart in charts {
-            chart.zooms = [:]
             if chart.defaultVisibleBars != zoom || chart.visibleBars != zoom {
                 chart.defaultVisibleBars = zoom
                 chart.visibleBars = zoom
@@ -94,6 +92,7 @@ extension Workspace {
     func resetViews(of charts: [ChartModel], zoom: Double, broker: Broker) {
         setZoom(zoom, of: charts, broker: broker)
         broker.forgetChartViews(of: charts)
+        for chart in charts { chart.zooms = [:] }
         for chart in charts where chart.scrollBack != 0 || chart.priceShift != 0 || chart.priceScale != 1 {
             chart.scrollBack = 0
             chart.priceShift = 0

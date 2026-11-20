@@ -18,7 +18,8 @@ management in one window built for quick entries and exits.
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
   as you scroll back), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D; each timeframe
-  keeps its own zoom, and each stock where its view was left, also after switching lists and back;
+  keeps its own zoom, and each stock where its view was left, also after switching lists or a
+  relaunch, until Reset or a right-click on the chart;
   the bars a chart showed, on every timeframe, stay in memory, so coming back to them shows at once),
   pre-market, after hours and overnight shading, VWAP and SMA 9 / 21, volume, tick-by-tick trades on
   the selected chart.

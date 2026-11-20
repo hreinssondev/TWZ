@@ -15,7 +15,7 @@ import Foundation
 
 struct BarCache {
     /// What a chart's bars are of.
-    struct Key: Hashable {
+    struct Key: Hashable, Codable {
         var symbol: String
         var timeframe: Timeframe
 

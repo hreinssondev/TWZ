@@ -68,6 +68,11 @@ struct TWZApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var broker: Broker?
 
+    /// Where every chart is, for the next launch (see `ChartViews`).
+    func applicationWillTerminate(_ notification: Notification) {
+        broker?.saveChartViews()
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let broker, broker.state == .connected else { return .terminateNow }
         let open = broker.positions.values.filter { $0.quantity != 0 }.sorted { $0.symbol < $1.symbol }

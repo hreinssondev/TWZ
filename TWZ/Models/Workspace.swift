@@ -47,7 +47,7 @@ final class ChartModel: Identifiable {
     /// Bars on screen at the default zoom (double-click goes back to it); each grid's Zoom slider sets it.
     var defaultVisibleBars: Double
     /// Bars on screen on the timeframes the chart was switched away from, so switching back zooms it
-    /// as it was left; those not in it start at the default zoom. The Zoom sliders and Reset clear it.
+    /// as it was left; those not in it start at the default zoom. Reset clears it.
     /// Where the chart was left on the stock and timeframe it goes to comes first (see `ChartViews`).
     @ObservationIgnored var zooms: [Timeframe: Double] = [:]
     /// The Charts window's charts (see `Workspace.secondaryCharts`) have ids from this on.
@@ -55,7 +55,7 @@ final class ChartModel: Identifiable {
     var inChartsWindow: Bool { id >= Self.chartsWindowFirstID }
 
     /// The view's place: how far back from the latest bar, and moved and zoomed up or down.
-    struct Place {
+    struct Place: Codable {
         var scrollBack = 0.0
         var priceShift = 0.0
         var priceScale = 1.0

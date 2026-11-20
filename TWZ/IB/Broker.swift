@@ -160,16 +160,45 @@ final class Broker {
     /// What each chart's bars are of: the symbol and timeframe it last loaded.
     @ObservationIgnored private var loadedBars: [Int: BarCache.Key] = [:]
     @ObservationIgnored private var barCache = BarCache()
-    @ObservationIgnored private var chartViews = ChartViews()
-
-    /// A Zoom slider set these charts' zoom: the zooms their window's charts were left at go too.
-    func forgetChartZooms(of charts: [ChartModel]) {
-        for window in Set(charts.map(\.inChartsWindow)) { chartViews.forgetZooms(inChartsWindow: window) }
-    }
+    @ObservationIgnored private var chartViews = ChartViews.saved()
+    @ObservationIgnored private var chartViewsSave: Task<Void, Never>?
 
     /// Reset: these charts' window forgets where its charts were left (see `ChartViews`).
     func forgetChartViews(of charts: [ChartModel]) {
         for window in Set(charts.map(\.inChartsWindow)) { chartViews.forget(inChartsWindow: window) }
+        chartViewsChanged()
+    }
+
+    /// At launch: the charts' default zoom, and each zoomed and placed where it was left on what it shows
+    /// (at the default zoom where it wasn't).
+    func restoreChartViews(_ charts: [ChartModel], zoom: Double) {
+        for chart in charts {
+            chart.defaultVisibleBars = zoom
+            let view = chartViews.view(for: .init(bars: .init(symbol: chart.symbol, timeframe: chart.timeframe),
+                                                  inChartsWindow: chart.inChartsWindow))
+            chart.visibleBars = view?.zoom ?? zoom
+            chart.place = view?.place ?? ChartModel.Place()
+        }
+    }
+
+    /// Quitting: keeps where every chart is, then saves it all.
+    func saveChartViews() {
+        for chart in charts where !chart.symbol.isEmpty {
+            let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
+            chartViews.keep(zoom: chart.visibleBars, place: chart.place, for: .init(bars: key, inChartsWindow: chart.inChartsWindow))
+        }
+        chartViewsSave?.cancel()
+        chartViews.save()
+    }
+
+    /// Saves the views a couple of seconds after they change, once for a burst (a whole grid switching).
+    private func chartViewsChanged() {
+        chartViewsSave?.cancel()
+        chartViewsSave = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self else { return }
+            self.chartViews.save()
+        }
     }
 
     /// What the bars kept for coming back to a timeframe or stock take (Settings › Trading shows it).
@@ -257,6 +286,7 @@ final class Broker {
             // A timeframe switch has already kept the zoom it leaves in `zooms`.
             let zoom = previous.timeframe == key.timeframe ? chart.visibleBars : chart.zooms[previous.timeframe] ?? chart.visibleBars
             chartViews.keep(zoom: zoom, place: chart.place, for: .init(bars: previous, inChartsWindow: window))
+            chartViewsChanged()
             view = chartViews.view(for: .init(bars: key, inChartsWindow: window))
         }
         if let zoom = view?.zoom { chart.visibleBars = zoom }
