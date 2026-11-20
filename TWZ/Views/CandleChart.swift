@@ -15,7 +15,7 @@
 //  each can be turned off, and their thickness set, in Settings › Appearance.
 //  Trades (off by default): the day's fills in the symbol, an arrow pointing right at each, green for a
 //  buy and red for a sell, its tip at the fill price just left of the bar the fill came in (as a
-//  what-if trade's fills always show, in its pink, outlined green for a long, red for a short); a round trip double-clicked in the Round trips tab
+//  what-if trade's fills always show, green for a long, red for a short, ringed in the what-if pink); a round trip double-clicked in the Round trips tab
 //  shows its fills' arrows either way.
 //  With Settings › Trading's dollar ⌥ / ⌘-click on, ⌥-click buys and ⌘-click sells a fixed dollar
 //  amount at the clicked price, the hover line and price tag green / red while the key is held.
@@ -681,8 +681,7 @@ struct CandleChart: View {
 
     /// An arrow pointing right, its tip at `tip`: a fill's (see `drawTrades`, `drawPointers`). Thinly
     /// outlined dark, or with `outline`, ringed in that color: a rim with sharp corners, so the arrow keeps
-    /// its shape, set off from the fill and the chart by thin dark lines (red beside the what-if pink
-    /// would run together otherwise).
+    /// its shape, set off from the chart by a thin dark line.
     private static func drawPointer(at tip: CGPoint, color: Color, outline: Color? = nil, in ctx: inout GraphicsContext) {
         let head: CGFloat = 7, halfWidth: CGFloat = 5, stem: CGFloat = 7, stemHalf: CGFloat = 1.25
         var arrow = Path()
@@ -696,11 +695,9 @@ struct CandleChart: View {
         arrow.closeSubpath()
         // Half of each stroke shows: the fill covers its inner half.
         if let outline {
-            let dark = Color.black.opacity(0.7)
             let rim: CGFloat = 1.5, line: CGFloat = 0.75
-            ctx.stroke(arrow, with: .color(dark), style: StrokeStyle(lineWidth: (rim + 2 * line) * 2, lineJoin: .miter))
-            ctx.stroke(arrow, with: .color(outline), style: StrokeStyle(lineWidth: (rim + line) * 2, lineJoin: .miter))
-            ctx.stroke(arrow, with: .color(dark), style: StrokeStyle(lineWidth: line * 2, lineJoin: .miter))
+            ctx.stroke(arrow, with: .color(.black.opacity(0.7)), style: StrokeStyle(lineWidth: (rim + line) * 2, lineJoin: .miter))
+            ctx.stroke(arrow, with: .color(outline), style: StrokeStyle(lineWidth: rim * 2, lineJoin: .miter))
         } else {
             ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
         }
