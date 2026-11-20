@@ -659,9 +659,9 @@ struct TradingChart: View {
                                    label: "", dashed: avgCostDashed, dotted: avgCostDashed && avgCostDots, movesAsideForLastPrice: true))
         }
         if let sim = broker.simPositions[chart.symbol] {
-            // A what-if trade: its average price in the what-if color, SIM beside it, and its simulated stop
-            // loss and take profit in their colors, dotted; a click on one takes it off.
-            lines.append(PriceLine(price: sim.avgCost, color: Self.whatIfColor, label: "SIM", movesAsideForLastPrice: true))
+            // A what-if trade: no line of its own (its arrows show where it filled, see `simPointers`); its
+            // simulated stop loss and take profit in their colors, dotted, SIM beside them; a click on one
+            // takes it off.
             if let stop = sim.stopLoss {
                 lines.append(PriceLine(price: stop, color: protectiveColor(.stopLoss), label: "SIM", dotted: true,
                                        orderId: SimPosition.stopLossLineId, cancelsOnClick: true))
