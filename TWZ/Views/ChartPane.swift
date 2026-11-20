@@ -610,7 +610,7 @@ struct TradingChart: View {
             : LineColors.resolve(takeProfitHex, default: LineColors.defaultTakeProfit)
     }
 
-    /// A what-if trade's fills: an arrow in its line's color pointing right at each, thickly outlined in
+    /// A what-if trade's fills: an arrow in the what-if pink pointing right at each, thickly outlined in
     /// the buy color for a long, the sell color for a short, so it's told apart from a real trade's.
     private var simPointers: [PricePointer] {
         guard let sim = broker.simPositions[chart.symbol] else { return [] }
