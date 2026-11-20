@@ -26,7 +26,8 @@
 //  ⌥1 / 2 / 3 / 4 / 5 sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
-//  place and price scale (see `Workspace.matchViews`).
+//  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field picks a saved scale,
+//  as clicking its number in the top bar does (see `Workspace.pickScale`).
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
 //
@@ -123,6 +124,12 @@ struct TradingShortcuts: ViewModifier {
                     }
                     // ⌥1–5 sets the account bar's timeframe; ChartGrid follows it. Set again too, so a chart
                     // whose own switch was changed goes back to it.
+                    // ⇧1–5 outside a text field picks a saved scale, as clicking its number in the top bar does.
+                    if modifiers == .shift, inMainWindow, let slot = ChartScale.slot(keyCode: event.keyCode) {
+                        if event.window?.firstResponder is NSTextView { return event }
+                        workspace.pickScale(slot, broker: broker)
+                        return nil
+                    }
                     // ⌥0, or ⇧A outside a text field: the other charts take the selected chart's view.
                     let matchKey = modifiers == .option && (event.keyCode == 29 || event.keyCode == 82)
                         || modifiers == .shift && event.charactersIgnoringModifiers?.lowercased() == "a"
@@ -246,6 +253,9 @@ extension KeyShortcut {
         if option, !command, !control, k == "z" || k == "<" { return "\(display) cancels orders" }
         if option, !shift, !command, !control, keyCode == 29 || keyCode == 82 {
             return "⌥0 gives every chart the selected chart's view"
+        }
+        if shift, !option, !command, !control, ChartScale.slot(keyCode: keyCode) != nil {
+            return "\(display) picks a saved scale"
         }
         if shift, !option, !command, !control, k == "a" {
             return "⇧A gives every chart the selected chart's view"

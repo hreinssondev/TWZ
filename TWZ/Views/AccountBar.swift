@@ -159,15 +159,8 @@ private struct ScaleButtons: View {
                 NSSound.beep()
                 broker.say("Select a chart to save its view as scale \(slot)")
             }
-        } else if workspace.activeScale == slot {
-            // Lit: off again, so charts keep their own views as stocks and timeframes change.
-            workspace.activeScale = nil
-            broker.say("Scale \(slot) off: charts keep their own views")
-        } else if workspace.applyScale(slot) {
-            broker.say("Scale \(slot) on every chart, also as lists and timeframes change (click it again to turn it off)")
         } else {
-            NSSound.beep()
-            broker.say("Nothing saved as scale \(slot) yet: ⇧-click it to save the selected chart's view")
+            workspace.pickScale(slot, broker: broker)
         }
     }
 }

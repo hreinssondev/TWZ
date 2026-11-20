@@ -258,6 +258,21 @@ extension Workspace {
         return true
     }
 
+    /// Clicking scale button `slot`, or ⇧ and its number: lit, it goes off; otherwise every chart takes
+    /// it and it lights (see `applyScale`). Says which in the status line; beeps with nothing saved.
+    func pickScale(_ slot: Int, broker: Broker) {
+        if activeScale == slot {
+            // Lit: off again, so charts keep their own views as stocks and timeframes change.
+            activeScale = nil
+            broker.say("Scale \(slot) off: charts keep their own views")
+        } else if applyScale(slot) {
+            broker.say("Scale \(slot) on every chart, also as lists and timeframes change (pick it again to turn it off)")
+        } else {
+            NSSound.beep()
+            broker.say("Nothing saved as scale \(slot) yet: ⇧-click its number in the top bar to save the selected chart's view")
+        }
+    }
+
     /// The scale saved under button `slot`, if any.
     func gridScale(_ slot: Int?) -> ChartScale? {
         slot.flatMap { chartScales[$0] }
@@ -306,6 +321,11 @@ struct ChartScale: Codable, Equatable {
     static let storageKey = "chartScales"
     static let activeKey = "activeChartScale"
     static let slots = [1, 2, 3, 4, 5]
+
+    /// The scale a 1–5 key picks with ⇧ (number row or keypad).
+    static func slot(keyCode: UInt16) -> Int? {
+        [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 83: 1, 84: 2, 85: 3, 86: 4, 87: 5][keyCode]
+    }
 
     init(of chart: ChartModel) {
         timeframe = chart.timeframe
