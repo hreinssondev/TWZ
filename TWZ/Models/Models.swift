@@ -304,6 +304,26 @@ nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// The number keys' orders, ⌘ or ⌘⌥ and 1–9 (number row or keypad): a Mode order (see `TradeMode`) at
+/// the mid, limit, no offset, outside regular hours too, DAY; ⌘ sizes it in dollars ($1,000 a step),
+/// ⌘⌥ in buying power (10% of what IB's margin allows in the stock, a step). Sent only with KEYS ON.
+nonisolated enum OrderKeys {
+    static func number(keyCode: UInt16) -> Int? {
+        [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9,
+         83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9][keyCode]
+    }
+
+    static func hotkey(number: Int, buyingPower: Bool) -> Hotkey {
+        let sizing: Hotkey.Sizing = buyingPower ? .buyingPower : .dollars
+        let amount = Double(number * (buyingPower ? 10 : 1000))
+        var hotkey = Hotkey(label: Hotkey.autoLabel(action: .mode, sizing: sizing, amount: amount), action: .mode,
+                            sizing: sizing, amount: amount, orderType: .limit, priceReference: .mid, offset: 0)
+        hotkey.outsideRth = true
+        hotkey.tif = .day
+        return hotkey
+    }
+}
+
 /// A key plus modifiers that fires a hotkey. Matched by the physical key (`keyCode`) and modifiers;
 /// `key` is only for display.
 nonisolated struct KeyShortcut: Codable, Hashable {
