@@ -13,7 +13,7 @@ management in one window built for quick entries and exits.
 - **Chart grid** from 2×2 up to 8×4 that follows the top gainers in rank order, or a list you load
   into it. Any chart can be given a stock by hand: it keeps it, the stock it showed leaves the grid so
   no other chart moves, and the list flows on through the other charts, until the top bar's Reset
-  hands it back (Reset, or ⌘⇧R, keeps the list loaded). ⌥⇧ and a color's letter outlines the selected
+  hands it back (Reset, or ⌘R, keeps the list loaded). ⌥⇧ and a color's letter outlines the selected
   chart's stock in that color on every chart, one stock per color, kept while it's off the charts (⌥⇧⌫
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
@@ -28,7 +28,7 @@ management in one window built for quick entries and exits.
   place and price scale. ⇧-clicking 1–5 in the top bar saves every chart's zoom and place on every
   timeframe as a view set, and clicking one puts them back;
   with Settings › Appearance's "Top bar numbers are scales" on, ⇧-click saves the selected chart's view
-  as a scale instead, and picking one gives it to every chart (and those loading another stock). ⌘R
+  as a scale instead, and picking one gives it to every chart (and those loading another stock). ⌘⇧R
   puts the charts back to the lit number as saved. The bars
   a chart showed, on every timeframe, stay in memory and on disk (two days after last shown), so coming
   back to them, also after a relaunch or zoomed far out, shows at once.

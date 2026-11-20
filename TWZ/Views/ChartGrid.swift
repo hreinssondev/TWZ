@@ -354,7 +354,7 @@ extension Workspace {
         }
     }
 
-    /// ⌘R: the charts back to the lit number as saved: a view set puts every chart's zoom and place back,
+    /// ⌘⇧R: the charts back to the lit number as saved: a view set puts every chart's zoom and place back,
     /// a scale gives every chart its view, own zoom included (dropping the zoom set by hand and the charts
     /// adjusted by hand). False with no number lit.
     func reapplyNumber(broker: Broker) -> Bool {

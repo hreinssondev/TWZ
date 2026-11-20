@@ -60,7 +60,7 @@ struct AccountBar: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help("⌘⇧R. Every chart follows the list loaded into the grid in order again (the top gainers unless another list was loaded), on the timeframe beside it and at the Zoom slider's zoom (zooms and places kept on other timeframes stay); charts set by hand let go of their stock")
+                    .help("⌘R. Every chart follows the list loaded into the grid in order again (the top gainers unless another list was loaded), on the timeframe beside it and at the Zoom slider's zoom (zooms and places kept on other timeframes stay); charts set by hand let go of their stock")
 
                     ScaleButtons()
                 }
