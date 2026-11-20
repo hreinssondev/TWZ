@@ -349,8 +349,9 @@ nonisolated struct KeyShortcut: Codable, Hashable {
 
 nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     enum Action: String, Codable, CaseIterable, Identifiable {
-        /// Buys while the trade mode is LONG, sells (short) while it's SHORT (see `TradeMode`).
-        case open = "Open"
+        /// Buys while the trade mode is LONG, sells (short) while it's SHORT (see `TradeMode`). Saved as
+        /// "Open" by the version before.
+        case mode = "Mode"
         case buy = "Buy"
         case sell = "Sell"
         case closeHalf = "Close 50%"
@@ -360,13 +361,13 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         case flattenAll = "Flatten All"
         var id: String { rawValue }
 
-        var needsSize: Bool { self == .open || self == .buy || self == .sell }
+        var needsSize: Bool { self == .mode || self == .buy || self == .sell }
         var placesOrder: Bool { self != .cancelSymbol && self != .cancelAll }
 
         /// Button color when the hotkey has no color of its own.
         var defaultColor: HotkeyColor {
             switch self {
-            case .open: .blue          // shown green while LONG, red while SHORT (see `HotkeyPanel`)
+            case .mode: .blue          // shown green while LONG, red while SHORT (see `HotkeyPanel`)
             case .buy: .green
             case .sell: .red
             case .closeHalf, .closeAll: .orange
@@ -431,7 +432,13 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         label = try c.decode(String.self, forKey: .label)
-        action = try c.decode(Action.self, forKey: .action)
+        // "Open" is what the mode action was called at first; its automatic labels follow.
+        let rawAction = try c.decode(String.self, forKey: .action)
+        guard let action = Action(rawValue: rawAction == "Open" ? Action.mode.rawValue : rawAction) else {
+            throw DecodingError.dataCorruptedError(forKey: .action, in: c, debugDescription: "Unknown hotkey action \(rawAction)")
+        }
+        self.action = action
+        if rawAction == "Open", label.hasPrefix("Open") { label = Action.mode.rawValue + label.dropFirst(4) }
         sizing = try c.decodeIfPresent(Sizing.self, forKey: .sizing) ?? .shares
         amount = try c.decodeIfPresent(Double.self, forKey: .amount) ?? 100
         // Older versions stored other IB order types here (Stop, Trailing Stop, …); those become Limit.
@@ -465,7 +472,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     /// What a hotkey for these settings is called automatically, e.g. "Buy 100", "Sell 1000$" or "Buy 80% BP".
     static func autoLabel(action: Action, sizing: Sizing, amount: Double) -> String {
         switch action {
-        case .open, .buy, .sell:
+        case .mode, .buy, .sell:
             let n = amount.formatted(.number.grouping(.never).precision(.fractionLength(0...2)))
             return "\(action.rawValue) \(n)\(sizing.suffix)"
         case .closeHalf, .closeAll: return action.rawValue
@@ -480,7 +487,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     static func isAutoLabel(_ label: String, action: Action, sizing: Sizing, amount: Double) -> Bool {
         if label.trimmingCharacters(in: .whitespaces).isEmpty { return true }
         if label == autoLabel(action: action, sizing: sizing, amount: amount) { return true }
-        if (action == .open || action == .buy || action == .sell), sizing == .dollars, amount >= 1_000,
+        if (action == .mode || action == .buy || action == .sell), sizing == .dollars, amount >= 1_000,
            amount.truncatingRemainder(dividingBy: 1_000) == 0 {
             return label == "\(action.rawValue) $\(Int(amount / 1_000))K"
         }

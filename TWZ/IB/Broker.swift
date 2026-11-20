@@ -496,9 +496,9 @@ final class Broker {
         order { $0.run(hotkey, symbol: symbol) }
     }
 
-    /// An Open hotkey goes the trade mode's way: a buy while LONG, a sell (short) while SHORT.
+    /// A Mode hotkey goes the trade mode's way: a buy while LONG, a sell (short) while SHORT.
     static func resolved(_ hotkey: Hotkey) -> Hotkey {
-        guard hotkey.action == .open else { return hotkey }
+        guard hotkey.action == .mode else { return hotkey }
         var hotkey = hotkey
         hotkey.action = TradeMode.current == .short ? .sell : .buy
         return hotkey

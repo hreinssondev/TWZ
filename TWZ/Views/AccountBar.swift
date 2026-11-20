@@ -185,7 +185,7 @@ private struct ScaleButtons: View {
     }
 }
 
-/// The trade mode Open hotkeys go by (see `TradeMode`): LONG in green, SHORT in red.
+/// The trade mode Mode hotkeys go by (see `TradeMode`): LONG in green, SHORT in red.
 private struct TradeModeBadge: View {
     @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
 
@@ -195,7 +195,7 @@ private struct TradeModeBadge: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(mode == .long ? Color.green.opacity(0.8) : Color.red.opacity(0.85)))
-            .help("Open hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O held together: LONG; with S and H: SHORT")
+            .help("Mode hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O held together: LONG; with S and H: SHORT")
     }
 }
 

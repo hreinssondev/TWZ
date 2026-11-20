@@ -115,12 +115,12 @@ struct HotkeyPanel: View {
 private extension Hotkey {
     var tint: Color { (color ?? action.defaultColor).color }
 
-    /// An Open hotkey as the trade mode makes it: "Long …", green, while LONG; "Short …", red, while SHORT.
+    /// A Mode hotkey as the trade mode makes it: "Long …", green, while LONG; "Short …", red, while SHORT.
     func shown(in mode: TradeMode) -> Hotkey {
-        guard action == .open else { return self }
+        guard action == .mode else { return self }
         var hotkey = self
-        if hotkey.label.hasPrefix(Action.open.rawValue) {
-            hotkey.label = (mode == .long ? "Long" : "Short") + hotkey.label.dropFirst(Action.open.rawValue.count)
+        if hotkey.label.hasPrefix(Action.mode.rawValue) {
+            hotkey.label = (mode == .long ? "Long" : "Short") + hotkey.label.dropFirst(Action.mode.rawValue.count)
         }
         if hotkey.color == nil { hotkey.color = mode == .long ? .green : .red }
         return hotkey
@@ -419,7 +419,7 @@ extension Workspace {
     @discardableResult
     func addHotkey() -> UUID? {
         guard hotkeys.count < Hotkey.maxCount else { return nil }
-        let hotkey = Hotkey(label: Hotkey.autoLabel(action: .open, sizing: .shares, amount: 100), action: .open)
+        let hotkey = Hotkey(label: Hotkey.autoLabel(action: .mode, sizing: .shares, amount: 100), action: .mode)
         hotkeys.insert(hotkey, at: hotkeys.count.isMultiple(of: 2) ? hotkeys.count / 2 : hotkeys.count)
         return hotkey.id
     }

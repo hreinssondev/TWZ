@@ -100,7 +100,7 @@ enum TimeframeSwitch {
     static var keepsView: Bool { UserDefaults.standard.object(forKey: keepViewKey) as? Bool ?? defaultKeepView }
 }
 
-/// Which way Open hotkeys go: LONG buys, SHORT sells short (see `Hotkey.Action.open`). ⌘⇧ with L and O
+/// Which way Mode hotkeys go: LONG buys, SHORT sells short (see `Hotkey.Action.mode`). ⌘⇧ with L and O
 /// held together switches to LONG, with S and H to SHORT; the top bar shows it. Saved, so it's as it
 /// was at the next launch.
 enum TradeMode: String {
