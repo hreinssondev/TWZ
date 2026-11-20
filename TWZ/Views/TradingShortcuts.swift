@@ -112,7 +112,6 @@ struct TradingShortcuts: ViewModifier {
                     // ⌘⇧R: the top bar's Reset.
                     if inMainWindow, modifiers == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "r" {
                         workspace.resetToGainers()
-                        broker.say("Reset: every chart follows the grid's list again")
                         return nil
                     }
                     // ⌘⇧ and a list's letter shows that list and loads it into the chart grid.
