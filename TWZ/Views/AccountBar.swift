@@ -46,7 +46,7 @@ struct AccountBar: View {
 
                 HStack(spacing: 8) {
                     TimeframePicker(selection: $gridTimeframe)
-                        .help("Every chart's timeframe (⌥1–6 or ⌘1–6: 1m, 5m, 15m, 30m, 1h, D); a chart's own switch changes just that chart, until it gets a new gainer or Reset")
+                        .help("Every chart's timeframe (⌥1–6, or ⌘1–6 with KEYS off: 1m, 5m, 15m, 30m, 1h, D); a chart's own switch changes just that chart, until it gets a new gainer or Reset")
 
                     Button {
                         workspace.resetToGainers()
@@ -212,18 +212,15 @@ private struct OrderShortcutsBadge: View {
 }
 
 /// Turns the charts' indicator lines on and off (the same settings as Settings › Appearance),
-/// styled like the charts' timeframe switch: the lit chips are the lines being drawn. "Alt-Click" first
-/// switches ⌥-click chart orders.
+/// styled like the charts' timeframe switch: the lit chips are the lines being drawn.
 private struct IndicatorToggles: View {
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
     @AppStorage(Indicators.tradesKey) private var showTrades = false
-    @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
 
     var body: some View {
         HStack(spacing: 1) {
-            chip("Alt-Click", isOn: $altClickOrders, help: "Turn ⌥-click chart orders on or off")
             chip("Trades", isOn: $showTrades)
             chip("VWAP", isOn: $showVWAP)
             chip("SMA9", isOn: $showFastSMA)

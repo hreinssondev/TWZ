@@ -201,7 +201,7 @@ struct ChartPane: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            TradingChart(chart: chart, allowsAltClick: true, onTrade: { workspace.selectedChartID = chart.id }) { factor in
+            TradingChart(chart: chart, onTrade: { workspace.selectedChartID = chart.id }) { factor in
                 // The top bar's Zoom slider: every main chart. As far as zooming one chart goes: in to 15 bars,
                 // out to all the bars the grid's charts have loaded (older ones load as the view reaches them).
                 let most = workspace.mainCells.compactMap(workspace.chart(id:)).map { Double($0.bars.count) }.max() ?? 0
@@ -430,16 +430,13 @@ struct ChartPane: View {
 }
 
 /// A candle chart that trades: ⌃-click places a stop loss / take profit (or, with no position, a
-/// what-if buy), ⌥-click places the selected hotkey's order (or the ⌥-click buy) at the clicked price
-/// where allowed, and the position, orders and what-if are drawn as lines
+/// what-if buy), and the position, orders and what-if are drawn as lines
 /// (double-click one to cancel it). Shared by the main charts and the Charts window.
 struct TradingChart: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     @Environment(\.sideColors) private var sideColors
     let chart: ChartModel
-    /// ⌥-click orders; also switched off in the top bar.
-    let allowsAltClick: Bool
     /// Called before an order or what-if from a click, e.g. to select the chart.
     var onTrade: () -> Void = {}
     /// ⇧-swipe: the grid's zoom times this (see `CandleChart.onZoomAll`).
@@ -447,7 +444,6 @@ struct TradingChart: View {
     /// What-if trades shown instead of real ones, as the Positions header switches (see `PositionsView`).
     @AppStorage(PositionsView.showsSimKey) private var showsSim = false
 
-    @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
@@ -478,14 +474,8 @@ struct TradingChart: View {
     var body: some View {
         CandleChart(
             chart: chart, lines: priceLines, pointers: simPointers,
-            // Switched off in the top bar: no handler, so ⌥ neither tints the price tag nor places orders.
-            // The selected hotkey button's order, or with none selected the order pad's (see `OrderPad`),
-            // at the clicked price, with its amount, order type and time in force (see
-            // `TradingEngine.run(_:symbol:at:)`). ⌘-click does nothing for now.
-            onAltClick: allowsAltClick && altClickOrders ? { price in
-                onTrade()
-                broker.run(workspace.activeHotkey, symbol: chart.symbol, at: price)
-            } : nil,
+            // No ⌥-click orders for now (`TradingEngine.run(_:symbol:at:)` still places one at a price):
+            // without a handler ⌥ neither tints the price tag nor places orders. ⌘-click does nothing.
             onControlClick: { price in
                 guard !chart.symbol.isEmpty else { return }
                 onTrade()

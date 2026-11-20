@@ -163,7 +163,7 @@ final class Workspace {
     var orderPad = OrderPad() {
         didSet { defaults.set(try? JSONEncoder().encode(orderPad), forKey: OrderPad.storageKey) }
     }
-    /// What ⌥-click and ⌘⇧↩ send: the selected hotkey button, or with none selected, the order pad's order.
+    /// What ⌘⇧↩ sends: the selected hotkey button, or with none selected, the order pad's order.
     var activeHotkey: Hotkey { selectedHotkey ?? orderPad.hotkey }
     /// Scanner filters per list panel and scanner, keyed "panelId|scanner".
     var scanFilters: [String: ScannerFilter] { didSet { save() } }

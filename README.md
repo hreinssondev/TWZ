@@ -18,7 +18,7 @@ management in one window built for quick entries and exits.
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
   as you scroll back), 1m to daily, pre-market, after hours and overnight shading, VWAP and SMA 9 / 21,
-  volume, tick-by-tick trades on the selected chart. ⌥1–6 or ⌘1–6 switches every chart (1m, 5m, 15m, 30m, 1h, D),
+  volume, tick-by-tick trades on the selected chart. ⌥1–6 (or ⌘1–6 while the order shortcuts are off) switches every chart (1m, 5m, 15m, 30m, 1h, D),
   keeping each chart's view: the same time on screen, only the candles change (or, with that off in
   Settings › Appearance, each timeframe going back to its own zoom and place).
 - **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the
@@ -32,20 +32,18 @@ management in one window built for quick entries and exits.
   puts the charts back to the lit number as saved. The bars
   a chart showed, on every timeframe, stay in memory and on disk (two days after last shown), so coming
   back to them, also after a relaunch or zoomed far out, shows at once.
-- **Trading from the chart**: ⌥-click places the selected order at the clicked price with its amount,
-  order type and time in force: a limit on the side that fills there or better (MIDPRICE capped there
-  for a Midprice order), a stop-limit on the other (a stop for a Market order); ⌃-click a stop loss or
-  take profit, and order lines show their fill as it happens. Double-click an order line to cancel it.
+- **Trading from the chart**: ⌃-click places a stop loss or take profit, and order lines show their
+  fill as it happens. Double-click an order line to cancel it.
 - **Order pad and hotkeys**: the order pad's buttons pick an order: dollars ($1,000 a step) or buying
   power (10% a step), the price or order type (mid, bid, ask, last, across the spread, market or IBKR
   MIDPRICE) and 1–9. It's a Mode order: it buys while LONG and sells short while SHORT (⌘⇧ with L and O
   held together switches to LONG, with S and H to SHORT; the top bar's LIVE / PAPER badge is green
   while LONG, red while SHORT). Beside it, configurable hotkey buttons (closing, cancelling, or orders of
   their own), each with an optional keyboard shortcut; clicking one selects it in place of the pad's
-  order. ⌥-click and ⌘⇧↩ send the selected order; ⌘⌥ and 1–9 sends a Mode order of 10–90% of the
-  buying power at the mid; ⌘⌫ cancels the symbol's orders and closes the position at market. The
-  shortcuts that send orders work only after ⌘ and the Globe (fn) key turn them on (again: off; off
-  at every launch, KEYS ON in the top bar).
+  order. ⌘⇧↩ sends the selected order; ⌘⌥ and 1–9 sends a Mode order of 10–90% of the buying power at
+  the mid; ⌘⌫ cancels the symbol's orders and closes the position at market. The shortcuts that send
+  orders work only after ⌘ and the Globe (fn) key turn them on (again: off; off at every launch, KEYS
+  ON in the top bar); while on, ⌘1–9 are free for hotkeys instead of switching timeframes.
 - **What-if trades**: ⌥⇧1–4 buys (⌃⌥⇧1–4 shorts) $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB; on the chart, an arrow, green for a long
   and red for a short, ringed in pink, points at each of its fills. It shows like a position, its symbol in pink,

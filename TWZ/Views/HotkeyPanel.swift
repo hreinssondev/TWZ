@@ -3,12 +3,11 @@
 //  TWZ
 //
 //  The order pad on the left (see `OrderPad`): $ or %, the price or order type, and 1–9, each a
-//  button that picks that setting, lit while picked. Its order is the one ⌥-click on a chart and
-//  ⌘⇧↩ send while no hotkey button is selected.
+//  button that picks that setting, lit while picked. Its order is the one ⌘⇧↩ sends while no
+//  hotkey button is selected.
 //  On the right, a two-row grid of configurable hotkey buttons (closing, cancelling, or orders of
 //  their own) acting on the selected chart's symbol. Clicking one selects it (never sends it):
-//  ⌘⇧↩ sends it, ⌥-clicking a chart places its order at the clicked price, and its own shortcut
-//  sends it any time. New buttons go in on the left. Click the "Hotkeys" title to customize them
+//  ⌘⇧↩ sends it, and its own shortcut (⌘1–9 too, with KEYS ON) sends it any time. New buttons go in on the left. Click the "Hotkeys" title to customize them
 //  all, or right-click a button to edit just that one.
 //
 
@@ -75,10 +74,10 @@ struct HotkeyPanel: View {
                         ForEach(Array(workspace.hotkeys.enumerated()), id: \.element.id) { index, hotkey in
                             HotkeyButton(hotkey: hotkey, height: height,
                                          selected: hotkey.id == workspace.selectedHotkeyID, firesOnPress: true) {
-                                // A click selects it: ⌥-click on a chart places its order there, ⌘⇧↩ sends it.
+                                // A click selects it: ⌘⇧↩ sends it.
                                 workspace.selectedHotkeyID = hotkey.id
                             }
-                            .help("Click to select: ⌥-click a chart then places its order at the clicked price (its amount, order type and time in force); ⌘⇧↩ sends it"
+                            .help("Click to select: ⌘⇧↩ then sends it"
                                   + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? ""))
                             .contextMenu {
                                 Button("Edit…") { editing = index }
@@ -234,7 +233,7 @@ private struct HotkeyButton: View {
 
 /// The order pad (see `OrderPad`): two rows of nine buttons: $ and % (what the numbers are), the price or
 /// order type, and 1–9. Each click picks that button's setting, lit in the trade mode's color (green
-/// LONG, red SHORT), and makes the pad's order the one ⌥-click and ⌘⇧↩ send (no hotkey button selected);
+/// LONG, red SHORT), and makes the pad's order the one ⌘⇧↩ sends (no hotkey button selected);
 /// while a hotkey button is selected the lit buttons dim. Fires on mouse-down, like the hotkey buttons.
 private struct OrderPadView: View {
     @Environment(Workspace.self) private var workspace
@@ -276,10 +275,10 @@ private struct OrderPadView: View {
                   fill: lit ? (mode == .long ? Color.green : Color.red).opacity(workspace.selectedHotkeyID == nil ? 0.75 : 0.3)
                             : Color.primary.opacity(0.12)) {
             pick()
-            // Picking on the pad makes its order the one ⌥-click and ⌘⇧↩ send.
+            // Picking on the pad makes its order the one ⌘⇧↩ sends.
             workspace.selectedHotkeyID = nil
         }
-        .help(help + " · ⌥-click a chart sends the pad's order there, ⌘⇧↩ sends it now")
+        .help(help + " · ⌘⇧↩ sends the pad's order")
     }
 }
 

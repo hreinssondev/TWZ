@@ -298,7 +298,7 @@ struct SecondaryChartsView: View {
 }
 
 /// A Charts window chart pane: clicking it loads its symbol into the main window's selected chart.
-/// ⌃-click, the what-if, its lines and hover P/L work as on the main charts; ⌥-click orders are left off.
+/// ⌃-click, the what-if, its lines and hover P/L work as on the main charts.
 struct SecondaryChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(\.sideColors) private var sideColors
@@ -315,7 +315,7 @@ struct SecondaryChartPane: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            TradingChart(chart: chart, allowsAltClick: false)
+            TradingChart(chart: chart)
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))

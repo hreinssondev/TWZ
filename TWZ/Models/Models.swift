@@ -320,7 +320,7 @@ nonisolated enum OrderKeys {
 
 /// The hotkey panel's order, set with its buttons: in dollars ($1,000 a step) or buying power (10% of
 /// what IB's margin allows in the stock, a step), the price or order type, and 1–9. While no hotkey
-/// button is selected, ⌥-click and ⌘⇧↩ send it: a Mode order (see `TradeMode`), no offset, outside
+/// button is selected, ⌘⇧↩ sends it: a Mode order (see `TradeMode`), no offset, outside
 /// regular hours too, DAY. Saved.
 nonisolated struct OrderPad: Codable, Equatable {
     enum Kind: String, Codable, CaseIterable, Identifiable {

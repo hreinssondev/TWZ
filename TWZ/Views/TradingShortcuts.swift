@@ -29,7 +29,7 @@
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  ⌘⌥ and 1–9 sends a Mode order of 10–90% of the buying power at the mid (see `OrderKeys`), with the
 //  order shortcuts on.
-//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌘1–6) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
+//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌘1–6 while the order shortcuts are off; on, ⌘1–9 are for hotkeys) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
 //  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field does what clicking
@@ -93,7 +93,10 @@ struct TradingShortcuts: ViewModifier {
                         broker.say("Order shortcuts are off: ⌘🌐 turns them on")
                         return nil
                     }
-                    if inMainWindow, let hotkey = workspace.hotkeys.first(where: { $0.shortcut == KeyShortcut(event) }) {
+                    // ⌘1–6 switch timeframes while the order shortcuts are off, a hotkey on one of them or not.
+                    let timeframeKey = modifiers == .command && Timeframe(keyCode: event.keyCode) != nil
+                    if inMainWindow, workspace.orderShortcutsOn || !timeframeKey,
+                       let hotkey = workspace.hotkeys.first(where: { $0.shortcut == KeyShortcut(event) }) {
                         let shortcut = KeyShortcut(event)
                         let typing = event.window?.firstResponder is NSTextView
                         if typing, !shortcut.command, !shortcut.option, !shortcut.control, !shortcut.isFunctionKey {
@@ -207,7 +210,13 @@ struct TradingShortcuts: ViewModifier {
                         broker.run(OrderKeys.hotkey(number: number), symbol: workspace.targetSymbol)
                         return nil
                     }
-                    // ⌥1–6 or ⌘1–6: the account bar's timeframe.
+                    // With the order shortcuts on, ⌘1–9 are the hotkeys' (above): one with none does nothing.
+                    if inMainWindow, modifiers == .command, workspace.orderShortcutsOn, OrderKeys.number(keyCode: event.keyCode) != nil {
+                        NSSound.beep()
+                        broker.say("\(KeyShortcut(event).display) has no hotkey (KEYS ON: ⌘1–9 are for hotkeys)")
+                        return nil
+                    }
+                    // ⌥1–6, or ⌘1–6 while the order shortcuts are off: the account bar's timeframe.
                     if modifiers == .option || modifiers == .command, inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
                         workspace.setMainTimeframe(timeframe, broker: broker)
@@ -338,9 +347,6 @@ extension KeyShortcut {
         }
         if command, option, !shift, !control, let number = OrderKeys.number(keyCode: keyCode) {
             return "\(display) sends a MID order of \(number * 10)% of the buying power"
-        }
-        if command, !option, !shift, !control, let timeframe = Timeframe(keyCode: keyCode) {
-            return "\(display) sets every chart to \(timeframe.rawValue)"
         }
         if option, !shift, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
             return "\(display) sets every chart to \(timeframe.rawValue)"
