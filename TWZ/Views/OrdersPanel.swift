@@ -6,7 +6,7 @@
 //  between them; clicking one of their headers stacks them instead, Positions on top (clicking again
 //  puts them side by side). Rows are two lines so they fit the narrow columns.
 //  Orders lists the working orders and, once done, what each filled: dimmed, at its average fill price.
-//  Positions lists the newest first, what-if trades among them (see `positionItems`).
+//  Positions lists the newest first, then the what-if trades, newest first too (see `positionItems`).
 //  A ⌃-click what-if buy shows among them too, as What-if, with IB's preview of its commissions and fees
 //  and the margin it would take (it's never sent); its ✕ removes it, like ⌃-clicking its line.
 //  Fills of orders entered in TWS (which IB reports without an order id) in the same symbol, side and
@@ -466,11 +466,15 @@ struct OrdersPanel: View {
             case .sim(let sim): sim.symbol
             }
         }
+
+        var isSim: Bool {
+            if case .sim = self { true } else { false }
+        }
     }
 
-    /// Positions and what-if trades, newest first: by the first fill of the position's open round trip,
-    /// a what-if by when it was bought. Positions held from before today's fills, whose opening isn't
-    /// known, go last, by symbol.
+    /// Positions, then what-if trades, each newest first: a position by the first fill of its open round
+    /// trip, a what-if by when it was bought. Positions held from before today's fills, whose opening
+    /// isn't known, go last among the positions, by symbol.
     private var positionItems: [PositionItem] {
         let opened = Dictionary(
             RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions)
@@ -479,7 +483,8 @@ struct OrdersPanel: View {
         let items = broker.positions.values.map { (item: PositionItem.real($0), opened: opened[$0.symbol]) }
             + broker.simPositions.values.map { (item: PositionItem.sim($0), opened: Optional($0.opened)) }
         return items.sorted { a, b in
-            switch (a.opened, b.opened) {
+            if a.item.isSim != b.item.isSim { return b.item.isSim }
+            return switch (a.opened, b.opened) {
             case let (x?, y?) where x != y: x > y
             case (.some, nil): true
             case (nil, .some): false
