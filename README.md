@@ -13,7 +13,7 @@ management in one window built for quick entries and exits.
 - **Chart grid** from 2×2 up to 8×4 that follows the top gainers in rank order, or a list you load
   into it. Any chart can be given a stock by hand: it keeps it, the stock it showed leaves the grid so
   no other chart moves, and the list flows on through the other charts, until the top bar's Reset
-  hands it back (Reset keeps the list loaded). ⌥⇧ and a color's letter outlines the selected
+  hands it back (Reset, or ⌘⇧R, keeps the list loaded). ⌥⇧ and a color's letter outlines the selected
   chart's stock in that color on every chart, one stock per color, kept while it's off the charts (⌥⇧⌫
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load

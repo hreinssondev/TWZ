@@ -21,6 +21,7 @@
 //  ⌥⇧1 / 2 / 3 / 4 buys a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 / $3,000 /
 //  85% of the buying power in the selected chart's symbol; ⌃⌥⇧1–4 sells (shorts) the same. Matched by
 //  key, number row or keypad, whatever the keyboard layout types there.
+//  ⌘⇧R does what the top bar's Reset does.
 //  ⌘⇧ and a list's letter (T or S Most Active $, L Top Losers, H AH Gainers, M or A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  ⌥1 / 2 / 3 / 4 / 5 sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
@@ -106,6 +107,12 @@ struct TradingShortcuts: ViewModifier {
                         if event.window?.firstResponder is NSTextView { return event }
                         let symbol = workspace.targetSymbol
                         if symbol.isEmpty || workspace.whatIfs.removeValue(forKey: symbol) == nil { NSSound.beep() }
+                        return nil
+                    }
+                    // ⌘⇧R: the top bar's Reset.
+                    if inMainWindow, modifiers == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "r" {
+                        workspace.resetToGainers()
+                        broker.say("Reset: every chart follows the grid's list again")
                         return nil
                     }
                     // ⌘⇧ and a list's letter shows that list and loads it into the chart grid.
@@ -245,6 +252,9 @@ extension KeyShortcut {
         let k = key.lowercased()
         if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
             return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
+        }
+        if command, shift, !option, !control, k == "r" {
+            return "⌘⇧R resets the chart grid, as the top bar's Reset"
         }
         if command, shift, !option, !control, let kind = ScannerKind.forShortcut(k) {
             return "\(display) shows the \(kind.rawValue) list"
