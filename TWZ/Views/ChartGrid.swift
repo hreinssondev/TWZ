@@ -354,14 +354,16 @@ extension Workspace {
     /// a scale gives every chart its view, own zoom included (dropping the zoom set by hand and the charts
     /// adjusted by hand). False with no number lit.
     func reapplyNumber(broker: Broker) -> Bool {
+        // The lit number, or with none lit (after Reset, say) the one last saved or picked, lit again.
         if NumberButtons.areScales {
-            guard let slot = activeScale, gridScale(slot) != nil else { return false }
+            guard let slot = activeScale ?? lastScale, gridScale(slot) != nil else { return false }
             manualZoom = nil
             broker.forgetChartAdjustments(of: mainCharts)
             return applyScale(slot, sparingAdjusted: false)
         }
-        guard let slot = activeViewSet, let set = viewSets[slot] else { return false }
+        guard let slot = activeViewSet ?? lastViewSet, let set = viewSets[slot] else { return false }
         putBack(set, broker: broker)
+        activeViewSet = slot
         return true
     }
 

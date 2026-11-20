@@ -224,8 +224,13 @@ final class Workspace {
         didSet { defaults.set(try? JSONEncoder().encode(viewSets), forKey: ViewSet.storageKey) }
     }
     var activeViewSet: Int? {
-        didSet { defaults.set(activeViewSet, forKey: ViewSet.activeKey) }
+        didSet {
+            defaults.set(activeViewSet, forKey: ViewSet.activeKey)
+            if let activeViewSet { lastViewSet = activeViewSet }
+        }
     }
+    /// The view set last saved or picked, lit or not (⌘R goes back to it).
+    var lastViewSet: Int?
     /// The top bar's saved scales by number (see `ChartScale`). Saved.
     var chartScales: [Int: ChartScale] = [:] {
         didSet { defaults.set(try? JSONEncoder().encode(chartScales), forKey: ChartScale.storageKey) }
@@ -233,8 +238,13 @@ final class Workspace {
     /// The scale last saved or picked, lit in the top bar: while it is, every main chart loading another
     /// stock takes it (see `Broker.gridScale`). Clicking it again, or Reset, turns it off. Saved.
     var activeScale: Int? {
-        didSet { defaults.set(activeScale, forKey: ChartScale.activeKey) }
+        didSet {
+            defaults.set(activeScale, forKey: ChartScale.activeKey)
+            if let activeScale { lastScale = activeScale }
+        }
     }
+    /// The scale last saved or picked, lit or not (⌘R goes back to it).
+    var lastScale: Int?
     /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧-swipe on a chart): it trumps the
     /// lit scale's zoom, on the charts now and on those loading another stock, until a scale is
     /// picked (its number clicked, or ⇧1–5 with no chart selected) or saved, or Reset. Saved.
@@ -339,10 +349,12 @@ final class Workspace {
         chartScales = defaults.data(forKey: ChartScale.storageKey)
             .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
         activeScale = (defaults.object(forKey: ChartScale.activeKey) as? Int).flatMap { chartScales[$0] != nil ? $0 : nil }
+        lastScale = activeScale
         manualZoom = defaults.object(forKey: ChartScale.manualZoomKey) as? Double
         viewSets = defaults.data(forKey: ViewSet.storageKey)
             .flatMap { try? JSONDecoder().decode([Int: ViewSet].self, from: $0) } ?? [:]
         activeViewSet = (defaults.object(forKey: ViewSet.activeKey) as? Int).flatMap { viewSets[$0] != nil ? $0 : nil }
+        lastViewSet = activeViewSet
         listScaleStates = defaults.data(forKey: "listScaleStates")
             .flatMap { try? JSONDecoder().decode([String: ListScaleState].self, from: $0) } ?? [:]
 

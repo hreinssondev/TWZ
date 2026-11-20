@@ -92,7 +92,6 @@ extension Workspace {
     /// into it), on the account bar's timeframe.
     func resetToGainers() {
         activeScale = nil
-        activeViewSet = nil
         manualZoom = nil
         manualChartIDs = []
         handDisplaced = [:]
