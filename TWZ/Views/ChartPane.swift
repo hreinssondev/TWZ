@@ -131,6 +131,7 @@ struct ChartPane: View {
 
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
+    @AppStorage(MainGrid.zoomKey) private var gridZoom: Double = ChartModel.initialVisibleBars
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
 
@@ -142,7 +143,10 @@ struct ChartPane: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            TradingChart(chart: chart, allowsAltClick: true) { workspace.selectedChartID = chart.id }
+            TradingChart(chart: chart, allowsAltClick: true, onTrade: { workspace.selectedChartID = chart.id }) { factor in
+                // The top bar's Zoom slider: every main chart.
+                gridZoom = min(ChartModel.maxVisibleBars, max(30, gridZoom * factor))
+            }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -377,6 +381,8 @@ struct TradingChart: View {
     let allowsAltClick: Bool
     /// Called before an order or what-if from a click, e.g. to select the chart.
     var onTrade: () -> Void = {}
+    /// ⇧-swipe: the grid's zoom times this (see `CandleChart.onZoomAll`).
+    var onZoomAll: ((Double) -> Void)?
 
     @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
     @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
@@ -504,7 +510,8 @@ struct TradingChart: View {
                 workspace.shownOrderFills[chart.symbol] = nil
                 return workspace.whatIfs.removeValue(forKey: chart.symbol) != nil
             },
-            shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? [])
+            shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? []),
+            onZoomAll: onZoomAll
         )
         // With the last trade lines off, a round trip that just closed (in the last 30 s, so not one
         // from before the chart showed the symbol) shows its exit line for 7 s.

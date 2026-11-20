@@ -4,7 +4,8 @@
 //
 //  Lightweight candlestick + volume chart drawn with a single SwiftUI Canvas.
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
-//  around the cursor; a diagonal swipe does both. Mouse: wheel zooms, shift-wheel pans.
+//  around the cursor; a diagonal swipe does both; with ⇧ held, a swipe moves the grid's Zoom slider
+//  instead (see `onZoomAll`). Mouse: wheel zooms, shift-wheel pans.
 //  Drag pans freely, in time and price. Right-click resets the view, as does double-clicking
 //  anywhere but an order line (unless `onDoubleClick` takes it: with a ⌃-click what-if on the chart,
 //  that comes off instead); double-clicking an order line cancels that order, and a single click
@@ -106,6 +107,8 @@ struct CandleChart: View {
     var onDoubleClick: (() -> Bool)?
     /// Fills drawn as arrows even with Trades off (a round trip shown from the Round trips tab).
     var shownFillIds: Set<String> = []
+    /// ⇧-swipe on the trackpad: the grid's zoom times this (above 1: zoomed out), as its Zoom slider.
+    var onZoomAll: ((Double) -> Void)?
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
 
@@ -178,6 +181,7 @@ struct CandleChart: View {
                     if dy != 0 { zoom(by: exp(dy * 0.01), at: location.x, plotWidth: plotWidth) }
                 },
                 onPriceScale: { dy in scalePrices(by: exp(dy * 0.01)) },
+                onShiftScroll: onZoomAll.map { zoomAll in { d in zoomAll(exp(d * 0.01)) } },
                 onMagnify: { magnification, location in
                     zoom(by: 1 / (1 + magnification), at: location.x, plotWidth: plotWidth)
                 },
@@ -896,6 +900,8 @@ private struct ScrollCatcher: NSViewRepresentable {
     var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
     /// ⌘ + vertical scroll, in points (positive = squeeze the prices, like zooming out).
     var onPriceScale: (CGFloat) -> Void
+    /// ⇧ + a trackpad swipe, either way, in points (positive = zoom out); nil: it pans and zooms as usual.
+    var onShiftScroll: ((CGFloat) -> Void)?
     var onMagnify: (CGFloat, CGPoint) -> Void
     var onClick: () -> Void
     /// ⌥- or ⌃-click location and which of the two; return true to consume the click.
@@ -912,6 +918,7 @@ private struct ScrollCatcher: NSViewRepresentable {
     func updateNSView(_ view: CatcherView, context: Context) {
         view.onScroll = onScroll
         view.onPriceScale = onPriceScale
+        view.onShiftScroll = onShiftScroll
         view.onMagnify = onMagnify
         view.onClick = onClick
         view.onModifiedClick = onModifiedClick
@@ -926,6 +933,7 @@ private struct ScrollCatcher: NSViewRepresentable {
     final class CatcherView: NSView {
         var onScroll: ((CGFloat, CGFloat, CGPoint) -> Void)?
         var onPriceScale: ((CGFloat) -> Void)?
+        var onShiftScroll: ((CGFloat) -> Void)?
         var onMagnify: ((CGFloat, CGPoint) -> Void)?
         var onClick: (() -> Void)?
         var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
@@ -993,6 +1001,13 @@ private struct ScrollCatcher: NSViewRepresentable {
             if event.modifierFlags.contains(.command) {
                 // A ⌘-swipe on the trackpad scales the opposite way to the ⌘-wheel.
                 if dy != 0 { onPriceScale?(event.hasPreciseScrollingDeltas ? -dy : dy) }
+                return
+            }
+            // ⇧ + a trackpad swipe: whichever way it goes most (the system may turn it sideways).
+            // A mouse's shift-wheel still pans.
+            if event.hasPreciseScrollingDeltas, event.modifierFlags.contains(.shift), let onShiftScroll {
+                let d = abs(dy) >= abs(dx) ? dy : dx
+                if d != 0 { onShiftScroll(d) }
                 return
             }
             onScroll?(dx, dy, location)
