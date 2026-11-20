@@ -6,8 +6,8 @@
 //  of the selected chart's symbol, ⌥⇧4 85% of the largest long IB's margin allows in it; with ⌃ as
 //  well (⌃⌥⇧1–4) the same sells, short. The trade fills at once at the ask (a buy) or the bid (a
 //  sell), and IB's preview of the order (asked, never placed) gives its commissions and fees. While
-//  it's open the app shows it as it shows a position, marked SIM: the chart's badge, average price
-//  line and hover P/L, and a row under Positions. ⌃-clicking its chart puts a simulated stop loss
+//  it's open the app shows it as it shows a position, marked as simulated: the chart's SIM badge,
+//  arrows at its fills and hover P/L, and a row under Positions, its symbol in the what-if pink. ⌃-clicking its chart puts a simulated stop loss
 //  (on the losing side of the average price) or take profit (on the winning side) on it, filled as
 //  the last price reaches it: a stop at the bid / ask, no better than its price; a take profit at its
 //  price. ⌘⌫ closes it at market, ⌘A takes its stop loss and take profit off. Nothing is simulated in

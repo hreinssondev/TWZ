@@ -32,7 +32,7 @@ management in one window built for quick entries and exits.
   ⌘ and the Globe (fn) key turn them on (again: off; off at every launch, KEYS ON in the top bar).
 - **What-if trades**: ⌥⇧1–4 buys (⌃⌥⇧1–4 shorts) $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB; on the chart, an arrow, green for a long
-  and red for a short, ringed in pink, points at each of its fills. It shows like a position, marked SIM,
+  and red for a short, ringed in pink, points at each of its fills. It shows like a position, its symbol in pink,
   with its P/L and IB's commission estimate, and ⌃-click gives it a simulated stop loss or take profit.
 - **Scanner lists**: gainers, losers, after-hours gainers and most active by dollar volume, with
   each stock's 5-minute change. One click charts a stock; the load button fills the grid from a list.

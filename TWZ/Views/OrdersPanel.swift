@@ -538,8 +538,8 @@ struct OrdersPanel: View {
         .rowStyle()
     }
 
-    /// A what-if trade (simulated, see `SimTrades.swift`) laid out like a position, marked SIM in the
-    /// what-if line's color: its P/L and value in NOK, shares and average price, its simulated stop loss
+    /// A what-if trade (simulated, see `SimTrades.swift`) laid out like a position, its symbol in the
+    /// what-if pink: its P/L and value in NOK, shares and average price, its simulated stop loss
     /// and take profit, and IB's estimate of its commissions in and out (twice the way in's). ✕ takes it
     /// off without a fill.
     private func simRow(_ sim: SimPosition) -> some View {
@@ -554,8 +554,8 @@ struct OrdersPanel: View {
             .compactMap { $0 }
         return VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {
-                symbolButton(symbol, onDoubleClick: { workspace.focusPosition(symbol, broker: broker) })
-                Text("SIM").foregroundStyle(TradingChart.whatIfColor).font(.system(size: 10, weight: .semibold))
+                // The symbol in the what-if color marks it as simulated.
+                symbolButton(symbol, color: TradingChart.whatIfColor, onDoubleClick: { workspace.focusPosition(symbol, broker: broker) })
                 Spacer(minLength: 2)
                 Text(pnl.map { Fmt.nok($0, signed: true, groupedFrom: Self.groupedFrom) } ?? "—")
                     .foregroundStyle(sideColors.of((pnl ?? 0) >= 0))
