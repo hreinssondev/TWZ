@@ -25,7 +25,7 @@
 //  as saved (see `Workspace.reapplyNumber`).
 //  ⌘⇧ and a list's letter (T or S Most Active $, L Top Losers, H AH Gainers, M or A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
-//  ⌥1 / 2 / 3 / 4 / 5 (or ⌘1–5) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
+//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌘1–6) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
 //  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field does what clicking
@@ -131,7 +131,7 @@ struct TradingShortcuts: ViewModifier {
                             return nil
                         }
                     }
-                    // ⌥1–5 sets the account bar's timeframe; ChartGrid follows it. Set again too, so a chart
+                    // ⌥1–6 sets the account bar's timeframe; ChartGrid follows it. Set again too, so a chart
                     // whose own switch was changed goes back to it.
                     // ⇧1–5 outside a text field: the selected chart takes that saved scale; with no chart
                     // selected, every chart does, as clicking its number in the top bar would.
@@ -159,7 +159,7 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    // ⌥1–5 or ⌘1–5: the account bar's timeframe.
+                    // ⌥1–6 or ⌘1–6: the account bar's timeframe.
                     if modifiers == .option || modifiers == .command, inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
                         workspace.setMainTimeframe(timeframe, broker: broker)
@@ -228,14 +228,15 @@ struct TradingShortcuts: ViewModifier {
 }
 
 extension Timeframe {
-    /// The 1–5 keys, on the number row or the keypad: 1m, 5m, 15m, 1h, D.
+    /// The 1–6 keys, on the number row or the keypad: 1m, 5m, 15m, 30m, 1h, D.
     init?(keyCode: UInt16) {
         switch keyCode {
         case 18, 83: self = .m1
         case 19, 84: self = .m5
         case 20, 85: self = .m15
-        case 21, 86: self = .h1
-        case 23, 87: self = .d1
+        case 21, 86: self = .m30
+        case 23, 87: self = .h1
+        case 22, 88: self = .d1
         default: return nil
         }
     }

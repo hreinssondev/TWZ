@@ -207,7 +207,7 @@ nonisolated struct RoundTrip: Identifiable, Equatable {
 }
 
 nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
-    case m1 = "1m", m5 = "5m", m15 = "15m", h1 = "1h", d1 = "D"
+    case m1 = "1m", m5 = "5m", m15 = "15m", m30 = "30m", h1 = "1h", d1 = "D"
     var id: String { rawValue }
 
     var barSize: String {
@@ -215,6 +215,7 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         case .m1: "1 min"
         case .m5: "5 mins"
         case .m15: "15 mins"
+        case .m30: "30 mins"
         case .h1: "1 hour"
         case .d1: "1 day"
         }
@@ -225,6 +226,7 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         case .m1: "5 D"
         case .m5: "10 D"
         case .m15: "10 D"
+        case .m30: "1 M"
         case .h1: "1 M"
         case .d1: "1 Y"
         }
@@ -236,6 +238,7 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         case .m1: "1 D"
         case .m5: "2 D"
         case .m15: "5 D"
+        case .m30: "10 D"
         case .h1: "10 D"
         case .d1: "6 M"
         }
@@ -247,6 +250,7 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         case .m1: "1 D"
         case .m5: "5 D"
         case .m15: "10 D"
+        case .m30: "1 M"
         case .h1: "1 M"
         case .d1: "1 Y"
         }
@@ -260,6 +264,7 @@ nonisolated enum Timeframe: String, CaseIterable, Codable, Identifiable {
         case .m1: 60
         case .m5: 300
         case .m15: 900
+        case .m30: 1800
         case .h1: 3600
         case .d1: nil
         }

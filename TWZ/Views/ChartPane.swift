@@ -352,7 +352,7 @@ struct ChartPane: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .controlSize(.mini)
-            .frame(width: 170)
+            .frame(width: 204)
         case .minimal:
             TimeframePicker(selection: timeframe)
         }

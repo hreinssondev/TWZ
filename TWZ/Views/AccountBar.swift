@@ -49,7 +49,7 @@ struct AccountBar: View {
 
                 HStack(spacing: 8) {
                     TimeframePicker(selection: $gridTimeframe)
-                        .help("Every chart's timeframe (⌥1–5 or ⌘1–5: 1m, 5m, 15m, 1h, D); a chart's own switch changes just that chart, until it gets a new gainer or Reset")
+                        .help("Every chart's timeframe (⌥1–6 or ⌘1–6: 1m, 5m, 15m, 30m, 1h, D); a chart's own switch changes just that chart, until it gets a new gainer or Reset")
 
                     Button {
                         workspace.resetToGainers()
@@ -75,14 +75,12 @@ struct AccountBar: View {
             HStack(spacing: 18) {
                 IndicatorToggles()
 
-                // The status text (e.g. why it disconnected) shows on hover.
+                // The status text (e.g. why it disconnected) shows on hover; disconnected, a click connects.
                 Circle().fill(statusColor).frame(width: 8, height: 8)
-                    .help(broker.statusText)
-
-                Button(broker.state == .disconnected ? "Connect" : "Disconnect") {
-                    broker.state == .disconnected ? broker.connect() : broker.disconnect()
-                }
-                .controlSize(.small)
+                    .padding(4)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if broker.state == .disconnected { broker.connect() } }
+                    .help(broker.state == .disconnected ? "\(broker.statusText) · click to connect" : broker.statusText)
 
                 Button {
                     workspace.showsSettings = true
