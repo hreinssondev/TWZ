@@ -330,7 +330,7 @@ private struct ScanFilterEditor: View {
 }
 
 extension ScannerKind {
-    /// ⌘⇧ + a letter shows that list and loads it into the chart grid (see `TradingShortcuts`): T or S Top
+    /// ⌘⇧ + a letter shows that list and loads it into the chart grid (see `TradingShortcuts`): T or S
     /// Most Active $, L Top Losers, H AH Gainers, M or A Top Gainers, F Forex.
     static func forShortcut(_ key: String) -> ScannerKind? {
         switch key {
