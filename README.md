@@ -28,7 +28,7 @@ management in one window built for quick entries and exits.
 - **Hotkeys**: a grid of configurable buttons (buy, sell, close half / all, cancel, flatten) priced
   off the bid, ask, mid, last or market, each with an optional keyboard shortcut. ⌘⌫ cancels the
   symbol's orders and closes the position at market. The shortcuts that send orders work only after
-  ⌃↑ turns them on (⌃↓ off; off at every launch, KEYS ON in the top bar while on).
+  ⌘ and the Globe (fn) key turn them on (again: off; off at every launch, KEYS ON in the top bar).
 - **What-if trades**: ⌥⇧1–4 buys (⌃⌥⇧1–4 shorts) $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB. It shows like a position, marked SIM,
   with its P/L and IB's commission estimate, and ⌃-click gives it a simulated stop loss or take profit.

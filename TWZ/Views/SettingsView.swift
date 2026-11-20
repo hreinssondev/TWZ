@@ -175,7 +175,7 @@ private struct TradingSettings: View {
     @AppStorage(Confetti.enabledKey) private var confetti = Confetti.defaultEnabled
 
     private let shortcuts: [(String, String)] = [
-        ("⌃↑  /  ⌃↓", "Turn the shortcuts that send orders (hotkeys' own, ⌘⇧↩, ⌘⌫) on / off; off at every launch, KEYS ON in the top bar while on"),
+        ("⌘🌐 (⌘ fn)", "Turn the shortcuts that send orders (hotkeys' own, ⌘⇧↩, ⌘⌫) on or off; off at every launch, KEYS ON in the top bar while on"),
         ("⌘⇧↩", "Send the selected hotkey"),
         ("⌘↩", "Keep the selected chart's tick-by-tick trades on or off once it's deselected (⚡ while on, "
             + "a red circle once IB's limit leaves it out); the selected chart always gets trades and bid/ask"),

@@ -122,7 +122,7 @@ private struct OrderShortcutsBadge: View {
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(isOn ? Color.orange : Color.primary.opacity(0.08)))
             .help("Order shortcuts (hotkeys' own keys, ⌘⇧↩ and ⌘⌫) \(isOn ? "send orders" : "are off")."
-                  + " ⌃↑ turns them on, ⌃↓ off; they're off at every launch. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) and what-if trades always work.")
+                  + " ⌘ and the Globe (fn) key turn them on or off; they're off at every launch. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) and what-if trades always work.")
     }
 }
 

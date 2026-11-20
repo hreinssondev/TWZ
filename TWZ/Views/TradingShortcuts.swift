@@ -3,8 +3,8 @@
 //  TWZ
 //
 //  App-wide order shortcuts, handled before any text field sees the key.
-//  The ones that send orders (a hotkey's own shortcut, ⌘⇧↩, ⌘⌫) work only once ⌃↑ turns them on, until
-//  ⌃↓ turns them off; they're off at every launch (see `Workspace.orderShortcutsOn`). While off they
+//  The ones that send orders (a hotkey's own shortcut, ⌘⇧↩, ⌘⌫) work only once ⌘ and the Globe (fn) key
+//  turn them on, until pressed again; they're off at every launch (see `Workspace.orderShortcutsOn`). While off they
 //  beep and say so. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) and what-if trades always work.
 //  ⌥Z cancels the last order placed; ⌥< cancels every order in the selected chart's symbol,
 //  stop loss and take profit included. Matched by character, so ⌥< is the < key on Nordic
@@ -41,22 +41,27 @@ struct TradingShortcuts: ViewModifier {
         content
             .onAppear {
                 guard monitor == nil else { return }
-                monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [broker, workspace] event in
+                monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [broker, workspace] event in
                     if ShortcutRecorder.isRecording { return event }
+                    // ⌘ and the Globe (fn) key, pressed in either order, turn the shortcuts that send orders on
+                    // or off. The keys go on to the rest of the app either way.
+                    if event.type == .flagsChanged {
+                        let flags = event.modifierFlags.intersection([.option, .command, .control, .shift, .function])
+                        let wentDown = event.keyCode == 63 ? flags.contains(.function)
+                            : (event.keyCode == 54 || event.keyCode == 55) && flags.contains(.command)
+                        if wentDown, flags == [.command, .function], event.window?.attachedSheet == nil {
+                            workspace.orderShortcutsOn.toggle()
+                            broker.say(workspace.orderShortcutsOn ? "Order shortcuts on (⌘🌐 turns them off)"
+                                                                  : "Order shortcuts off (⌘🌐 turns them on)")
+                        }
+                        return event
+                    }
                     let modifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
                     let inMainWindow = event.window.map { $0 === NSApp.mainWindow && $0.attachedSheet == nil } ?? false
-                    // ⌃↑ turns the shortcuts that send orders on, ⌃↓ off.
-                    if modifiers == .control, event.keyCode == 126 || event.keyCode == 125,
-                       event.window?.attachedSheet == nil {
-                        let on = event.keyCode == 126
-                        if workspace.orderShortcutsOn != on { workspace.orderShortcutsOn = on }
-                        broker.say(on ? "Order shortcuts on (⌃↓ turns them off)" : "Order shortcuts off (⌃↑ turns them on)")
-                        return nil
-                    }
                     /// A shortcut that sends orders, pressed while they're off.
                     func refuse() -> NSEvent? {
                         NSSound.beep()
-                        broker.say("Order shortcuts are off: ⌃↑ turns them on")
+                        broker.say("Order shortcuts are off: ⌘🌐 turns them on")
                         return nil
                     }
                     if inMainWindow, let hotkey = workspace.hotkeys.first(where: { $0.shortcut == KeyShortcut(event) }) {
@@ -210,9 +215,6 @@ extension KeyShortcut {
         let k = key.lowercased()
         if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
             return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
-        }
-        if control, !command, !option, !shift, keyCode == 126 || keyCode == 125 {
-            return "⌃↑ / ⌃↓ turn the order shortcuts on and off"
         }
         if command, shift, !option, !control, let kind = ScannerKind.forShortcut(k) {
             return "\(display) shows the \(kind.rawValue) list"
