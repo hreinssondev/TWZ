@@ -101,7 +101,8 @@ enum TimeframeSwitch {
 }
 
 /// Which way Mode hotkeys go: LONG buys, SHORT sells short (see `Hotkey.Action.mode`). ⌘⇧ with L and O
-/// held together switches to LONG, with S and H to SHORT; the top bar shows it. Saved, so it's as it
+/// held together switches to LONG, with S and H to SHORT; the top bar's LIVE / PAPER badge shows it in
+/// green or red. Saved, so it's as it
 /// was at the next launch.
 enum TradeMode: String {
     case long, short

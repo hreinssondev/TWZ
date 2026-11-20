@@ -24,15 +24,10 @@ struct AccountBar: View {
         // in a narrow window before anything in it is squeezed.
         HStack(spacing: 0) {
             HStack(spacing: 18) {
-                Text(broker.isLivePort ? "LIVE" : "PAPER")
-                    .font(.system(size: 10, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Capsule().fill(broker.isLivePort ? Color.red : Color.blue))
+                // LIVE or PAPER, in the trade mode's color: green while LONG, red while SHORT.
+                AccountBadge(isLive: broker.isLivePort)
 
-                TradeModeBadge()
-
-            OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
+                OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
 
                 // Account values are in the base currency (NOK), shown as bare numbers.
                 HStack(spacing: 12) {
@@ -185,17 +180,19 @@ private struct ScaleButtons: View {
     }
 }
 
-/// The trade mode Mode hotkeys go by (see `TradeMode`): LONG in green, SHORT in red.
-private struct TradeModeBadge: View {
+/// LIVE or PAPER (the gateway port), in the color of the trade mode Mode hotkeys go by (see
+/// `TradeMode`): green while LONG, red while SHORT.
+private struct AccountBadge: View {
+    let isLive: Bool
     @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
 
     var body: some View {
-        Text(mode == .long ? "LONG" : "SHORT")
+        Text(isLive ? "LIVE" : "PAPER")
             .font(.system(size: 10, weight: .heavy))
             .foregroundStyle(.white)
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(mode == .long ? Color.green.opacity(0.8) : Color.red.opacity(0.85)))
-            .help("Mode hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O held together: LONG; with S and H: SHORT")
+            .help("\(isLive ? "Live" : "Paper") account · \(mode == .long ? "LONG" : "SHORT"): Mode hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O held together: LONG; with S and H: SHORT")
     }
 }
 

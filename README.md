@@ -41,7 +41,8 @@ management in one window built for quick entries and exits.
   off the bid, ask, mid, last or market, each with an optional keyboard shortcut. ⌘⌫ cancels the
   symbol's orders and closes the position at market. The shortcuts that send orders work only after
   ⌘ and the Globe (fn) key turn them on (again: off; off at every launch, KEYS ON in the top bar).
-  Mode hotkeys go the trade mode's way, shown in the top bar: they buy while LONG and sell short while
+  Mode hotkeys go the trade mode's way (the top bar's LIVE / PAPER badge is green while LONG, red
+  while SHORT): they buy while LONG and sell short while
   SHORT; ⌘⇧ with L and O held together switches to LONG, with S and H to SHORT.
 - **What-if trades**: ⌥⇧1–4 buys (⌃⌥⇧1–4 shorts) $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB; on the chart, an arrow, green for a long

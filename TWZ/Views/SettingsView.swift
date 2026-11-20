@@ -233,7 +233,7 @@ private struct TradingSettings: View {
         ("⌃⌥⇧1 2 3 4", "The same what-if trade, selling (short)"),
         ("⌘⇧S L H A F", "Show that list and load it into the chart grid: Most Active $, Top Losers, AH Gainers, "
             + "Top Gainers, Forex (S, H and L wait a moment for a second letter)"),
-        ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (shown in the top bar); Mode hotkeys buy while LONG, sell short while SHORT"),
+        ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red); Mode hotkeys buy while LONG, sell short while SHORT"),
         ("⌥ or ⌘ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D"),
         ("⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("⌘R", "The charts back to the lit number in the top bar as saved (its view set, or its scale at its own zoom)"),
