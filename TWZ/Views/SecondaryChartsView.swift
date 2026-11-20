@@ -92,6 +92,7 @@ extension Workspace {
     /// edge, price range fitted to the bars again.
     func resetViews(of charts: [ChartModel], zoom: Double) {
         setZoom(zoom, of: charts)
+        for chart in charts { chart.places = [:] }
         for chart in charts where chart.scrollBack != 0 || chart.priceShift != 0 || chart.priceScale != 1 {
             chart.scrollBack = 0
             chart.priceShift = 0

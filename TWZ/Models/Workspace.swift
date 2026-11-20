@@ -49,6 +49,25 @@ final class ChartModel: Identifiable {
     /// Bars on screen on the timeframes the chart was switched away from, so switching back zooms it
     /// as it was left; those not in it start at the default zoom. The Zoom sliders and Reset clear it.
     @ObservationIgnored var zooms: [Timeframe: Double] = [:]
+    /// Where the view was on the timeframes the chart was switched away from, in the stock it shows,
+    /// so switching back puts it there (see `Broker.loadChart`); a new stock starts at the latest bars.
+    @ObservationIgnored var places: [Timeframe: Place] = [:]
+
+    /// The view's place: how far back from the latest bar, and moved and zoomed up or down.
+    struct Place {
+        var scrollBack = 0.0
+        var priceShift = 0.0
+        var priceScale = 1.0
+    }
+
+    var place: Place {
+        get { Place(scrollBack: scrollBack, priceShift: priceShift, priceScale: priceScale) }
+        set {
+            scrollBack = newValue.scrollBack
+            priceShift = newValue.priceShift
+            priceScale = newValue.priceScale
+        }
+    }
     static let initialVisibleBars: Double = 240
     /// The furthest out the Zoom sliders and gestures go (a full extended-hours day of 1m bars fits).
     static let maxVisibleBars: Double = 1200

@@ -234,9 +234,15 @@ final class Broker {
         let seed = barCache.bars(for: key, previous: previous, previousBars: shown, live: live)
         chart.bars = seed
         chart.error = nil
-        chart.scrollBack = 0
-        chart.priceShift = 0
-        chart.priceScale = 1
+        // Another timeframe of the same stock: the view goes where it was left on it, and its place on
+        // the one it leaves is kept. Another stock starts at the latest bars.
+        if previous.symbol == key.symbol, previous.timeframe != key.timeframe {
+            chart.places[previous.timeframe] = chart.place
+            chart.place = chart.places.removeValue(forKey: key.timeframe) ?? ChartModel.Place()
+        } else {
+            chart.places = [:]
+            chart.place = ChartModel.Place()
+        }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
         engine.perform { $0.loadChart(spec, generation: generation) }

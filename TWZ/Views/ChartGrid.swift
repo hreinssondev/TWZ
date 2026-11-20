@@ -22,7 +22,8 @@
 //  until it gets a new gainer, Reset or the account bar's switch. The Zoom slider sets every chart's
 //  default zoom, and Reset puts every chart's view back to it (as double-clicking a chart does).
 //  Each chart keeps its zoom per timeframe: switching back to one zooms it as it was left, until the
-//  Zoom slider or Reset (see `ChartModel.zooms`).
+//  Zoom slider or Reset (see `ChartModel.zooms`); while it stays on its stock, where its view was on it
+//  too, until Reset (see `ChartModel.places`).
 //  A grip at every crossing of four charts moves that column and row line together (see `SplitGrid`).
 //
 
