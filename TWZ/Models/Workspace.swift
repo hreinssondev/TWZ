@@ -135,7 +135,7 @@ final class Workspace {
     var isChartSelected = true
 
     var hotkeys: [Hotkey] { didSet { save() } }
-    /// The keyboard shortcuts that send orders (a hotkey's own, ⌘⇧↩, ⌘⌫) work: ⌘⇧↑ turns them on, ⌘⇧↓
+    /// The keyboard shortcuts that send orders (a hotkey's own, ⌘⇧↩, ⌘⌫) work: ⌃↑ turns them on, ⌃↓
     /// off (see `TradingShortcuts`). Not saved, so they're off at every launch.
     var orderShortcutsOn = false
     /// The hotkey ⌘A sends; picked by clicking a hotkey button.
