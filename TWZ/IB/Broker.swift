@@ -341,7 +341,13 @@ final class Broker {
             chartViewsChanged()
         }
         chart.pendingEdge = nil
-        if previous != key, previous.symbol == key.symbol {
+        let keepsView = TimeframeSwitch.keepsView
+        // Settings' Keep the view off: each timeframe its own zoom, the one left kept for coming back.
+        if !keepsView, previous.timeframe != key.timeframe {
+            chart.zooms[previous.timeframe] = chart.visibleBars
+            chart.visibleBars = chart.zooms.removeValue(forKey: key.timeframe) ?? chart.defaultVisibleBars
+        }
+        if previous != key, previous.symbol == key.symbol, keepsView {
             // Another timeframe of the same stock: the same view, only the candles change. As much time on
             // screen, the right edge at the same time (the end of the right-most candle; or as far past the
             // latest bar), prices as they were; where that time is on the new timeframe is known once its
@@ -358,9 +364,9 @@ final class Broker {
                 chart.scrollBack *= ratio
             }
         } else if previous != key {
-            // Another stock: where a chart of its window was left on it, if anywhere (else the view stays as
-            // it is, at the latest bars on another timeframe); then a lit scale, but not over a view adjusted
-            // by hand.
+            // Another stock, or with Keep the view off another timeframe: where a chart of its window was
+            // left on it, if anywhere (else the view stays as it is, at the latest bars on another
+            // timeframe); then a lit scale, but not over a view adjusted by hand.
             let view = chartViews.view(for: .init(bars: key, inChartsWindow: window, list: list))
             chart.adjustedByHand = view?.manual == true
             if let view {

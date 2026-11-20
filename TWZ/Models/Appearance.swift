@@ -90,6 +90,16 @@ struct SideColorsFromSettings: ViewModifier {
     }
 }
 
+/// Settings › Appearance's timeframe switch: on (the default), a chart switching timeframe keeps its view,
+/// only the candles change; off, each timeframe keeps its own zoom and place to go back to (see
+/// `Broker.loadChart`).
+enum TimeframeSwitch {
+    static let keepViewKey = "keepViewOnTimeframeSwitch"
+    static let defaultKeepView = true
+
+    static var keepsView: Bool { UserDefaults.standard.object(forKey: keepViewKey) as? Bool ?? defaultKeepView }
+}
+
 /// Every stored Appearance setting. Add new keys here so Settings' "Reset to Defaults" covers them.
 enum AppearanceDefaults {
     static let keys = [
@@ -102,6 +112,7 @@ enum AppearanceDefaults {
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
+        TimeframeSwitch.keepViewKey,
     ] + LineDashes.keys + LineDashes.dotsKeys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.

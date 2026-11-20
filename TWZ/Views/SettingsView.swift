@@ -461,6 +461,7 @@ private struct AppearanceSettings: View {
     @AppStorage(PriceAxis.fontSizeKey) private var axisFontSize = PriceAxis.defaultFontSize
     @AppStorage(PriceAxis.labelSpacingKey) private var labelSpacing = PriceAxis.defaultLabelSpacing
     @AppStorage(PriceAxis.lastPriceOpacityKey) private var lastPriceOpacity = PriceAxis.defaultLastPriceOpacity
+    @AppStorage(TimeframeSwitch.keepViewKey) private var keepViewOnTimeframeSwitch = TimeframeSwitch.defaultKeepView
 
     /// The selected chart's outline as it's drawn: the stored width is a third of it (see `SelectedOutline`).
     private var selectedOutline: Binding<Double> {
@@ -631,6 +632,14 @@ private struct AppearanceSettings: View {
                     ForEach(TimeframePickerStyle.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
+            }
+            Section("Switching timeframe") {
+                Toggle("Keep the view when switching timeframe", isOn: $keepViewOnTimeframeSwitch)
+                Text(keepViewOnTimeframeSwitch
+                     ? "The same time stays on screen, the right edge where it was; only the candles change."
+                     : "Each timeframe keeps its own zoom and place, and switching back goes to them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Selected chart") {
                 LabeledContent("Outline thickness") {

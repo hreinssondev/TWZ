@@ -92,7 +92,10 @@ extension Workspace {
     func resetViews(of charts: [ChartModel], zoom: Double, broker: Broker) {
         setZoom(zoom, of: charts, broker: broker)
         broker.forgetChartViews(of: charts)
-        for chart in charts { chart.adjustedByHand = false }
+        for chart in charts {
+            chart.adjustedByHand = false
+            chart.zooms = [:]
+        }
         for chart in charts where chart.scrollBack != 0 || chart.priceShift != 0 || chart.priceScale != 1 {
             chart.scrollBack = 0
             chart.priceShift = 0

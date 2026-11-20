@@ -13,8 +13,8 @@ import Observation
 final class ChartModel: Identifiable {
     let id: Int
     var symbol: String
-    /// Switching keeps the view, only the candles change: as much time on screen, the right edge at the
-    /// same time (see `Broker.loadChart`).
+    /// Switching keeps the view, only the candles change (as much time on screen, the right edge at the
+    /// same time), or with Settings' Keep the view off, goes to the timeframe's own (see `Broker.loadChart`).
     var timeframe: Timeframe
     var bars: [Bar] = []
     var isLoading = false
@@ -41,6 +41,10 @@ final class ChartModel: Identifiable {
 
     /// Bars on screen at the default zoom (double-click goes back to it); each grid's Zoom slider sets it.
     var defaultVisibleBars: Double
+    /// Bars on screen on the timeframes the chart was switched away from, with Settings' Keep the view
+    /// when switching timeframe off: switching back zooms it as it was left (those not in it, at the
+    /// default zoom). Reset clears it.
+    @ObservationIgnored var zooms: [Timeframe: Double] = [:]
     /// After a timeframe switch while scrolled back: the time of the candle that was right-most, made the
     /// right-most one again once the new timeframe's bars are in (see `Broker.apply`). Panning drops it.
     @ObservationIgnored var pendingEdge: Date?
