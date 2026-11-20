@@ -13,7 +13,14 @@ import Observation
 final class ChartModel: Identifiable {
     let id: Int
     var symbol: String
-    var timeframe: Timeframe
+    /// Each timeframe keeps the zoom it was left at: switching zooms to the new one's (see `zooms`).
+    var timeframe: Timeframe {
+        didSet {
+            guard timeframe != oldValue else { return }
+            zooms[oldValue] = visibleBars
+            visibleBars = zooms.removeValue(forKey: timeframe) ?? defaultVisibleBars
+        }
+    }
     var bars: [Bar] = []
     var isLoading = false
     var error: String?
@@ -39,6 +46,9 @@ final class ChartModel: Identifiable {
 
     /// Bars on screen at the default zoom (double-click goes back to it); each grid's Zoom slider sets it.
     var defaultVisibleBars: Double
+    /// Bars on screen on the timeframes the chart was switched away from, so switching back zooms it
+    /// as it was left; those not in it start at the default zoom. The Zoom sliders and Reset clear it.
+    @ObservationIgnored var zooms: [Timeframe: Double] = [:]
     static let initialVisibleBars: Double = 240
     /// The furthest out the Zoom sliders and gestures go (a full extended-hours day of 1m bars fits).
     static let maxVisibleBars: Double = 1200

@@ -76,11 +76,15 @@ extension Workspace {
         }
     }
 
-    /// Sets the charts' default zoom and zooms them to it.
+    /// Sets the charts' default zoom and zooms them to it, on every timeframe (the zooms they kept for
+    /// their other timeframes are dropped).
     func setZoom(_ zoom: Double, of charts: [ChartModel]) {
-        for chart in charts where chart.defaultVisibleBars != zoom || chart.visibleBars != zoom {
-            chart.defaultVisibleBars = zoom
-            chart.visibleBars = zoom
+        for chart in charts {
+            chart.zooms = [:]
+            if chart.defaultVisibleBars != zoom || chart.visibleBars != zoom {
+                chart.defaultVisibleBars = zoom
+                chart.visibleBars = zoom
+            }
         }
     }
 

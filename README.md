@@ -17,7 +17,8 @@ management in one window built for quick entries and exits.
   chart's stock in that color on every chart, one stock per color, kept while it's off the charts (⌥⇧⌫
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
-  as you scroll back), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D),
+  as you scroll back), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D; each timeframe
+  keeps its own zoom),
   pre-market, after hours and overnight shading, VWAP and SMA 9 / 21, volume, tick-by-tick trades on
   the selected chart.
 - **Trading from the chart**: ⌥-click places the selected hotkey's order (or a fixed NOK amount) at
