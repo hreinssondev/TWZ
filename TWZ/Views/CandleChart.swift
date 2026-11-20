@@ -680,7 +680,9 @@ struct CandleChart: View {
     }
 
     /// An arrow pointing right, its tip at `tip`: a fill's (see `drawTrades`, `drawPointers`). Thinly
-    /// outlined dark, or with `outline`, thickly in that color.
+    /// outlined dark, or with `outline`, ringed in that color: a rim with sharp corners, so the arrow keeps
+    /// its shape, set off from the fill and the chart by thin dark lines (red beside the what-if pink
+    /// would run together otherwise).
     private static func drawPointer(at tip: CGPoint, color: Color, outline: Color? = nil, in ctx: inout GraphicsContext) {
         let head: CGFloat = 7, halfWidth: CGFloat = 5, stem: CGFloat = 7, stemHalf: CGFloat = 1.25
         var arrow = Path()
@@ -692,8 +694,16 @@ struct CandleChart: View {
         arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y + stemHalf))
         arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y + halfWidth))
         arrow.closeSubpath()
-        // Half the stroke shows: the fill covers its inner half.
-        ctx.stroke(arrow, with: .color(outline ?? .black.opacity(0.6)), style: StrokeStyle(lineWidth: outline == nil ? 1.5 : 4, lineJoin: .round))
+        // Half of each stroke shows: the fill covers its inner half.
+        if let outline {
+            let dark = Color.black.opacity(0.7)
+            let rim: CGFloat = 1.5, line: CGFloat = 0.75
+            ctx.stroke(arrow, with: .color(dark), style: StrokeStyle(lineWidth: (rim + 2 * line) * 2, lineJoin: .miter))
+            ctx.stroke(arrow, with: .color(outline), style: StrokeStyle(lineWidth: (rim + line) * 2, lineJoin: .miter))
+            ctx.stroke(arrow, with: .color(dark), style: StrokeStyle(lineWidth: line * 2, lineJoin: .miter))
+        } else {
+            ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+        }
         ctx.fill(arrow, with: .color(color))
     }
 
