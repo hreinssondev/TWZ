@@ -2,10 +2,10 @@
 //  BarCache.swift
 //  TWZ
 //
-//  1m and 5m bars (a forex pair's 1h too) kept in memory when a chart moves off them, to another
+//  1m, 5m and 1h bars kept in memory when a chart moves off them, to another
 //  timeframe or stock, so a chart coming back to them shows them at once instead of Loading…, while
 //  IB's fresh bars load behind them (see `Broker.loadChart`). Nothing is downloaded for it: only bars a
-//  chart already showed are kept, the last day of them (a pair's 1h, the 10 days it loads). A chart
+//  chart already showed are kept, the last day of them (of 1h, the 10 days it loads). A chart
 //  showing the same bars live gives them instead, and going from 1m to 5m in the same stock, its live
 //  1m bars bring the kept 5m bars up to date, or make them the first time. Up to `capacity` series;
 //  past that, the one kept longest ago goes.
@@ -19,12 +19,11 @@ struct BarCache {
         var symbol: String
         var timeframe: Timeframe
 
-        /// 1m and 5m bars are kept, and a forex pair's 1h.
+        /// 1m, 5m and 1h bars are kept.
         var isKept: Bool {
             guard !symbol.isEmpty else { return false }
             switch timeframe {
-            case .m1, .m5: return true
-            case .h1: return ForexPair.isForex(symbol)
+            case .m1, .m5, .h1: return true
             case .m15, .d1: return false
             }
         }

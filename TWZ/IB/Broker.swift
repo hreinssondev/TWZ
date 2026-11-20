@@ -220,7 +220,7 @@ final class Broker {
         engine.perform { $0.setSelectedChart(id) }
     }
 
-    /// Loads the chart's symbol and timeframe. Its 1m / 5m bars (a forex pair's 1h too) kept from before,
+    /// Loads the chart's symbol and timeframe. Its 1m / 5m / 1h bars kept from before,
     /// or another chart's showing them, show at once, fresh ones replacing them when they're in; the
     /// bars it showed are kept (see `BarCache`).
     func loadChart(_ chart: ChartModel) {
