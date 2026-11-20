@@ -21,8 +21,8 @@
 //  The account bar's timeframe switch (or ⌥1–5) sets every chart; a chart's own switch changes just that one,
 //  until it gets a new gainer, Reset or the account bar's switch. The Zoom slider sets every chart's
 //  default zoom, and Reset puts every chart's view back to it (as double-clicking a chart does).
-//  Each chart keeps its zoom per timeframe: switching back to one zooms it as it was left, until Reset
-//  (see `ChartModel.zooms`). Where a chart was left on a stock and timeframe, zoom and place, is kept
+//  Switching a chart's timeframe keeps its view, only the candles change: as much time on screen, the
+//  right edge at the same time (see `Broker.loadChart`). Where a chart was left on a stock and timeframe, zoom and place, is kept
 //  too, across relaunches: a chart coming back to them, after a list switched and back, say, picks up
 //  there, until Reset, or a right-click or double-click on it (see `ChartViews`). Each list keeps its own
 //  views, lit scale and zoom set by hand, so switching lists and back finds them as they were. A stock a chart wasn't
@@ -284,7 +284,7 @@ extension Workspace {
         let shown = mainCells.compactMap(chart(id:)).filter { !$0.symbol.isEmpty }
         let anyByHand = manualZoom != nil || shown.contains(where: \.adjustedByHand)
         if activeScale == slot, !byClick || !anyByHand {
-            // Lit: off again, so charts keep their own views as stocks and timeframes change.
+            // Lit: off again, so charts keep their own views as stocks change.
             activeScale = nil
             broker.say("Scale \(slot) off: charts keep their own views")
             return
@@ -299,7 +299,7 @@ extension Workspace {
             return
         }
         let spared = byClick ? 0 : shown.filter(\.adjustedByHand).count
-        broker.say("Scale \(slot) on every chart, also as lists and timeframes change (pick it again to turn it off)"
+        broker.say("Scale \(slot) on every chart, also as lists change (pick it again to turn it off)"
                    + (spared > 0 ? "; \(spared) chart\(spared == 1 ? "" : "s") adjusted by hand kept as \(spared == 1 ? "it is" : "they are")" : ""))
     }
 

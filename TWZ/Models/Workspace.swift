@@ -13,14 +13,9 @@ import Observation
 final class ChartModel: Identifiable {
     let id: Int
     var symbol: String
-    /// Each timeframe keeps the zoom it was left at: switching zooms to the new one's (see `zooms`).
-    var timeframe: Timeframe {
-        didSet {
-            guard timeframe != oldValue else { return }
-            zooms[oldValue] = visibleBars
-            visibleBars = zooms.removeValue(forKey: timeframe) ?? defaultVisibleBars
-        }
-    }
+    /// Switching keeps the view, only the candles change: as much time on screen, the right edge at the
+    /// same time (see `Broker.loadChart`).
+    var timeframe: Timeframe
     var bars: [Bar] = []
     var isLoading = false
     var error: String?
@@ -46,10 +41,9 @@ final class ChartModel: Identifiable {
 
     /// Bars on screen at the default zoom (double-click goes back to it); each grid's Zoom slider sets it.
     var defaultVisibleBars: Double
-    /// Bars on screen on the timeframes the chart was switched away from, so switching back zooms it
-    /// as it was left; those not in it start at the default zoom. Reset clears it.
-    /// Where the chart was left on the stock and timeframe it goes to comes first (see `ChartViews`).
-    @ObservationIgnored var zooms: [Timeframe: Double] = [:]
+    /// After a timeframe switch while scrolled back: the time of the candle that was right-most, made the
+    /// right-most one again once the new timeframe's bars are in (see `Broker.apply`). Panning drops it.
+    @ObservationIgnored var pendingEdge: Date?
     /// Zoomed, panned or its prices moved by hand on what it shows: a lit scale picked with ⇧1–5, or one
     /// that charts take as they load, leaves it as it is (see `ChartViews`). A click on a scale's number,
     /// Reset, or a right-click / double-click on it clears it.
@@ -225,13 +219,13 @@ final class Workspace {
     var chartScales: [Int: ChartScale] = [:] {
         didSet { defaults.set(try? JSONEncoder().encode(chartScales), forKey: ChartScale.storageKey) }
     }
-    /// The scale last saved or picked, lit in the top bar: while it is, every main chart loading a stock or
-    /// timeframe takes it (see `Broker.gridScale`). Clicking it again, or Reset, turns it off. Saved.
+    /// The scale last saved or picked, lit in the top bar: while it is, every main chart loading another
+    /// stock takes it (see `Broker.gridScale`). Clicking it again, or Reset, turns it off. Saved.
     var activeScale: Int? {
         didSet { defaults.set(activeScale, forKey: ChartScale.activeKey) }
     }
     /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧-swipe on a chart): it trumps the
-    /// lit scale's zoom, on the charts now and on those loading a stock or timeframe, until a scale is
+    /// lit scale's zoom, on the charts now and on those loading another stock, until a scale is
     /// picked (its number clicked, or ⇧1–5 with no chart selected) or saved, or Reset. Saved.
     var manualZoom: Double? {
         didSet { defaults.set(manualZoom, forKey: ChartScale.manualZoomKey) }
