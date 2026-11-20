@@ -162,7 +162,7 @@ final class Broker {
     @ObservationIgnored private var barCache = BarCache()
     @ObservationIgnored private var chartViews = ChartViews.saved()
     /// The top bar's scale while one is lit (see `Workspace.activeScale`): every main chart loading a
-    /// stock takes it, in place of where it was left (a timeframe switch keeps the chart's view).
+    /// stock or timeframe takes it, in place of where it was left.
     @ObservationIgnored var gridScale: ChartScale?
     /// The main grid's list (see `Workspace.gridListKey`): views are kept per list, and the list each
     /// chart's view belongs to.
@@ -333,51 +333,35 @@ final class Broker {
         let list = chart.inChartsWindow ? nil : viewList
         let previousList = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
         if let list { loadedLists[chart.id] = list }
-        // Where it was left on the stock and timeframe it leaves is kept (see `ChartViews`).
+        // Where it was left on the stock and timeframe it leaves is kept; where a chart of its window was
+        // left on the ones it goes to, it goes back to (see `ChartViews`). Otherwise another timeframe
+        // starts at the zoom the timeframe switch left (`ChartModel.zooms`), at the latest bars, and
+        // another stock on the same timeframe (a list loaded, a new gainer) keeps the view as it is.
         let window = chart.inChartsWindow
+        var view: ChartViews.View?
         if previous != key {
-            chartViews.keep(zoom: chart.visibleBars, place: chart.place, manual: chart.adjustedByHand,
+            // A timeframe switch has already kept the zoom it leaves in `zooms`.
+            let zoom = previous.timeframe == key.timeframe ? chart.visibleBars : chart.zooms[previous.timeframe] ?? chart.visibleBars
+            chartViews.keep(zoom: zoom, place: chart.place, manual: chart.adjustedByHand,
                             for: .init(bars: previous, inChartsWindow: window, list: previousList))
             chartViewsChanged()
+            view = chartViews.view(for: .init(bars: key, inChartsWindow: window, list: list))
         }
-        chart.pendingEdge = nil
-        if previous != key, previous.symbol == key.symbol {
-            // Another timeframe of the same stock: the view carries over, as many bars on screen, the
-            // right-most candle at the same time (or as far past the latest bar), prices as they were;
-            // where that time is on the new timeframe is known once its bars are (see `apply`).
-            if chart.scrollBack > 0, !shown.isEmpty {
-                let last = min(shown.count - 1, max(0, Int((Double(shown.count) - chart.scrollBack).rounded()) - 1))
-                let edge = shown[last].time
-                chart.pendingEdge = edge
-                if !seed.isEmpty { chart.scrollBack = Self.scrollBack(showing: edge, in: seed, timeframe: key.timeframe) }
-            }
-        } else if previous != key {
-            // Another stock: where a chart of its window was left on it, if anywhere (else the view stays as
-            // it is, at the latest bars on another timeframe); then a lit scale, but not over a view adjusted
-            // by hand.
-            let view = chartViews.view(for: .init(bars: key, inChartsWindow: window, list: list))
-            chart.adjustedByHand = view?.manual == true
-            if let view {
-                if let zoom = view.zoom { chart.visibleBars = zoom }
-                chart.place = view.place
-            } else if previous.timeframe != key.timeframe {
-                chart.place = ChartModel.Place()
-            }
-            if !window, !chart.adjustedByHand, let gridScale {
-                gridScale.apply(to: chart)
-                if let gridZoomOverride { chart.visibleBars = gridZoomOverride }
-            }
+        if previous != key { chart.adjustedByHand = view?.manual == true }
+        if let view {
+            if let zoom = view.zoom { chart.visibleBars = zoom }
+            chart.place = view.place
+        } else if previous.timeframe != key.timeframe {
+            chart.place = ChartModel.Place()
+        }
+        // A lit scale, but not over a view adjusted by hand.
+        if previous != key, !chart.inChartsWindow, !chart.adjustedByHand, let gridScale {
+            gridScale.apply(to: chart)
+            if let gridZoomOverride { chart.visibleBars = gridZoomOverride }
         }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
         engine.perform { $0.loadChart(spec, generation: generation) }
-    }
-
-    /// How far back from the latest of `bars` the bar holding `edge` is: to keep it the right-most one.
-    static func scrollBack(showing edge: Date, in bars: [Bar], timeframe: Timeframe) -> Double {
-        guard let first = bars.first else { return 0 }
-        let i = CandleChart.barIndex(of: edge, in: bars, barSeconds: timeframe.barSeconds) ?? (edge < first.time ? 0 : bars.count - 1)
-        return Double(bars.count - 1 - i)
     }
 
     /// The view reached the chart's oldest bar: loads its full history (`Timeframe.duration`, with the
@@ -673,14 +657,7 @@ final class Broker {
         for patch in s.charts {
             guard patch.generation == chartGeneration[patch.id] ?? 0,
                   let chart = charts.first(where: { $0.id == patch.id }) else { continue }
-            if let bars = patch.bars {
-                chart.bars = bars
-                // A timeframe switch's right-most candle, once the new timeframe's bars are in.
-                if let edge = chart.pendingEdge, !bars.isEmpty {
-                    chart.scrollBack = Self.scrollBack(showing: edge, in: bars, timeframe: chart.timeframe)
-                    chart.pendingEdge = nil
-                }
-            }
+            if let bars = patch.bars { chart.bars = bars }
             for bar in patch.tail { Self.upsert(bar, into: chart) }
             if chart.isLoading != patch.isLoading { chart.isLoading = patch.isLoading }
             if chart.error != patch.error { chart.error = patch.error }

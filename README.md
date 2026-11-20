@@ -17,16 +17,17 @@ management in one window built for quick entries and exits.
   chart's stock in that color on every chart, one stock per color, kept while it's off the charts (⌥⇧⌫
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
-  as you scroll back), 1m to daily, pre-market, after hours and overnight shading, VWAP and SMA 9 / 21,
-  volume, tick-by-tick trades on the selected chart. ⌥1–5 switches every chart (1m, 5m, 15m, 1h, D),
-  keeping each chart's zoom and its right-most candle in place.
-- **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the
-  grid), across list switches and relaunches, until Reset or a right-click on the chart. ⇧-swipe moves
-  the top bar's Zoom slider, zooming every chart; ⌥0 or ⇧A gives every chart the selected one's zoom,
-  place and price scale. ⇧-clicking 1–5 in the top bar saves that as a scale; clicking one gives it to
-  every chart (and those loading another stock) until it's clicked again, ⇧ and a number just to the
-  selected chart; a chart zoomed or panned by hand keeps its view until a number is clicked. The bars
-  a chart showed, on every timeframe, stay in memory, so coming back to them shows at once.
+  as you scroll back; ⇧-swipe moves the top bar's Zoom slider, zooming every chart; ⌥0 or ⇧A gives every
+  chart the selected one's zoom, place and price scale; ⇧-clicking 1–5 in the top bar saves it as a scale,
+  and clicking one (or ⇧ and its number) gives it to every chart, also as lists and timeframes change, until it's clicked
+  again; ⇧ and a number gives just the selected chart that scale; a chart zoomed or panned by hand
+  (per stock and timeframe) keeps its view until a number is clicked; each list keeps its own views
+  and lit scale; kept across relaunches), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D; each timeframe
+  keeps its own zoom, and each stock where its view was left, also after switching lists or a
+  relaunch, until Reset or a right-click on the chart;
+  the bars a chart showed, on every timeframe, stay in memory, so coming back to them shows at once),
+  pre-market, after hours and overnight shading, VWAP and SMA 9 / 21, volume, tick-by-tick trades on
+  the selected chart.
 - **Trading from the chart**: ⌥-click places the selected hotkey's order (or a fixed NOK amount) at
   the clicked price, ⌃-click a stop loss or take profit, and order lines show their fill as it
   happens. Double-click an order line to cancel it.

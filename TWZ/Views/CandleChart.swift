@@ -267,7 +267,6 @@ struct CandleChart: View {
         let maxBack = max(0, Double(chart.bars.count) - 10)
         chart.scrollBack = min(maxBack, max(-chart.visibleBars / 2, value))
         chart.adjustedByHand = true
-        chart.pendingEdge = nil
     }
 
     /// Positive points move the content right (revealing older bars).
