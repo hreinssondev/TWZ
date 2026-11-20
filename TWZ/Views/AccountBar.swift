@@ -123,7 +123,7 @@ struct AccountBar: View {
 }
 
 /// The saved scales (see `ChartScale`), styled like the timeframe switch: a click gives every chart the
-/// view saved under that number, and lights it: charts loading a stock or timeframe take it too, until
+/// view saved under that number, and lights it: charts loading another stock take it too, until
 /// it's clicked again or Reset. ⇧-click saves the selected chart's view there (and lights it). Numbers
 /// with nothing saved are dimmer.
 private struct ScaleButtons: View {
@@ -147,7 +147,7 @@ private struct ScaleButtons: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(saved ? "Every chart takes scale \(slot), its zoom, place and price scale, also as lists and timeframes change; click again to turn it off. ⇧-click saves the selected chart's view here instead"
+                .help(saved ? "Every chart takes scale \(slot), its zoom, place and price scale, also as lists change; click again to turn it off. ⇧-click saves the selected chart's view here instead"
                       : "⇧-click saves the selected chart's view (zoom, place and price scale) as scale \(slot)")
             }
         }
