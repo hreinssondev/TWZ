@@ -164,6 +164,8 @@ final class Broker {
     /// The top bar's scale while one is lit (see `Workspace.activeScale`): every main chart loading a
     /// stock or timeframe takes it, in place of where it was left.
     @ObservationIgnored var gridScale: ChartScale?
+    /// The zoom set by hand, trumping `gridScale`'s (see `Workspace.manualZoom`).
+    @ObservationIgnored var gridZoomOverride: Double?
     @ObservationIgnored private var chartViewsSave: Task<Void, Never>?
 
     /// Reset: these charts' window forgets where its charts were left (see `ChartViews`).
@@ -299,7 +301,10 @@ final class Broker {
         } else if previous.timeframe != key.timeframe {
             chart.place = ChartModel.Place()
         }
-        if previous != key, !chart.inChartsWindow, let gridScale { gridScale.apply(to: chart) }
+        if previous != key, !chart.inChartsWindow, let gridScale {
+            gridScale.apply(to: chart)
+            if let gridZoomOverride { chart.visibleBars = gridZoomOverride }
+        }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
         engine.perform { $0.loadChart(spec, generation: generation) }

@@ -41,7 +41,9 @@ struct AccountBar: View {
                 }
 
                 // The chart grid's size, its charts' zoom and timeframe (see `ChartGrid`).
-                GridSliders(columns: $gridColumns, rows: $gridRows, zoom: $gridZoom,
+                // Zoom moved by hand trumps the lit scale's (see `Workspace.manualZoom`).
+                GridSliders(columns: $gridColumns, rows: $gridRows,
+                            zoom: Binding(get: { gridZoom }, set: { gridZoom = $0; workspace.manualZoom = $0 }),
                             columnRange: 2...MainGrid.maxColumns, rowRange: 2...MainGrid.maxRows)
                     .background(NoWindowDrag())
 
@@ -160,7 +162,7 @@ private struct ScaleButtons: View {
                 broker.say("Select a chart to save its view as scale \(slot)")
             }
         } else {
-            workspace.pickScale(slot, broker: broker)
+            workspace.pickScale(slot, byClick: true, broker: broker)
         }
     }
 }

@@ -204,6 +204,12 @@ final class Workspace {
     var activeScale: Int? {
         didSet { defaults.set(activeScale, forKey: ChartScale.activeKey) }
     }
+    /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧-swipe on a chart): it trumps the
+    /// lit scale's zoom, on the charts now and on those loading a stock or timeframe, and through
+    /// ⇧1–5. Clicking a scale's number, saving one, or Reset, clears it. Saved.
+    var manualZoom: Double? {
+        didSet { defaults.set(manualZoom, forKey: ChartScale.manualZoomKey) }
+    }
     /// Colors given to stocks with ⌥⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
     /// stock that leaves the charts has its color again when it comes back. Set with `setColor`.
     private(set) var stockColors: [String: StockColor] {
@@ -302,6 +308,7 @@ final class Workspace {
         chartScales = defaults.data(forKey: ChartScale.storageKey)
             .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
         activeScale = (defaults.object(forKey: ChartScale.activeKey) as? Int).flatMap { chartScales[$0] != nil ? $0 : nil }
+        manualZoom = defaults.object(forKey: ChartScale.manualZoomKey) as? Double
 
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }

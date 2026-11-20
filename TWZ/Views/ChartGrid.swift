@@ -74,7 +74,13 @@ struct ChartGrid: View {
             broker.restoreChartViews(workspace.mainCharts, zoom: zoom)
             // A scale picked before the relaunch goes on.
             broker.gridScale = workspace.gridScale(workspace.activeScale)
-            if let scale = broker.gridScale { workspace.mainCharts.forEach(scale.apply) }
+            broker.gridZoomOverride = workspace.manualZoom
+            if let scale = broker.gridScale {
+                for chart in workspace.mainCharts {
+                    scale.apply(to: chart)
+                    if let manual = workspace.manualZoom { chart.visibleBars = manual }
+                }
+            }
             workspace.arrangeMainGrid(columns: columns, rows: rows, gainers: gainers, broker: broker)
             broker.setScanner(scan, owner: MainGrid.scannerOwner)
             follow()
@@ -95,6 +101,7 @@ struct ChartGrid: View {
         }
         .onChange(of: zoom) { _, new in workspace.setZoom(new, of: workspace.mainCharts, broker: broker) }
         .onChange(of: workspace.gridScale(workspace.activeScale)) { _, scale in broker.gridScale = scale }
+        .onChange(of: workspace.manualZoom) { _, zoom in broker.gridZoomOverride = zoom }
         .onChange(of: timeframe) { _, new in workspace.setMainTimeframe(new, broker: broker) }
         .onChange(of: workspace.layoutLoads) {
             columnSplits = Self.splits("mainChartColumnSplits", legacyKey: "chartColumnSplit")
@@ -246,6 +253,7 @@ extension Workspace {
         guard isChartSelected, let chart = chart(id: selectedChartID), !chart.symbol.isEmpty else { return false }
         chartScales[slot] = ChartScale(of: chart)
         activeScale = slot
+        manualZoom = nil
         return true
     }
 
@@ -258,15 +266,24 @@ extension Workspace {
         return true
     }
 
-    /// Clicking scale button `slot`, or ⇧ and its number: lit, it goes off; otherwise every chart takes
-    /// it and it lights (see `applyScale`). Says which in the status line; beeps with nothing saved.
-    func pickScale(_ slot: Int, broker: Broker) {
-        if activeScale == slot {
+    /// Clicking scale button `slot` (`byClick`), or ⇧ and its number: lit, it goes off; otherwise every
+    /// chart takes it and it lights (see `applyScale`). A click puts every chart at the scale's own zoom,
+    /// dropping the zoom set by hand (and on the lit scale, does that rather than turn it off); ⇧ and the
+    /// number keeps the zoom set by hand (see `manualZoom`). Says which in the status line; beeps with
+    /// nothing saved.
+    func pickScale(_ slot: Int, byClick: Bool, broker: Broker) {
+        if activeScale == slot, !byClick || manualZoom == nil {
             // Lit: off again, so charts keep their own views as stocks and timeframes change.
             activeScale = nil
             broker.say("Scale \(slot) off: charts keep their own views")
         } else if applyScale(slot) {
-            broker.say("Scale \(slot) on every chart, also as lists and timeframes change (pick it again to turn it off)")
+            if byClick {
+                manualZoom = nil
+            } else if let manualZoom {
+                for chart in mainCells.compactMap(chart(id:)) where !chart.symbol.isEmpty { chart.visibleBars = manualZoom }
+            }
+            broker.say("Scale \(slot) on every chart, also as lists and timeframes change (pick it again to turn it off)"
+                       + (!byClick && manualZoom != nil ? ", at the zoom set by hand" : ""))
         } else {
             NSSound.beep()
             broker.say("Nothing saved as scale \(slot) yet: ⇧-click its number in the top bar to save the selected chart's view")
@@ -320,6 +337,7 @@ struct ChartScale: Codable, Equatable {
 
     static let storageKey = "chartScales"
     static let activeKey = "activeChartScale"
+    static let manualZoomKey = "manualGridZoom"
     static let slots = [1, 2, 3, 4, 5]
 
     /// The scale a 1–5 key picks with ⇧ (number row or keypad).

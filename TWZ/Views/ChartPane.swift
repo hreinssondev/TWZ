@@ -92,6 +92,7 @@ extension Workspace {
     /// into it), on the account bar's timeframe.
     func resetToGainers() {
         activeScale = nil
+        manualZoom = nil
         manualChartIDs = []
         handDisplaced = [:]
         secondaryPins = [:]
@@ -147,6 +148,7 @@ struct ChartPane: View {
             TradingChart(chart: chart, allowsAltClick: true, onTrade: { workspace.selectedChartID = chart.id }) { factor in
                 // The top bar's Zoom slider: every main chart.
                 gridZoom = min(ChartModel.maxVisibleBars, max(30, gridZoom * factor))
+                workspace.manualZoom = gridZoom
             }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))

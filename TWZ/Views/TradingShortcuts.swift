@@ -127,7 +127,7 @@ struct TradingShortcuts: ViewModifier {
                     // ⇧1–5 outside a text field picks a saved scale, as clicking its number in the top bar does.
                     if modifiers == .shift, inMainWindow, let slot = ChartScale.slot(keyCode: event.keyCode) {
                         if event.window?.firstResponder is NSTextView { return event }
-                        workspace.pickScale(slot, broker: broker)
+                        workspace.pickScale(slot, byClick: false, broker: broker)
                         return nil
                     }
                     // ⌥0, or ⇧A outside a text field: the other charts take the selected chart's view.
