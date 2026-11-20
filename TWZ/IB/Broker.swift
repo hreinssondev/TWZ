@@ -161,6 +161,9 @@ final class Broker {
     @ObservationIgnored private var loadedBars: [Int: BarCache.Key] = [:]
     @ObservationIgnored private var barCache = BarCache()
     @ObservationIgnored private var chartViews = ChartViews.saved()
+    /// The top bar's scale while one is lit (see `Workspace.activeScale`): every main chart loading a
+    /// stock or timeframe takes it, in place of where it was left.
+    @ObservationIgnored var gridScale: ChartScale?
     @ObservationIgnored private var chartViewsSave: Task<Void, Never>?
 
     /// Reset: these charts' window forgets where its charts were left (see `ChartViews`).
@@ -296,6 +299,7 @@ final class Broker {
         } else if previous.timeframe != key.timeframe {
             chart.place = ChartModel.Place()
         }
+        if previous != key, !chart.inChartsWindow, let gridScale { gridScale.apply(to: chart) }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
         engine.perform { $0.loadChart(spec, generation: generation) }

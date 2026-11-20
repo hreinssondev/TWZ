@@ -72,6 +72,9 @@ struct ChartGrid: View {
         }
         .onAppear {
             broker.restoreChartViews(workspace.mainCharts, zoom: zoom)
+            // A scale picked before the relaunch goes on.
+            broker.gridScale = workspace.activeScale.flatMap { workspace.chartScales[$0] }
+            if let scale = broker.gridScale { workspace.mainCharts.forEach(scale.apply) }
             workspace.arrangeMainGrid(columns: columns, rows: rows, gainers: gainers, broker: broker)
             broker.setScanner(scan, owner: MainGrid.scannerOwner)
             follow()
@@ -91,6 +94,7 @@ struct ChartGrid: View {
             workspace.resetViews(of: workspace.mainCharts, zoom: zoom, broker: broker)
         }
         .onChange(of: zoom) { _, new in workspace.setZoom(new, of: workspace.mainCharts, broker: broker) }
+        .onChange(of: workspace.activeScale.flatMap { workspace.chartScales[$0] }) { _, scale in broker.gridScale = scale }
         .onChange(of: timeframe) { _, new in workspace.setMainTimeframe(new, broker: broker) }
         .onChange(of: workspace.layoutLoads) {
             columnSplits = Self.splits("mainChartColumnSplits", legacyKey: "chartColumnSplit")
@@ -245,8 +249,8 @@ extension Workspace {
         return true
     }
 
-    /// Clicking a scale button: every chart in the grid takes the view saved under `slot`; false while
-    /// none is.
+    /// Clicking a scale button: every chart in the grid takes the view saved under `slot`, and so does
+    /// every one loading a stock or timeframe from then on (see `activeScale`); false while none is.
     func applyScale(_ slot: Int) -> Bool {
         guard let scale = chartScales[slot] else { return false }
         for chart in mainCells.compactMap(chart(id:)) where !chart.symbol.isEmpty { scale.apply(to: chart) }
@@ -295,6 +299,7 @@ struct ChartScale: Codable, Equatable {
     var priceScale: Double
 
     static let storageKey = "chartScales"
+    static let activeKey = "activeChartScale"
     static let slots = [1, 2, 3]
 
     init(of chart: ChartModel) {

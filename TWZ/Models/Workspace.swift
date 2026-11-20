@@ -199,8 +199,11 @@ final class Workspace {
     var chartScales: [Int: ChartScale] = [:] {
         didSet { defaults.set(try? JSONEncoder().encode(chartScales), forKey: ChartScale.storageKey) }
     }
-    /// The scale last saved or picked, lit in the top bar; Reset clears it.
-    var activeScale: Int?
+    /// The scale last saved or picked, lit in the top bar: while it is, every main chart loading a stock or
+    /// timeframe takes it (see `Broker.gridScale`). Clicking it again, or Reset, turns it off. Saved.
+    var activeScale: Int? {
+        didSet { defaults.set(activeScale, forKey: ChartScale.activeKey) }
+    }
     /// Colors given to stocks with ⌥⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
     /// stock that leaves the charts has its color again when it comes back. Set with `setColor`.
     private(set) var stockColors: [String: StockColor] {
@@ -298,6 +301,7 @@ final class Workspace {
         gridScan = defaults.data(forKey: MainGrid.scanKey).flatMap { try? JSONDecoder().decode(ScanSpec.self, from: $0) }
         chartScales = defaults.data(forKey: ChartScale.storageKey)
             .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
+        activeScale = (defaults.object(forKey: ChartScale.activeKey) as? Int).flatMap { chartScales[$0] != nil ? $0 : nil }
 
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }

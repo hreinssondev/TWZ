@@ -114,8 +114,9 @@ struct AccountBar: View {
 }
 
 /// The saved scales (see `ChartScale`), styled like the timeframe switch: a click gives every chart the
-/// view saved under that number, ⇧-click saves the selected chart's view there. The one last saved or
-/// picked is lit; numbers with nothing saved are dimmer.
+/// view saved under that number, and lights it: charts loading a stock or timeframe take it too, until
+/// it's clicked again or Reset. ⇧-click saves the selected chart's view there (and lights it). Numbers
+/// with nothing saved are dimmer.
 private struct ScaleButtons: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
@@ -137,7 +138,7 @@ private struct ScaleButtons: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(saved ? "Every chart takes scale \(slot): its zoom, place and price scale. ⇧-click saves the selected chart's view here instead"
+                .help(saved ? "Every chart takes scale \(slot), its zoom, place and price scale, also as lists and timeframes change; click again to turn it off. ⇧-click saves the selected chart's view here instead"
                             : "⇧-click saves the selected chart's view (zoom, place and price scale) as scale \(slot)")
             }
         }
@@ -151,7 +152,13 @@ private struct ScaleButtons: View {
                 NSSound.beep()
                 broker.say("Select a chart to save its view as scale \(slot)")
             }
-        } else if !workspace.applyScale(slot) {
+        } else if workspace.activeScale == slot {
+            // Lit: off again, so charts keep their own views as stocks and timeframes change.
+            workspace.activeScale = nil
+            broker.say("Scale \(slot) off: charts keep their own views")
+        } else if workspace.applyScale(slot) {
+            broker.say("Scale \(slot) on every chart, also as lists and timeframes change (click it again to turn it off)")
+        } else {
             NSSound.beep()
             broker.say("Nothing saved as scale \(slot) yet: ⇧-click it to save the selected chart's view")
         }
