@@ -25,6 +25,8 @@
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  ⌥1 / 2 / 3 / 4 / 5 sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
+//  ⌥0 gives every other chart in the grid the selected chart's view: zoom, place and price scale
+//  (see `Workspace.matchViews`).
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
 //
@@ -121,6 +123,16 @@ struct TradingShortcuts: ViewModifier {
                     }
                     // ⌥1–5 sets the account bar's timeframe; ChartGrid follows it. Set again too, so a chart
                     // whose own switch was changed goes back to it.
+                    // ⌥0: the other charts take the selected chart's view.
+                    if modifiers == .option, inMainWindow, event.keyCode == 29 || event.keyCode == 82 {
+                        if workspace.isChartSelected, let chart = workspace.chart(id: workspace.selectedChartID), !chart.symbol.isEmpty {
+                            workspace.matchViews(to: chart)
+                            broker.say("Every chart follows \(chart.symbol)'s view")
+                        } else {
+                            NSSound.beep()
+                        }
+                        return nil
+                    }
                     if modifiers == .option, inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
                         workspace.setMainTimeframe(timeframe, broker: broker)
@@ -229,6 +241,9 @@ extension KeyShortcut {
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }
         if option, !command, !control, k == "z" || k == "<" { return "\(display) cancels orders" }
+        if option, !shift, !command, !control, keyCode == 29 || keyCode == 82 {
+            return "⌥0 gives every chart the selected chart's view"
+        }
         if option, !shift, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
             return "\(display) sets every chart to \(timeframe.rawValue)"
         }

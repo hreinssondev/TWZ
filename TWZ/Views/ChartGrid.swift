@@ -236,6 +236,31 @@ extension Workspace {
         setTimeframe(timeframe, of: mainCharts.filter { !mainCells.contains($0.id) }, broker: broker)
     }
 
+    /// ⌥0: every other chart in the grid takes `source`'s view: as much time on screen (as many bars on
+    /// its timeframe), its right edge at the same time (or as far past the latest bar, while `source`'s
+    /// is there), and its prices moved and squeezed alike. A stock with fewer bars ends up as far back as
+    /// it goes, and loads older ones.
+    func matchViews(to source: ChartModel) {
+        let bars = source.bars
+        // The time of the last bar on screen, while scrolled back.
+        let edge: Date? = source.scrollBack > 0 && !bars.isEmpty
+            ? bars[min(bars.count - 1, max(0, Int((Double(bars.count) - source.scrollBack).rounded()) - 1))].time : nil
+        for chart in mainCells.compactMap(chart(id:)) where chart !== source && !chart.symbol.isEmpty {
+            // Bars of one timeframe in the other's; daily bars count as they are.
+            let ratio = source.timeframe.barSeconds.flatMap { s in chart.timeframe.barSeconds.map { s / $0 } } ?? 1
+            chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, source.visibleBars * ratio))
+            if let edge, let first = chart.bars.first {
+                let i = CandleChart.barIndex(of: edge, in: chart.bars, barSeconds: chart.timeframe.barSeconds)
+                    ?? (edge < first.time ? 0 : chart.bars.count - 1)
+                chart.scrollBack = Double(chart.bars.count - 1 - i)
+            } else {
+                chart.scrollBack = source.scrollBack * ratio
+            }
+            chart.priceShift = source.priceShift
+            chart.priceScale = source.priceScale
+        }
+    }
+
     /// The second chart of a stock: 5m next to 1m, 1m next to anything else.
     private static func timeframe(nextTo first: Timeframe) -> Timeframe {
         first == .m1 ? .m5 : .m1
