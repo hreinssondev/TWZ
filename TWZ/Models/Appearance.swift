@@ -102,7 +102,9 @@ enum TimeframeSwitch {
 
 /// The Positions column shows real positions or what-if trades (simulated, see `SimTrades.swift`),
 /// switched by clicking its header; the charts follow: trade arrows of the one shown (real ones with the
-/// top bar's Trades on), and the what-if trades' badge and stop loss / take profit lines only with them.
+/// top bar's Trades on), and the what-if trades' badge, stop loss / take profit lines, hover P/L and
+/// ⌃-click stop loss / take profit only with them; with real positions shown, what-if trades count for
+/// nothing on the charts.
 enum PositionsView {
     static let showsSimKey = "positionsShowSim"
 }

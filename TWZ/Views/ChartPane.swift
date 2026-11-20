@@ -453,7 +453,7 @@ struct TradingChart: View {
                 onTrade()
                 if hasPosition {
                     broker.placeProtective(symbol: chart.symbol, at: price)
-                } else if broker.simPositions[chart.symbol] != nil {
+                } else if showsSim, broker.simPositions[chart.symbol] != nil {
                     // A what-if trade: its simulated stop loss or take profit.
                     broker.placeSimProtective(symbol: chart.symbol, at: price)
                 } else {
@@ -477,7 +477,7 @@ struct TradingChart: View {
                 return true
             },
             controlClickColor: { price in
-                if !hasPosition, broker.simPositions[chart.symbol] != nil {
+                if !hasPosition, showsSim, broker.simPositions[chart.symbol] != nil {
                     return broker.simProtectiveKind(chart.symbol, at: price).map(protectiveColor)
                 }
                 guard hasPosition else { return Self.whatIfColor }
@@ -486,12 +486,13 @@ struct TradingChart: View {
                 return protectiveColor(kind)
             },
             hoverPnL: { price in
-                // The open position's if it closed there, else the what-if line's, else a pretend buy
-                // at the last price, sized as Settings says: by buying power or a NOK amount. In dollars
-                // (a forex pair's at its currency's dollar rate).
+                // The open position's if it closed there (with what-if trades shown, the what-if trade's
+                // first; with real positions shown, what-if trades don't count), else the ⌃-click what-if
+                // line's, else a pretend buy at the last price, sized as Settings says: by buying power or a
+                // NOK amount. In dollars (a forex pair's at its currency's dollar rate).
                 guard let usd = broker.usdPerPriceUnit(chart.symbol) else { return nil }
+                if showsSim, let sim = broker.simPositions[chart.symbol] { return sim.pnl(at: price) * usd }
                 if let p = broker.positions[chart.symbol], p.quantity != 0 { return (price - p.avgCost) * p.quantity * usd }
-                if let sim = broker.simPositions[chart.symbol] { return sim.pnl(at: price) * usd }
                 if let whatIf = workspace.whatIfs[chart.symbol] { return whatIf.pnl(at: price) * usd }
                 guard let last = broker.quote(chart.symbol)?.last else { return nil }
                 if hoverSizing == .nok {
