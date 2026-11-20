@@ -164,6 +164,10 @@ final class Broker {
     /// The top bar's scale while one is lit (see `Workspace.activeScale`): every main chart loading a
     /// stock or timeframe takes it, in place of where it was left.
     @ObservationIgnored var gridScale: ChartScale?
+    /// The main grid's list (see `Workspace.gridListKey`): views are kept per list, and the list each
+    /// chart's view belongs to.
+    @ObservationIgnored var viewList: String?
+    @ObservationIgnored private var loadedLists: [Int: String] = [:]
     /// The zoom set by hand, trumping `gridScale`'s (see `Workspace.manualZoom`).
     @ObservationIgnored var gridZoomOverride: Double?
     @ObservationIgnored private var chartViewsSave: Task<Void, Never>?
@@ -179,18 +183,51 @@ final class Broker {
     func restoreChartViews(_ charts: [ChartModel], zoom: Double) {
         for chart in charts {
             chart.defaultVisibleBars = zoom
+            let list = chart.inChartsWindow ? nil : viewList
+            if let list { loadedLists[chart.id] = list }
             let view = chartViews.view(for: .init(bars: .init(symbol: chart.symbol, timeframe: chart.timeframe),
-                                                  inChartsWindow: chart.inChartsWindow))
+                                                  inChartsWindow: chart.inChartsWindow, list: list))
             chart.visibleBars = view?.zoom ?? zoom
             chart.place = view?.place ?? ChartModel.Place()
             chart.adjustedByHand = view?.manual == true
         }
     }
 
-    /// A click on a scale's number: these charts' window has no view adjusted by hand any more.
+    /// After the grid switched lists: a chart that kept its stock (in both lists) keeps its view under the
+    /// list it was in, and takes the one it was left at in this list, if any (else it stays as it is); one
+    /// not adjusted by hand then takes the lit scale. Charts that loaded a stock have done so already.
+    func adoptList(_ charts: [ChartModel]) {
+        guard let list = viewList else { return }
+        var changed = false
+        for chart in charts where !chart.inChartsWindow && !chart.symbol.isEmpty {
+            let old = loadedLists[chart.id] ?? list
+            guard old != list else { continue }
+            let bars = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
+            chartViews.keep(zoom: chart.visibleBars, place: chart.place, manual: chart.adjustedByHand,
+                            for: .init(bars: bars, inChartsWindow: false, list: old))
+            let view = chartViews.view(for: .init(bars: bars, inChartsWindow: false, list: list))
+            if let view {
+                if let zoom = view.zoom { chart.visibleBars = zoom }
+                chart.place = view.place
+            }
+            chart.adjustedByHand = view?.manual == true
+            if !chart.adjustedByHand, let gridScale {
+                gridScale.apply(to: chart)
+                if let gridZoomOverride { chart.visibleBars = gridZoomOverride }
+            }
+            loadedLists[chart.id] = list
+            changed = true
+        }
+        if changed { chartViewsChanged() }
+    }
+
+    /// A click on a scale's number: no view of these charts' window, in the grid's current list, counts as
+    /// adjusted by hand any more.
     func forgetChartAdjustments(of charts: [ChartModel]) {
         for chart in charts { chart.adjustedByHand = false }
-        for window in Set(charts.map(\.inChartsWindow)) { chartViews.forgetManual(inChartsWindow: window) }
+        for window in Set(charts.map(\.inChartsWindow)) {
+            chartViews.forgetManual(inChartsWindow: window, list: window ? nil : viewList)
+        }
         chartViewsChanged()
     }
 
@@ -198,8 +235,9 @@ final class Broker {
     func saveChartViews() {
         for chart in charts where !chart.symbol.isEmpty {
             let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
+            let list = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
             chartViews.keep(zoom: chart.visibleBars, place: chart.place, manual: chart.adjustedByHand,
-                            for: .init(bars: key, inChartsWindow: chart.inChartsWindow))
+                            for: .init(bars: key, inChartsWindow: chart.inChartsWindow, list: list))
         }
         chartViewsSave?.cancel()
         chartViews.save()
@@ -291,6 +329,10 @@ final class Broker {
         let seed = barCache.bars(for: key, previous: previous, previousBars: shown, live: live)
         chart.bars = seed
         chart.error = nil
+        // Views are kept per list in the main grid: the one it leaves under the list it was in.
+        let list = chart.inChartsWindow ? nil : viewList
+        let previousList = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
+        if let list { loadedLists[chart.id] = list }
         // Where it was left on the stock and timeframe it leaves is kept; where a chart of its window was
         // left on the ones it goes to, it goes back to (see `ChartViews`). Otherwise another timeframe
         // starts at the zoom the timeframe switch left (`ChartModel.zooms`), at the latest bars, and
@@ -301,9 +343,9 @@ final class Broker {
             // A timeframe switch has already kept the zoom it leaves in `zooms`.
             let zoom = previous.timeframe == key.timeframe ? chart.visibleBars : chart.zooms[previous.timeframe] ?? chart.visibleBars
             chartViews.keep(zoom: zoom, place: chart.place, manual: chart.adjustedByHand,
-                            for: .init(bars: previous, inChartsWindow: window))
+                            for: .init(bars: previous, inChartsWindow: window, list: previousList))
             chartViewsChanged()
-            view = chartViews.view(for: .init(bars: key, inChartsWindow: window))
+            view = chartViews.view(for: .init(bars: key, inChartsWindow: window, list: list))
         }
         if previous != key { chart.adjustedByHand = view?.manual == true }
         if let view {

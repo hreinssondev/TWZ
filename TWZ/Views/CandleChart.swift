@@ -940,6 +940,9 @@ private struct ScrollCatcher: NSViewRepresentable {
         var onShiftScroll: ((CGFloat) -> Void)?
         var onMagnify: ((CGFloat, CGPoint) -> Void)?
         var onClick: (() -> Void)?
+        /// The trackpad gesture going on began with ⇧ held: all of it, ⇧ let go early and its momentum
+        /// included, moves the grid's zoom, so it never zooms or pans just this chart.
+        private var shiftGesture = false
         var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
         var onModifierKeys: ((NSEvent.ModifierFlags) -> Void)?
         var onRightClick: (() -> Void)?
@@ -1009,7 +1012,12 @@ private struct ScrollCatcher: NSViewRepresentable {
             }
             // ⇧ + a trackpad swipe: whichever way it goes most (the system may turn it sideways).
             // A mouse's shift-wheel still pans.
-            if event.hasPreciseScrollingDeltas, event.modifierFlags.contains(.shift), let onShiftScroll {
+            if event.phase.contains(.began) || event.phase.contains(.mayBegin) {
+                shiftGesture = event.modifierFlags.contains(.shift)
+            } else if event.modifierFlags.contains(.shift) {
+                shiftGesture = true
+            }
+            if event.hasPreciseScrollingDeltas, shiftGesture, let onShiftScroll {
                 let d = abs(dy) >= abs(dx) ? dy : dx
                 if d != 0 { onShiftScroll(d) }
                 return

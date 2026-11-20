@@ -197,7 +197,29 @@ final class Workspace {
     /// The list the main-window charts follow in place of the top gainers, from a list's load button
     /// or ⌘⇧ shortcut, until another list loads; Reset keeps it (nil: the gainers). Saved.
     var gridScan: ScanSpec? {
-        didSet { defaults.set(gridScan.flatMap { try? JSONEncoder().encode($0) }, forKey: MainGrid.scanKey) }
+        didSet {
+            defaults.set(gridScan.flatMap { try? JSONEncoder().encode($0) }, forKey: MainGrid.scanKey)
+            // Each list keeps its own lit scale and zoom set by hand: the one left keeps them, the one
+            // loaded gets its own back.
+            let old = Self.listKey(oldValue), new = gridListKey
+            guard old != new else { return }
+            listScaleStates[old] = ListScaleState(activeScale: activeScale, manualZoom: manualZoom)
+            let state = listScaleStates[new]
+            activeScale = state?.activeScale.flatMap { chartScales[$0] != nil ? $0 : nil }
+            manualZoom = state?.manualZoom
+        }
+    }
+    /// The main grid's list, by which charts' views, the lit scale and the zoom set by hand are kept.
+    var gridListKey: String { Self.listKey(gridScan) }
+    static func listKey(_ scan: ScanSpec?) -> String { (scan?.kind ?? .gainers).rawValue }
+
+    /// A list's lit scale and zoom set by hand while another list is loaded (see `gridScan`). Saved.
+    struct ListScaleState: Codable {
+        var activeScale: Int?
+        var manualZoom: Double?
+    }
+    var listScaleStates: [String: ListScaleState] = [:] {
+        didSet { defaults.set(try? JSONEncoder().encode(listScaleStates), forKey: "listScaleStates") }
     }
     /// The top bar's saved scales by number (see `ChartScale`). Saved.
     var chartScales: [Int: ChartScale] = [:] {
@@ -209,8 +231,8 @@ final class Workspace {
         didSet { defaults.set(activeScale, forKey: ChartScale.activeKey) }
     }
     /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧-swipe on a chart): it trumps the
-    /// lit scale's zoom, on the charts now and on those loading a stock or timeframe, and through
-    /// ⇧1–5. Clicking a scale's number, saving one, or Reset, clears it. Saved.
+    /// lit scale's zoom, on the charts now and on those loading a stock or timeframe, until a scale is
+    /// picked (its number clicked, or ⇧1–5 with no chart selected) or saved, or Reset. Saved.
     var manualZoom: Double? {
         didSet { defaults.set(manualZoom, forKey: ChartScale.manualZoomKey) }
     }
@@ -313,6 +335,8 @@ final class Workspace {
             .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
         activeScale = (defaults.object(forKey: ChartScale.activeKey) as? Int).flatMap { chartScales[$0] != nil ? $0 : nil }
         manualZoom = defaults.object(forKey: ChartScale.manualZoomKey) as? Double
+        listScaleStates = defaults.data(forKey: "listScaleStates")
+            .flatMap { try? JSONDecoder().decode([String: ListScaleState].self, from: $0) } ?? [:]
 
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }

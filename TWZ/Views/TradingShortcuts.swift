@@ -26,8 +26,9 @@
 //  ⌥1 / 2 / 3 / 4 / 5 sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
-//  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field picks a saved scale,
-//  as clicking its number in the top bar does (see `Workspace.pickScale`).
+//  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field gives the selected
+//  chart that saved scale (see `Workspace.applyScale(_:to:broker:)`); with no chart selected, every
+//  chart, as clicking its number in the top bar does (see `Workspace.pickScale`).
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
 //
@@ -124,10 +125,15 @@ struct TradingShortcuts: ViewModifier {
                     }
                     // ⌥1–5 sets the account bar's timeframe; ChartGrid follows it. Set again too, so a chart
                     // whose own switch was changed goes back to it.
-                    // ⇧1–5 outside a text field picks a saved scale, as clicking its number in the top bar does.
+                    // ⇧1–5 outside a text field: the selected chart takes that saved scale; with no chart
+                    // selected, every chart does, as clicking its number in the top bar would.
                     if modifiers == .shift, inMainWindow, let slot = ChartScale.slot(keyCode: event.keyCode) {
                         if event.window?.firstResponder is NSTextView { return event }
-                        workspace.pickScale(slot, byClick: false, broker: broker)
+                        if workspace.isChartSelected, let chart = workspace.chart(id: workspace.selectedChartID), !chart.symbol.isEmpty {
+                            workspace.applyScale(slot, to: chart, broker: broker)
+                        } else {
+                            workspace.pickScale(slot, byClick: false, broker: broker)
+                        }
                         return nil
                     }
                     // ⌥0, or ⇧A outside a text field: the other charts take the selected chart's view.

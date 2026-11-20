@@ -10,6 +10,7 @@
 //  as it is (on another timeframe, the latest bars). Saved across relaunches; the top bar's Reset
 //  forgets the main window's, and right-click or double-click on a chart puts that one back to the
 //  default zoom at the latest bars, which is what's kept for it from then on.
+//  In the main grid each list keeps its own (see `Key.list`).
 //
 
 import Foundation
@@ -18,6 +19,9 @@ struct ChartViews: Codable {
     struct Key: Hashable, Codable {
         var bars: BarCache.Key
         var inChartsWindow: Bool
+        /// The main grid's list it was left in (see `Workspace.gridListKey`): each list keeps its own.
+        /// nil in the Charts window, and for views kept before lists kept their own.
+        var list: String?
     }
 
     struct View: Codable {
@@ -45,11 +49,16 @@ struct ChartViews: Codable {
         }
     }
 
-    func view(for key: Key) -> View? { views[key] }
+    /// The view kept for `key`, or one kept for its stock and timeframe before lists kept their own.
+    func view(for key: Key) -> View? {
+        views[key] ?? (key.list == nil ? nil : views[Key(bars: key.bars, inChartsWindow: key.inChartsWindow, list: nil)])
+    }
 
-    /// A click on a scale's number: no view of the window counts as adjusted by hand any more.
-    mutating func forgetManual(inChartsWindow: Bool) {
-        for key in views.keys where key.inChartsWindow == inChartsWindow { views[key]?.manual = nil }
+    /// A click on a scale's number: no view of the window's `list` counts as adjusted by hand any more.
+    mutating func forgetManual(inChartsWindow: Bool, list: String?) {
+        for key in views.keys where key.inChartsWindow == inChartsWindow && (key.list == list || key.list == nil) {
+            views[key]?.manual = nil
+        }
     }
 
     /// Reset: the window's charts start over at the latest bars.
