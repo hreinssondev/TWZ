@@ -20,6 +20,8 @@
 //  key, number row or keypad, whatever the keyboard layout types there.
 //  ⌘⇧ and a list's letter (T or S Top Gainers, L Top Losers, H AH Gainers, M or A Most Active $, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
+//  ⌥1 / 2 / 3 / 4 / 5 sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
+//  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
 //
@@ -93,6 +95,13 @@ struct TradingShortcuts: ViewModifier {
                             return nil
                         }
                     }
+                    // ⌥1–5 sets the account bar's timeframe; ChartGrid follows it. Set again too, so a chart
+                    // whose own switch was changed goes back to it.
+                    if modifiers == .option, inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
+                        UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
+                        workspace.setMainTimeframe(timeframe, broker: broker)
+                        return nil
+                    }
                     if modifiers == .command, inMainWindow, let window = event.window {
                         let symbol = workspace.targetSymbol
                         let typing = window.firstResponder is NSTextView
@@ -147,6 +156,20 @@ struct TradingShortcuts: ViewModifier {
     }
 }
 
+extension Timeframe {
+    /// The 1–5 keys, on the number row or the keypad: 1m, 5m, 15m, 1h, D.
+    init?(keyCode: UInt16) {
+        switch keyCode {
+        case 18, 83: self = .m1
+        case 19, 84: self = .m5
+        case 20, 85: self = .m15
+        case 21, 86: self = .h1
+        case 23, 87: self = .d1
+        default: return nil
+        }
+    }
+}
+
 extension KeyShortcut {
     init(_ event: NSEvent) {
         let flags = event.modifierFlags
@@ -177,6 +200,9 @@ extension KeyShortcut {
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }
         if option, !command, !control, k == "z" || k == "<" { return "\(display) cancels orders" }
+        if option, !shift, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
+            return "\(display) sets every chart to \(timeframe.rawValue)"
+        }
         if option, shift, !command, SimSize.keyCodes.contains(keyCode) {
             return "\(display) \(control ? "sells" : "buys") a what-if trade"
         }

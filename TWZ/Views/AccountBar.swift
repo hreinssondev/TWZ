@@ -42,7 +42,7 @@ struct AccountBar: View {
 
             HStack(spacing: 8) {
                 TimeframePicker(selection: $gridTimeframe)
-                    .help("Every chart's timeframe; a chart's own switch changes just that chart, until it gets a new gainer or Reset")
+                    .help("Every chart's timeframe (⌥1–5: 1m, 5m, 15m, 1h, D); a chart's own switch changes just that chart, until it gets a new gainer or Reset")
 
                 Button {
                     workspace.resetToGainers()

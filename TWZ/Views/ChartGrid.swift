@@ -18,7 +18,7 @@
 //  Every chart trades like any other (see `ChartPane`); clicking one selects it, so hotkeys and order
 //  shortcuts go to its symbol. A chart that loses its cell to a smaller grid is emptied; if it was
 //  selected, no chart is selected.
-//  The account bar's timeframe switch sets every chart; a chart's own switch changes just that one,
+//  The account bar's timeframe switch (or ⌥1–5) sets every chart; a chart's own switch changes just that one,
 //  until it gets a new gainer, Reset or the account bar's switch. The Zoom slider sets every chart's
 //  default zoom, and Reset puts every chart's view back to it (as double-clicking a chart does).
 //  A grip at every crossing of four charts moves that column and row line together (see `SplitGrid`).
