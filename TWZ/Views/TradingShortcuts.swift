@@ -21,8 +21,7 @@
 //  ⌃⌥⇧1 / 2 / 3 / 4 sells (shorts) a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 /
 //  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 no longer buys one: ⌥⇧ and
 //  numbers are timeframes). Matched by key, number row or keypad, whatever the keyboard layout types there.
-//  ⌘R does what the top bar's Reset does; ⌘⇧R puts the charts back to the lit number in the top bar,
-//  as saved (see `Workspace.reapplyNumber`).
+//  ⌘R, ⇧R (outside a text field) or ⌘⇧R does what the top bar's Reset does.
 //  ⌘⇧ with two letters held together switches the trade mode (see `TradeMode`): S + H SHORT, L + O LONG;
 //  S, H and L alone (lists' letters too) wait a moment for the other letter first.
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
@@ -129,9 +128,11 @@ struct TradingShortcuts: ViewModifier {
                         if symbol.isEmpty || workspace.whatIfs.removeValue(forKey: symbol) == nil { NSSound.beep() }
                         return nil
                     }
-                    // ⌘⇧R: the charts back to the lit number in the top bar, as saved.
-                    if inMainWindow, modifiers == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "r" {
-                        if !workspace.reapplyNumber(broker: broker) { NSSound.beep() }
+                    // ⇧R (outside a text field) or ⌘⇧R: the top bar's Reset, as ⌘R.
+                    if inMainWindow, modifiers == .shift || modifiers == [.command, .shift],
+                       event.charactersIgnoringModifiers?.lowercased() == "r" {
+                        if modifiers == .shift, event.window?.firstResponder is NSTextView { return event }
+                        workspace.resetToGainers()
                         return nil
                     }
                     // ⌘⇧ with two letters held together: S + H the SHORT trade mode, L + O the LONG one (see
@@ -304,8 +305,11 @@ extension KeyShortcut {
         if command, shift, !option, !control, k == "o" {
             return "⌘⇧ with L and O held together switches to LONG"
         }
+        if shift, !command, !option, !control, k == "r" {
+            return "⇧R resets the chart grid, as the top bar's Reset"
+        }
         if command, shift, !option, !control, k == "r" {
-            return "⌘⇧R puts the charts back to the lit number in the top bar"
+            return "⌘⇧R resets the chart grid, as the top bar's Reset"
         }
         if command, shift, !option, !control, let kind = ScannerKind.forShortcut(k) {
             return "\(display) shows the \(kind.rawValue) list"

@@ -263,7 +263,7 @@ final class Workspace {
             if let activeViewSet { lastViewSet = activeViewSet }
         }
     }
-    /// The view set last saved or picked, lit or not (⌘⇧R goes back to it).
+    /// The view set last saved or picked, lit or not (`reapplyNumber` goes back to it).
     var lastViewSet: Int?
     /// The top bar's saved scales by number (see `ChartScale`). Saved.
     var chartScales: [Int: ChartScale] = [:] {
@@ -277,7 +277,7 @@ final class Workspace {
             if let activeScale { lastScale = activeScale }
         }
     }
-    /// The scale last saved or picked, lit or not (⌘⇧R goes back to it).
+    /// The scale last saved or picked, lit or not (`reapplyNumber` goes back to it).
     var lastScale: Int?
     /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧- / ⌘-swipe on a chart): it trumps the
     /// lit scale's zoom, on the charts now and on those loading another stock, until a scale is
