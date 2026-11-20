@@ -238,7 +238,7 @@ private struct TradingSettings: View {
             + "Top Gainers (M or A), Forex"),
         ("⌥1 2 3 4 5", "Every chart's timeframe: 1m / 5m / 15m / 1h / D"),
         ("⌥0  /  ⇧A", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes); ⇧A not while typing"),
-        ("1 2 3 4 5 (top bar), ⇧1–5", "Click, or ⇧ and the number outside a text field: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists change until it's clicked again or Reset (a timeframe switch keeps each chart's view). The Zoom slider or ⇧-swipe trumps its zoom until a scale is picked; a chart zoomed or panned by hand keeps its view (per stock and timeframe) through ⇧1–5 and list switches, until a number is clicked (or a right-click on that chart). ⇧1–5 with a chart selected gives just that chart the scale. Each list keeps its own views and lit scale. ⇧-click: save the selected chart's view as it"),
+        ("1 2 3 4 5 (top bar), ⇧1–5", "View sets (by default): ⇧-click a number saves every chart's zoom and place on every timeframe; a click, or ⇧ and the number (just the selected chart, if one is), puts them back. With Appearance's \"Top bar numbers are scales\" on, scales: click, or ⇧ and the number outside a text field: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists change until it's clicked again or Reset (a timeframe switch keeps each chart's view). The Zoom slider or ⇧-swipe trumps its zoom until a scale is picked; a chart zoomed or panned by hand keeps its view (per stock and timeframe) through ⇧1–5 and list switches, until a number is clicked (or a right-click on that chart). ⇧1–5 with a chart selected gives just that chart the scale. Each list keeps its own views and lit scale. ⇧-click: save the selected chart's view as it"),
         ("Own shortcut", "Send that hotkey (set in the hotkey editor)"),
     ]
 
@@ -469,6 +469,7 @@ private struct AppearanceSettings: View {
     @AppStorage(PriceAxis.lastPriceOpacityKey) private var lastPriceOpacity = PriceAxis.defaultLastPriceOpacity
     @AppStorage(TimeframeSwitch.keepViewKey) private var keepViewOnTimeframeSwitch = TimeframeSwitch.defaultKeepView
     @AppStorage(GridZoom.resetsAdjustedKey) private var gridZoomResetsAdjusted = GridZoom.defaultResetsAdjusted
+    @AppStorage(NumberButtons.scalesKey) private var numberButtonsAreScales = NumberButtons.defaultScales
 
     /// The selected chart's outline as it's drawn: the stored width is a third of it (see `SelectedOutline`).
     private var selectedOutline: Binding<Double> {
@@ -651,6 +652,12 @@ private struct AppearanceSettings: View {
                 Text(gridZoomResetsAdjusted
                      ? "⇧-swipe and the Zoom slider put every chart at the same zoom, those zoomed or panned by hand too."
                      : "Charts zoomed or panned by hand keep their own zoom and zoom in or out by as much as the rest.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Top bar numbers are scales", isOn: $numberButtonsAreScales)
+                Text(numberButtonsAreScales
+                     ? "⇧-click a number saves the selected chart's view as a scale; picking it gives every chart that view."
+                     : "⇧-click a number saves every chart's zoom and place on every timeframe; picking it puts them all back.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

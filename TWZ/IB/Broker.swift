@@ -179,6 +179,37 @@ final class Broker {
         chartViewsChanged()
     }
 
+    /// Keeps where these charts are now, as they'd be kept moving off what they show (saving a view set).
+    func keepChartViews(of charts: [ChartModel]) {
+        for chart in charts where !chart.symbol.isEmpty {
+            let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
+            let list = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
+            chartViews.keep(zoom: chart.visibleBars, place: chart.place, manual: chart.adjustedByHand,
+                            for: .init(bars: key, inChartsWindow: chart.inChartsWindow, list: list))
+        }
+        chartViewsChanged()
+    }
+
+    /// The main window's kept views (saving a view set).
+    var mainChartViews: [ChartViews.Key: ChartViews.View] { chartViews.entries(inChartsWindow: false) }
+
+    /// The main window's kept views become a view set's.
+    func replaceMainChartViews(with views: [ChartViews.Key: ChartViews.View]) {
+        chartViews.replace(inChartsWindow: false, with: views)
+        chartViewsChanged()
+    }
+
+    /// The chart goes where it was left on what it shows, if anywhere (picking a view set).
+    func restoreView(of chart: ChartModel) {
+        guard !chart.symbol.isEmpty else { return }
+        let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
+        let list = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
+        guard let view = chartViews.view(for: .init(bars: key, inChartsWindow: chart.inChartsWindow, list: list)) else { return }
+        if let zoom = view.zoom { chart.visibleBars = zoom }
+        chart.place = view.place
+        chart.adjustedByHand = view.manual == true
+    }
+
     /// At launch: the charts' default zoom, and each zoomed and placed where it was left on what it shows
     /// (at the default zoom where it wasn't).
     func restoreChartViews(_ charts: [ChartModel], zoom: Double) {

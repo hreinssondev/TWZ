@@ -122,19 +122,22 @@ struct AccountBar: View {
     }
 }
 
-/// The saved scales (see `ChartScale`), styled like the timeframe switch: a click gives every chart the
-/// view saved under that number, and lights it: charts loading another stock take it too, until
-/// it's clicked again or Reset. ⇧-click saves the selected chart's view there (and lights it). Numbers
-/// with nothing saved are dimmer.
+/// The top bar's numbers, styled like the timeframe switch. By default view sets (see `ViewSet`): ⇧-click
+/// saves every chart's zoom and place on every timeframe, a click puts them back and lights it. With
+/// Settings' "Top bar numbers are scales" on, scales (see `ChartScale`): a click gives every chart the
+/// view saved under that number, and lights it: charts loading another stock take it too, until it's
+/// clicked again or Reset; ⇧-click saves the selected chart's view there. Either way a lit number
+/// clicked again goes off, and numbers with nothing saved are dimmer.
 private struct ScaleButtons: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
+    @AppStorage(NumberButtons.scalesKey) private var asScales = NumberButtons.defaultScales
 
     var body: some View {
         HStack(spacing: 1) {
             ForEach(ChartScale.slots, id: \.self) { slot in
-                let lit = workspace.activeScale == slot
-                let saved = workspace.chartScales[slot] != nil
+                let lit = asScales ? workspace.activeScale == slot : workspace.activeViewSet == slot
+                let saved = asScales ? workspace.chartScales[slot] != nil : workspace.viewSets[slot] != nil
                 Button {
                     pick(slot)
                 } label: {
@@ -147,14 +150,29 @@ private struct ScaleButtons: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(saved ? "Every chart takes scale \(slot), its zoom, place and price scale, also as lists change; click again to turn it off. ⇧-click saves the selected chart's view here instead"
-                      : "⇧-click saves the selected chart's view (zoom, place and price scale) as scale \(slot)")
+                .help(help(slot, saved: saved))
             }
         }
+        // Switching what the numbers are: scales apply to charts loading another stock only as scales.
+        .onChange(of: asScales) { workspace.syncGridScale(to: broker) }
+    }
+
+    private func help(_ slot: Int, saved: Bool) -> String {
+        if !asScales {
+            return saved ? "Every chart's zoom and place on every timeframe go back to view set \(slot); click again to turn it off. ⇧-click saves them here instead"
+                         : "⇧-click saves every chart's zoom and place on every timeframe as view set \(slot)"
+        }
+        return saved ? "Every chart takes scale \(slot), its zoom, place and price scale, also as lists change; click again to turn it off. ⇧-click saves the selected chart's view here instead"
+                     : "⇧-click saves the selected chart's view (zoom, place and price scale) as scale \(slot)"
     }
 
     private func pick(_ slot: Int) {
-        if NSEvent.modifierFlags.contains(.shift) {
+        let shift = NSEvent.modifierFlags.contains(.shift)
+        if !asScales {
+            if shift { workspace.saveViewSet(slot, broker: broker) } else { workspace.pickViewSet(slot, broker: broker) }
+            return
+        }
+        if shift {
             if workspace.saveScale(slot), let symbol = workspace.chart(id: workspace.selectedChartID)?.symbol {
                 broker.say("Scale \(slot) saved from \(symbol)'s view")
             } else {

@@ -129,10 +129,12 @@ struct TradingShortcuts: ViewModifier {
                     // selected, every chart does, as clicking its number in the top bar would.
                     if modifiers == .shift, inMainWindow, let slot = ChartScale.slot(keyCode: event.keyCode) {
                         if event.window?.firstResponder is NSTextView { return event }
-                        if workspace.isChartSelected, let chart = workspace.chart(id: workspace.selectedChartID), !chart.symbol.isEmpty {
-                            workspace.applyScale(slot, to: chart, broker: broker)
-                        } else {
-                            workspace.pickScale(slot, byClick: false, broker: broker)
+                        let selected = workspace.isChartSelected ? workspace.chart(id: workspace.selectedChartID) : nil
+                        switch (NumberButtons.areScales, selected.flatMap { $0.symbol.isEmpty ? nil : $0 }) {
+                        case (true, let chart?): workspace.applyScale(slot, to: chart, broker: broker)
+                        case (true, nil): workspace.pickScale(slot, byClick: false, broker: broker)
+                        case (false, let chart?): workspace.applyViewSet(slot, to: chart, broker: broker)
+                        case (false, nil): workspace.pickViewSet(slot, broker: broker)
                         }
                         return nil
                     }

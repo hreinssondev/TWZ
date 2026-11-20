@@ -24,9 +24,10 @@ management in one window built for quick entries and exits.
 - **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the
   grid), across list switches and relaunches, until Reset or a right-click on the chart. ⇧-swipe moves
   the top bar's Zoom slider, zooming every chart; ⌥0 or ⇧A gives every chart the selected one's zoom,
-  place and price scale. ⇧-clicking 1–5 in the top bar saves that as a scale; clicking one gives it to
-  every chart (and those loading another stock) until it's clicked again, ⇧ and a number just to the
-  selected chart; a chart zoomed or panned by hand keeps its view until a number is clicked. The bars
+  place and price scale. ⇧-clicking 1–5 in the top bar saves every chart's zoom and place on every
+  timeframe as a view set, and clicking one (⇧ and a number: just the selected chart) puts them back;
+  with Settings › Appearance's "Top bar numbers are scales" on, ⇧-click saves the selected chart's view
+  as a scale instead, and picking one gives it to every chart (and those loading another stock). The bars
   a chart showed, on every timeframe, stay in memory and on disk (two days after last shown), so coming
   back to them, also after a relaunch or zoomed far out, shows at once.
 - **Trading from the chart**: ⌥-click places the selected hotkey's order (or a fixed NOK amount) at

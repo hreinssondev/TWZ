@@ -15,6 +15,18 @@
 
 import Foundation
 
+/// What one of the top bar's numbers holds with Settings' "Top bar numbers are scales" off: every main
+/// chart's zoom and place on every timeframe, as they were when saved (⇧-click), put back when picked:
+/// the views kept per stock, timeframe and list (see `ChartViews`), each chart's own one included, and
+/// each chart's zoom per timeframe (`ChartModel.zooms`).
+struct ViewSet: Codable {
+    var views: [ChartViews.Key: ChartViews.View]
+    var zooms: [Int: [Timeframe: Double]]
+
+    static let storageKey = "viewSets"
+    static let activeKey = "activeViewSet"
+}
+
 struct ChartViews: Codable {
     struct Key: Hashable, Codable {
         var bars: BarCache.Key
@@ -66,6 +78,16 @@ struct ChartViews: Codable {
         views = views.filter { key, _ in
             key.inChartsWindow != inChartsWindow || (timeframe.map { key.bars.timeframe != $0 } ?? false)
         }
+    }
+
+    /// The window's views (a view set's, see `ViewSet`).
+    func entries(inChartsWindow: Bool) -> [Key: View] {
+        views.filter { $0.key.inChartsWindow == inChartsWindow }
+    }
+
+    /// The window's views become `entries` (picking a view set).
+    mutating func replace(inChartsWindow: Bool, with entries: [Key: View]) {
+        views = views.filter { $0.key.inChartsWindow != inChartsWindow }.merging(entries) { _, new in new }
     }
 
     static func saved() -> ChartViews {

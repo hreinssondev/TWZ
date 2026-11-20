@@ -100,6 +100,16 @@ enum TimeframeSwitch {
     static var keepsView: Bool { UserDefaults.standard.object(forKey: keepViewKey) as? Bool ?? defaultKeepView }
 }
 
+/// Settings › Appearance: what the top bar's number buttons hold. Off (the default), view sets: every
+/// chart's zoom and place on every timeframe (see `ViewSet`); on, scales: one chart's view, given to
+/// every chart (see `ChartScale`).
+enum NumberButtons {
+    static let scalesKey = "numberButtonsAreScales"
+    static let defaultScales = false
+
+    static var areScales: Bool { UserDefaults.standard.object(forKey: scalesKey) as? Bool ?? defaultScales }
+}
+
 /// Settings › Appearance: on (the default), moving the grid's zoom (⇧-swipe, the Zoom slider) puts charts
 /// adjusted by hand at that zoom too, like the rest; off, they zoom in or out by as much, from their own
 /// zoom (see `Workspace.setZoom`).
@@ -124,7 +134,7 @@ enum AppearanceDefaults {
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
-        TimeframeSwitch.keepViewKey, GridZoom.resetsAdjustedKey,
+        TimeframeSwitch.keepViewKey, GridZoom.resetsAdjustedKey, NumberButtons.scalesKey,
     ] + LineDashes.keys + LineDashes.dotsKeys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.

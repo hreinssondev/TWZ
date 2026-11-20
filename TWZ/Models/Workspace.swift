@@ -219,6 +219,13 @@ final class Workspace {
     var listScaleStates: [String: ListScaleState] = [:] {
         didSet { defaults.set(try? JSONEncoder().encode(listScaleStates), forKey: "listScaleStates") }
     }
+    /// The top bar's saved view sets by number (see `ViewSet`), and the one last saved or picked. Saved.
+    var viewSets: [Int: ViewSet] = [:] {
+        didSet { defaults.set(try? JSONEncoder().encode(viewSets), forKey: ViewSet.storageKey) }
+    }
+    var activeViewSet: Int? {
+        didSet { defaults.set(activeViewSet, forKey: ViewSet.activeKey) }
+    }
     /// The top bar's saved scales by number (see `ChartScale`). Saved.
     var chartScales: [Int: ChartScale] = [:] {
         didSet { defaults.set(try? JSONEncoder().encode(chartScales), forKey: ChartScale.storageKey) }
@@ -333,6 +340,9 @@ final class Workspace {
             .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
         activeScale = (defaults.object(forKey: ChartScale.activeKey) as? Int).flatMap { chartScales[$0] != nil ? $0 : nil }
         manualZoom = defaults.object(forKey: ChartScale.manualZoomKey) as? Double
+        viewSets = defaults.data(forKey: ViewSet.storageKey)
+            .flatMap { try? JSONDecoder().decode([Int: ViewSet].self, from: $0) } ?? [:]
+        activeViewSet = (defaults.object(forKey: ViewSet.activeKey) as? Int).flatMap { viewSets[$0] != nil ? $0 : nil }
         listScaleStates = defaults.data(forKey: "listScaleStates")
             .flatMap { try? JSONDecoder().decode([String: ListScaleState].self, from: $0) } ?? [:]
 
