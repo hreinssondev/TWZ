@@ -322,7 +322,7 @@ extension Workspace {
         broker.say("View set \(slot) saved: every chart's zoom and place on every timeframe")
     }
 
-    /// Clicking a number, or ⇧ and it with no chart selected, with the numbers as view sets: every main
+    /// Clicking a number, or ⇧ and it, with the numbers as view sets: every main
     /// chart's zoom and place on every timeframe go back to those saved under `slot`, and it lights; lit,
     /// it goes off (the charts stay as they are). Beeps with nothing saved.
     func pickViewSet(_ slot: Int, broker: Broker) {
@@ -365,23 +365,6 @@ extension Workspace {
         putBack(set, broker: broker)
         activeViewSet = slot
         return true
-    }
-
-    /// ⇧ and a number with a chart selected, with the numbers as view sets: just that chart goes back to
-    /// its zoom and place saved under `slot`, on every timeframe.
-    func applyViewSet(_ slot: Int, to chart: ChartModel, broker: Broker) {
-        guard let set = viewSets[slot] else {
-            NSSound.beep()
-            broker.say("Nothing saved as view set \(slot) yet: ⇧-click its number in the top bar to save every chart's zoom and place")
-            return
-        }
-        chart.zooms = set.zooms[chart.id] ?? chart.zooms
-        // This chart's stock, on every timeframe and list, as saved.
-        var views = broker.mainChartViews
-        for (key, view) in set.views where key.bars.symbol == chart.symbol { views[key] = view }
-        broker.replaceMainChartViews(with: views)
-        broker.restoreView(of: chart)
-        broker.say("\(chart.symbol): view set \(slot) (just this chart; click the number in the top bar for every chart)")
     }
 
     /// ⇧1–5 with a chart selected: just that chart takes the scale saved under `slot`, its own zoom

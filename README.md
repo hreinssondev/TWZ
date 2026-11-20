@@ -25,7 +25,7 @@ management in one window built for quick entries and exits.
   grid), across list switches and relaunches, until Reset or a right-click on the chart. ⇧-swipe moves
   the top bar's Zoom slider, zooming every chart; ⌥0 or ⇧A gives every chart the selected one's zoom,
   place and price scale. ⇧-clicking 1–5 in the top bar saves every chart's zoom and place on every
-  timeframe as a view set, and clicking one (⇧ and a number: just the selected chart) puts them back;
+  timeframe as a view set, and clicking one (or ⇧ and its number) puts them back;
   with Settings › Appearance's "Top bar numbers are scales" on, ⇧-click saves the selected chart's view
   as a scale instead, and picking one gives it to every chart (and those loading another stock). ⌘R
   puts the charts back to the lit number as saved. The bars

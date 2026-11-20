@@ -28,9 +28,10 @@
 //  ⌥1 / 2 / 3 / 4 / 5 sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
-//  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field gives the selected
-//  chart that saved scale (see `Workspace.applyScale(_:to:broker:)`); with no chart selected, every
-//  chart, as clicking its number in the top bar does (see `Workspace.pickScale`).
+//  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field does what clicking
+//  that number in the top bar does with view sets (see `Workspace.pickViewSet`); with the numbers as
+//  scales, it gives the selected chart that scale (see `Workspace.applyScale(_:to:broker:)`), or with no
+//  chart selected every chart (see `Workspace.pickScale`).
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
 //  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
 //
@@ -140,8 +141,8 @@ struct TradingShortcuts: ViewModifier {
                         switch (NumberButtons.areScales, selected.flatMap { $0.symbol.isEmpty ? nil : $0 }) {
                         case (true, let chart?): workspace.applyScale(slot, to: chart, broker: broker)
                         case (true, nil): workspace.pickScale(slot, byClick: false, broker: broker)
-                        case (false, let chart?): workspace.applyViewSet(slot, to: chart, broker: broker)
-                        case (false, nil): workspace.pickViewSet(slot, broker: broker)
+                        // View sets: as clicking the number in the top bar.
+                        case (false, _): workspace.pickViewSet(slot, broker: broker)
                         }
                         return nil
                     }
