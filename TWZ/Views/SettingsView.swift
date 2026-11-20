@@ -468,6 +468,7 @@ private struct AppearanceSettings: View {
     @AppStorage(PriceAxis.labelSpacingKey) private var labelSpacing = PriceAxis.defaultLabelSpacing
     @AppStorage(PriceAxis.lastPriceOpacityKey) private var lastPriceOpacity = PriceAxis.defaultLastPriceOpacity
     @AppStorage(TimeframeSwitch.keepViewKey) private var keepViewOnTimeframeSwitch = TimeframeSwitch.defaultKeepView
+    @AppStorage(GridZoom.resetsAdjustedKey) private var gridZoomResetsAdjusted = GridZoom.defaultResetsAdjusted
 
     /// The selected chart's outline as it's drawn: the stored width is a third of it (see `SelectedOutline`).
     private var selectedOutline: Binding<Double> {
@@ -639,11 +640,17 @@ private struct AppearanceSettings: View {
                 }
                 .pickerStyle(.segmented)
             }
-            Section("Switching timeframe") {
+            Section("Chart views") {
                 Toggle("Keep the view when switching timeframe", isOn: $keepViewOnTimeframeSwitch)
                 Text(keepViewOnTimeframeSwitch
                      ? "The same time stays on screen, the right edge where it was; only the candles change."
                      : "Each timeframe keeps its own zoom and place, and switching back goes to them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("⇧-swipe zooms charts adjusted by hand to the same zoom", isOn: $gridZoomResetsAdjusted)
+                Text(gridZoomResetsAdjusted
+                     ? "⇧-swipe and the Zoom slider put every chart at the same zoom, those zoomed or panned by hand too."
+                     : "Charts zoomed or panned by hand keep their own zoom and zoom in or out by as much as the rest.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

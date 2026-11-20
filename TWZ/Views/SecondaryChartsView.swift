@@ -78,8 +78,17 @@ extension Workspace {
 
     /// Sets the charts' default zoom and zooms them to it. The zooms they were left at on other stocks
     /// and timeframes stay (see `ChartViews`); Reset forgets those.
-    func setZoom(_ zoom: Double, of charts: [ChartModel], broker: Broker) {
+    /// From `oldZoom` (the grid's zoom moved: ⇧-swipe, the Zoom slider) with Settings' "⇧-swipe zooms
+    /// charts adjusted by hand to the same zoom" off, charts adjusted by hand keep their own zoom and
+    /// change it by as much (see `GridZoom`).
+    func setZoom(_ zoom: Double, of charts: [ChartModel], broker: Broker, from oldZoom: Double? = nil) {
+        let relative = oldZoom.flatMap { old in !GridZoom.resetsAdjusted && old > 0 ? zoom / old : nil }
         for chart in charts {
+            if let relative, chart.adjustedByHand {
+                chart.defaultVisibleBars = zoom
+                chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, chart.visibleBars * relative))
+                continue
+            }
             if chart.defaultVisibleBars != zoom || chart.visibleBars != zoom {
                 chart.defaultVisibleBars = zoom
                 chart.visibleBars = zoom
