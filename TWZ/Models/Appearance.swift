@@ -100,6 +100,13 @@ enum TimeframeSwitch {
     static var keepsView: Bool { UserDefaults.standard.object(forKey: keepViewKey) as? Bool ?? defaultKeepView }
 }
 
+/// The Positions column shows real positions or what-if trades (simulated, see `SimTrades.swift`),
+/// switched by clicking its header; the charts follow: trade arrows of the one shown (real ones with the
+/// top bar's Trades on), and the what-if trades' badge and stop loss / take profit lines only with them.
+enum PositionsView {
+    static let showsSimKey = "positionsShowSim"
+}
+
 /// Settings › Appearance: what the top bar's number buttons hold. Off (the default), view sets: every
 /// chart's zoom and place on every timeframe (see `ViewSet`); on, scales: one chart's view, given to
 /// every chart (see `ChartScale`).

@@ -3,8 +3,10 @@
 //  TWZ
 //
 //  Orders and Positions side by side as two always-visible columns, with a draggable divider
-//  between them; clicking one of their headers stacks them instead, Positions on top (clicking again
-//  puts them side by side). Rows are two lines so they fit the narrow columns.
+//  between them; clicking the Orders header stacks them instead, Positions on top (clicking again
+//  puts them side by side). Clicking the Positions header switches it between real positions and
+//  what-if trades, and the charts' arrows with it (see `PositionsView`). Rows are two lines so they
+//  fit the narrow columns.
 //  Orders lists the working orders and, once done, what each filled: dimmed, at its average fill price.
 //  Positions lists the newest first, then the what-if trades, newest first too (see `positionItems`).
 //  A ⌃-click what-if buy shows among them too, as What-if, with IB's preview of its commissions and fees
@@ -38,6 +40,8 @@ struct OrdersPanel: View {
     @AppStorage("ordersStacked") private var stacked = false
     /// Height of the Positions row as a share of the stack; Orders takes the rest.
     @AppStorage("positionsRow") private var positionsRowShare: Double = 1 / 3
+    /// Positions shows what-if trades instead of real positions (see `PositionsView`).
+    @AppStorage(PositionsView.showsSimKey) private var showsSim = false
     /// Height of the three columns as a share of the panel; round trips take the rest.
     @AppStorage("roundTripsSplit") private var columnsShare: Double = 0.5
     @AppStorage("bottomTab") private var bottomTab: BottomTab = .roundTrips
@@ -125,9 +129,15 @@ struct OrdersPanel: View {
         column("Orders", count: activeOrders.count, onEmptyClick: deselectChart, onHeaderClick: toggleStacked) { orderRows }
     }
 
+    /// Its header switches between real positions and what-if trades (the Orders header stacks them).
     private var positionsColumn: some View {
-        column("Positions", count: broker.positions.count + broker.simPositions.count, onEmptyClick: deselectChart,
-               onHeaderClick: toggleStacked) { positionRows }
+        column(title: {
+            Text(showsSim ? "Sim positions" : "Positions").fontWeight(.semibold)
+                .foregroundStyle(showsSim ? TradingChart.whatIfColor : Color.primary)
+            Text("\(showsSim ? broker.simPositions.count : broker.positions.count)").foregroundStyle(.secondary)
+        }, onEmptyClick: deselectChart, onHeaderClick: { showsSim.toggle() },
+           headerHelp: showsSim ? "Click to show real positions (and their trade arrows on the charts)"
+                                : "Click to show what-if trades (and their arrows on the charts)") { positionRows }
     }
 
     private func toggleStacked() {
@@ -155,6 +165,7 @@ struct OrdersPanel: View {
     private func column<Title: View, Rows: View>(@ViewBuilder title: () -> Title, trailing: Text? = nil,
                                                  dimsHeader: Bool = false,
                                                  onEmptyClick: (() -> Void)? = nil, onHeaderClick: (() -> Void)? = nil,
+                                                 headerHelp: String? = nil,
                                                  @ViewBuilder rows: () -> Rows) -> some View {
         let content = rows()
         return VStack(spacing: 0) {
@@ -170,7 +181,7 @@ struct OrdersPanel: View {
             .background(Color.primary.opacity(0.05))
             .contentShape(Rectangle())
             .onTapGesture { onHeaderClick?() }
-            .help(onHeaderClick == nil ? "" : (stacked ? "Click to put side by side" : "Click to stack"))
+            .help(headerHelp ?? (onHeaderClick == nil ? "" : (stacked ? "Click to put side by side" : "Click to stack")))
             GeometryReader { geo in
                 ScrollView {
                     LazyVStack(spacing: 0) { content }
@@ -480,8 +491,10 @@ struct OrdersPanel: View {
             RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions)
                 .filter { $0.isOpen && $0.carried == 0 }.map { ($0.symbol, $0.start) },
             uniquingKeysWith: max)
-        let items = broker.positions.values.map { (item: PositionItem.real($0), opened: opened[$0.symbol]) }
-            + broker.simPositions.values.map { (item: PositionItem.sim($0), opened: Optional($0.opened)) }
+        // Real positions or what-if trades, as the header switches (see `PositionsView`).
+        let items = showsSim
+            ? broker.simPositions.values.map { (item: PositionItem.sim($0), opened: Optional($0.opened)) }
+            : broker.positions.values.map { (item: PositionItem.real($0), opened: opened[$0.symbol]) }
         return items.sorted { a, b in
             if a.item.isSim != b.item.isSim { return b.item.isSim }
             return switch (a.opened, b.opened) {
@@ -496,7 +509,7 @@ struct OrdersPanel: View {
     @ViewBuilder private var positionRows: some View {
         let items = positionItems
         let openTripOrders = tripOrders.open
-        if items.isEmpty { empty("No positions") }
+        if items.isEmpty { empty(showsSim ? "No what-if trades" : "No positions") }
         ForEach(items) { item in
             switch item {
             case .real(let p): positionRow(p, tripOrders: openTripOrders[p.symbol])

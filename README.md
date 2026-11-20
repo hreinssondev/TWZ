@@ -44,6 +44,8 @@ management in one window built for quick entries and exits.
 - **Scanner lists**: gainers, losers, after-hours gainers and most active by dollar volume, with
   each stock's 5-minute change. One click charts a stock; the load button fills the grid from a list.
 - **Orders, fills and positions** side by side or stacked, with today's round trips and their P/L.
+  Clicking the Positions header switches it between real positions and what-if trades, and the
+  charts' trade arrows with it.
 - **Forex**: the lists' Forex option shows the main currency pairs on IBKR's IDEALPRO (majors,
   crosses and the NOK / SEK pairs), ranked by % change; a chart takes a pair typed as EUR.USD, EURUSD
   or EUR/USD. Pairs chart as bid/ask midpoints around the clock and trade like stocks from hotkeys,

@@ -135,6 +135,7 @@ struct ChartPane: View {
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(MainGrid.zoomKey) private var gridZoom: Double = ChartModel.initialVisibleBars
+    @AppStorage(PositionsView.showsSimKey) private var showsSim = false
     @State private var symbolText = ""
     @FocusState private var symbolFocused: Bool
 
@@ -245,7 +246,7 @@ struct ChartPane: View {
 
             // A what-if trade (simulated, see `SimTrades.swift`): "SIM LONG 23 322 +452", its value and
             // P/L in NOK like a position's, outlined in the what-if color.
-            if let sim = broker.simPositions[chart.symbol] {
+            if showsSim, let sim = broker.simPositions[chart.symbol] {
                 let last = broker.quote(sim.symbol)?.last
                 let usd = broker.usdPerPriceUnit(sim.symbol)
                 let valueNOK = usd.flatMap { usd in broker.usdNok.map { abs(sim.quantity) * (last ?? sim.avgCost) * usd * $0 } }
@@ -389,6 +390,8 @@ struct TradingChart: View {
     var onTrade: () -> Void = {}
     /// ⇧-swipe: the grid's zoom times this (see `CandleChart.onZoomAll`).
     var onZoomAll: ((Double) -> Void)?
+    /// What-if trades shown instead of real ones, as the Positions header switches (see `PositionsView`).
+    @AppStorage(PositionsView.showsSimKey) private var showsSim = false
 
     @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
     @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
@@ -517,7 +520,8 @@ struct TradingChart: View {
                 return workspace.whatIfs.removeValue(forKey: chart.symbol) != nil
             },
             shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? []),
-            onZoomAll: onZoomAll
+            onZoomAll: onZoomAll,
+            showsRealTrades: !showsSim
         )
         // With the last trade lines off, a round trip that just closed (in the last 30 s, so not one
         // from before the chart showed the symbol) shows its exit line for 7 s.
@@ -626,7 +630,7 @@ struct TradingChart: View {
     /// A what-if trade's fills: an arrow pointing right at each, in the buy color for a long, the sell
     /// color for a short, ringed in the what-if pink so it's told apart from a real trade's.
     private var simPointers: [PricePointer] {
-        guard let sim = broker.simPositions[chart.symbol] else { return [] }
+        guard showsSim, let sim = broker.simPositions[chart.symbol] else { return [] }
         let color = sideColors.of(sim.isLong)
         return sim.entryPoints.map { PricePointer(time: $0.time, price: $0.price, color: color, outline: Self.whatIfColor) }
     }
@@ -671,7 +675,7 @@ struct TradingChart: View {
             lines.append(PriceLine(price: p.avgCost, color: LineColors.resolve(avgCostHex, default: LineColors.defaultAvgCost),
                                    label: "", dashed: avgCostDashed, dotted: avgCostDashed && avgCostDots, movesAsideForLastPrice: true))
         }
-        if let sim = broker.simPositions[chart.symbol] {
+        if showsSim, let sim = broker.simPositions[chart.symbol] {
             // A what-if trade: no line of its own (its arrows show where it filled, see `simPointers`); its
             // simulated stop loss and take profit in their colors, dotted, SIM beside them; a click on one
             // takes it off.
