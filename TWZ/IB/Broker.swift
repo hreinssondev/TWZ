@@ -509,11 +509,6 @@ final class Broker {
         order { $0.buyNOK(nok, symbol: symbol, at: clickedPrice) }
     }
 
-    /// ⌥- / ⌘-click with dollar clicks on: a DAY buy / sell of `dollars` worth of `symbol` at the clicked price.
-    func placeDollars(_ dollars: Double, action: String, symbol: String, at clickedPrice: Double) {
-        order { $0.placeDollars(dollars, action: action, symbol: symbol, at: clickedPrice) }
-    }
-
     /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price.
     func run(_ hotkey: Hotkey, symbol: String, at clickedPrice: Double) {
         let hotkey = Self.resolved(hotkey)

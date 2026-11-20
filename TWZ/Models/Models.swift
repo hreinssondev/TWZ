@@ -304,15 +304,6 @@ nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// What clicking a hotkey button does (Settings ▸ Trading).
-nonisolated enum HotkeyClickMode: String, CaseIterable, Identifiable {
-    case select = "Selects it (⌘⇧↩ sends)"
-    case send = "Sends the order"
-    var id: String { rawValue }
-
-    static let storageKey = "hotkeyClickMode"
-}
-
 /// A key plus modifiers that fires a hotkey. Matched by the physical key (`keyCode`) and modifiers;
 /// `key` is only for display.
 nonisolated struct KeyShortcut: Codable, Hashable {

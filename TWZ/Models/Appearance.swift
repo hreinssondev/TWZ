@@ -131,7 +131,7 @@ enum NumberButtons {
     static var areScales: Bool { UserDefaults.standard.object(forKey: scalesKey) as? Bool ?? defaultScales }
 }
 
-/// Settings › Appearance: on (the default), moving the grid's zoom (⇧-swipe, the Zoom slider) puts charts
+/// Settings › Appearance: on (the default), moving the grid's zoom (⇧- or ⌘-swipe, the Zoom slider) puts charts
 /// adjusted by hand at that zoom too, like the rest; off, they zoom in or out by as much, from their own
 /// zoom (see `Workspace.setZoom`).
 enum GridZoom {
@@ -245,15 +245,6 @@ enum Indicators {
 /// "Reset to Defaults" leaves it.
 enum AltClickOrders {
     static let enabledKey = "altClickOrdersEnabled"
-}
-
-/// Settings › Trading: with this on, ⌥-click on a chart buys and ⌘-click sells a fixed dollar amount
-/// at the clicked price, in place of the selected hotkey's / NOK ⌥-click order; holding ⌥ tints the
-/// hover line and its price tag green, holding ⌘ red. Off by default.
-enum DollarClickOrders {
-    static let enabledKey = "dollarClickOrdersEnabled"
-    static let amountKey = "dollarClickOrdersAmount"
-    static let defaultAmount = 3000.0
 }
 
 /// What the chart's hover P/L sizes its pretend buy at the last price by, with no position or what-if

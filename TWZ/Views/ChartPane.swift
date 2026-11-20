@@ -394,8 +394,6 @@ struct TradingChart: View {
 
     @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
     @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
-    @AppStorage(DollarClickOrders.enabledKey) private var dollarClicks = false
-    @AppStorage(DollarClickOrders.amountKey) private var dollarClickAmount = DollarClickOrders.defaultAmount
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
     @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
@@ -427,26 +425,17 @@ struct TradingChart: View {
         CandleChart(
             chart: chart, lines: priceLines, pointers: simPointers,
             // Switched off in the top bar: no handler, so ⌥ neither tints the price tag nor places orders.
-            // The selected hotkey's order at the clicked price, or with none selected (the ⌥-click
-            // buy box is), a buy for its NOK amount.
+            // The selected hotkey's order at the clicked price, with its amount, order type and time in
+            // force (see `TradingEngine.run(_:symbol:at:)`), or with none selected (the ⌥-click buy box
+            // is), a buy for its NOK amount. ⌘-click does nothing for now.
             onAltClick: allowsAltClick && altClickOrders ? { price in
                 onTrade()
-                if dollarClicks {
-                    broker.placeDollars(dollarClickAmount, action: "BUY", symbol: chart.symbol, at: price)
-                } else if let hotkey = workspace.selectedHotkey {
+                if let hotkey = workspace.selectedHotkey {
                     broker.run(hotkey, symbol: chart.symbol, at: price)
                 } else {
                     broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
                 }
             } : nil,
-            // Dollar clicks: ⌘-click sells the same amount ⌥-click buys.
-            onCommandClick: allowsAltClick && altClickOrders && dollarClicks ? { price in
-                onTrade()
-                broker.placeDollars(dollarClickAmount, action: "SELL", symbol: chart.symbol, at: price)
-            } : nil,
-            altClickTint: dollarClicks ? sideColors.up : .white,
-            commandClickTint: sideColors.down,
-            tintsHoverLine: dollarClicks,
             onControlClick: { price in
                 guard !chart.symbol.isEmpty else { return }
                 onTrade()

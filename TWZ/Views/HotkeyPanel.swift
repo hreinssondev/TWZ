@@ -3,11 +3,11 @@
 //  TWZ
 //
 //  Two-row grid (6 × 2 by default) of configurable order buttons acting on the selected chart's symbol.
-//  Clicking a button selects it, and ⌘⇧↩ sends the selected one (see TradingShortcuts); or, set in
-//  Settings ▸ Trading, clicking sends the order on mouse-down (and selects it too).
+//  Clicking a button selects it (never sends it): ⌘⇧↩ sends the selected one (see TradingShortcuts),
+//  and ⌥-clicking a chart places its order at the clicked price. New buttons go in on the left.
 //  Click the "Hotkeys" title to customize them all, or right-click a button to edit just that one.
-//  ⌥-clicking a chart places the selected hotkey's order at the clicked price. Beside the buttons,
-//  the NOK amount that ⌥-clicking buys instead when no hotkey is selected: clicking it selects it.
+//  Beside the buttons, the NOK amount that ⌥-clicking buys instead when no hotkey is selected:
+//  clicking it selects it.
 //
 
 import SwiftUI
@@ -18,7 +18,6 @@ struct HotkeyPanel: View {
     @Environment(Workspace.self) private var workspace
     @State private var editing: Int?
     @State private var showingCustomizer = false
-    @AppStorage(HotkeyClickMode.storageKey) private var clickMode: HotkeyClickMode = .select
 
     static let buttonHeight: CGFloat = 44
     /// Buttons shrink down to this when the panel is dragged shorter than they need at full height.
@@ -69,12 +68,11 @@ struct HotkeyPanel: View {
                         ForEach(Array(workspace.hotkeys.enumerated()), id: \.element.id) { index, hotkey in
                             HotkeyButton(hotkey: hotkey, height: height,
                                          selected: hotkey.id == workspace.selectedHotkeyID, firesOnPress: true) {
+                                // A click selects it: ⌥-click on a chart places its order there, ⌘⇧↩ sends it.
                                 workspace.selectedHotkeyID = hotkey.id
-                                if clickMode == .send { broker.run(hotkey, symbol: workspace.targetSymbol) }
                             }
-                            .help((clickMode == .send ? "Click sends · ⌘⇧↩ sends it again" : "Click to select · ⌘⇧↩ sends it")
-                                  + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? "")
-                                  + " · ⌥-click a chart places it at the clicked price while selected")
+                            .help("Click to select: ⌥-click a chart then places its order at the clicked price (its amount, order type and time in force); ⌘⇧↩ sends it"
+                                  + (hotkey.shortcut.map { " · \($0.display) sends it any time" } ?? ""))
                             .contextMenu {
                                 Button("Edit…") { editing = index }
                             }
@@ -414,13 +412,13 @@ private struct HotkeyCustomizer: View {
 }
 
 extension Workspace {
-    /// Adds a "Buy 100" button as a new column (end of the top row) or, when the top row is already
-    /// the longer one, at the end of the bottom row, so neither row's buttons shift. Returns its id.
+    /// Adds a "Mode 100" button on the left: at the start of the top row, or when the top row is already
+    /// the longer one, at the start of the bottom row, so the rows line up again. Returns its id.
     @discardableResult
     func addHotkey() -> UUID? {
         guard hotkeys.count < Hotkey.maxCount else { return nil }
         let hotkey = Hotkey(label: Hotkey.autoLabel(action: .mode, sizing: .shares, amount: 100), action: .mode)
-        hotkeys.insert(hotkey, at: hotkeys.count.isMultiple(of: 2) ? hotkeys.count / 2 : hotkeys.count)
+        hotkeys.insert(hotkey, at: hotkeys.count.isMultiple(of: 2) ? 0 : Hotkey.columns(for: hotkeys.count))
         return hotkey.id
     }
 

@@ -22,8 +22,9 @@ management in one window built for quick entries and exits.
   keeping each chart's view: the same time on screen, only the candles change (or, with that off in
   Settings › Appearance, each timeframe going back to its own zoom and place).
 - **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the
-  grid), across list switches and relaunches, until Reset or a right-click on the chart. ⇧-swipe moves
-  the top bar's Zoom slider, zooming every chart; ⌥0 or ⇧A gives every chart the selected one's zoom,
+  grid), across list switches and relaunches, until Reset or a right-click on the chart. ⇧- or ⌘-swipe
+  moves the top bar's Zoom slider, zooming every chart (⌘⇧-swipe squeezes or stretches one chart's
+  price axis); ⌥0 or ⇧A gives every chart the selected one's zoom,
   place and price scale. ⇧-clicking 1–5 in the top bar saves every chart's zoom and place on every
   timeframe as a view set, and clicking one (or ⇧ and its number) puts them back;
   with Settings › Appearance's "Top bar numbers are scales" on, ⇧-click saves the selected chart's view
@@ -31,8 +32,10 @@ management in one window built for quick entries and exits.
   puts the charts back to the lit number as saved. The bars
   a chart showed, on every timeframe, stay in memory and on disk (two days after last shown), so coming
   back to them, also after a relaunch or zoomed far out, shows at once.
-- **Trading from the chart**: ⌥-click places the selected hotkey's order (or a fixed NOK amount) at
-  the clicked price, ⌃-click a stop loss or take profit, and order lines show their fill as it
+- **Trading from the chart**: clicking a hotkey selects it, and ⌥-click then places its order at the
+  clicked price with its amount, order type and time in force (with none selected, a fixed NOK
+  amount): a limit on the side that fills there or better (MIDPRICE capped there for a Midprice
+  hotkey), a stop-limit on the other (a stop for a Market hotkey); ⌃-click a stop loss or take profit, and order lines show their fill as it
   happens. Double-click an order line to cancel it.
 - **Hotkeys**: a grid of configurable buttons (mode, buy, sell, close half / all, cancel, flatten) priced
   off the bid, ask, mid, last or market, each with an optional keyboard shortcut. ⌘⌫ cancels the

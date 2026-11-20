@@ -213,9 +213,6 @@ private struct MemoryUsage: View {
 private struct TradingSettings: View {
     @Environment(Workspace.self) private var workspace
     @Environment(Broker.self) private var broker
-    @AppStorage(HotkeyClickMode.storageKey) private var clickMode: HotkeyClickMode = .select
-    @AppStorage(DollarClickOrders.enabledKey) private var dollarClicks = false
-    @AppStorage(DollarClickOrders.amountKey) private var dollarClickAmount = DollarClickOrders.defaultAmount
     @AppStorage(HoverPnLSize.storageKey) private var hoverSizing: HoverPnLSize = .buyingPower
     @AppStorage(HoverPnLSize.percentKey) private var hoverPercent = HoverPnLSize.defaultPercent
     @AppStorage(HoverPnLSize.amountKey) private var hoverAmount = HoverPnLSize.defaultAmount
@@ -241,39 +238,13 @@ private struct TradingSettings: View {
         ("⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("⌘R", "The charts back to the lit number in the top bar as saved (its view set, or its scale at its own zoom)"),
         ("⌥0  /  ⇧A", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes); ⇧A not while typing"),
-        ("1 2 3 4 5 (top bar), ⇧1–5", "View sets (by default): ⇧-click a number saves every chart's zoom and place on every timeframe; a click, or ⇧ and the number, puts them back. With Appearance's \"Top bar numbers are scales\" on, scales: click, or ⇧ and the number outside a text field: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists change until it's clicked again or Reset (a timeframe switch keeps each chart's view). The Zoom slider or ⇧-swipe trumps its zoom until a scale is picked; a chart zoomed or panned by hand keeps its view (per stock and timeframe) through ⇧1–5 and list switches, until a number is clicked (or a right-click on that chart). ⇧1–5 with a chart selected gives just that chart the scale. Each list keeps its own views and lit scale. ⇧-click: save the selected chart's view as it"),
+        ("1 2 3 4 5 (top bar), ⇧1–5", "View sets (by default): ⇧-click a number saves every chart's zoom and place on every timeframe; a click, or ⇧ and the number, puts them back. With Appearance's \"Top bar numbers are scales\" on, scales: click, or ⇧ and the number outside a text field: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists change until it's clicked again or Reset (a timeframe switch keeps each chart's view). The Zoom slider or ⇧- / ⌘-swipe trumps its zoom until a scale is picked; a chart zoomed or panned by hand keeps its view (per stock and timeframe) through ⇧1–5 and list switches, until a number is clicked (or a right-click on that chart). ⇧1–5 with a chart selected gives just that chart the scale. Each list keeps its own views and lit scale. ⇧-click: save the selected chart's view as it"),
         ("Own shortcut", "Send that hotkey (set in the hotkey editor)"),
     ]
 
     var body: some View {
         Form {
             Section("Memory") { MemoryUsage() }
-            Section("Hotkey buttons") {
-                Picker("Clicking a button", selection: $clickMode) {
-                    ForEach(HotkeyClickMode.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.radioGroup)
-                Text(clickMode == .send
-                     ? "Fires as the mouse goes down. The clicked button is also selected, so ⌘⇧↩ sends it again."
-                     : "Click picks the hotkey; ⌘⇧↩ sends it for the selected chart's symbol.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section("⌥ / ⌘-click on a chart") {
-                Toggle("⌥-click buys, ⌘-click sells a dollar amount", isOn: $dollarClicks)
-                LabeledContent("Amount (USD)") {
-                    TextField("", value: $dollarClickAmount, format: .number.precision(.fractionLength(0)))
-                        .labelsHidden()
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 80)
-                }
-                .disabled(!dollarClicks)
-                Text(dollarClicks
-                     ? "A DAY order at the clicked price, in place of the selected hotkey's ⌥-click order: a limit where it fills at that price or better, a stop-limit on the other side. Holding ⌥ turns the hover line and its price green, ⌘ red. The top bar's Alt-Click switches both off."
-                     : "Off: ⌥-click places the selected hotkey's order at the clicked price (or a NOK buy), and ⌘-click does nothing.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             Section("Lists and charts") {
                 Toggle("Hide restricted stocks", isOn: Bindable(broker).hideRestricted)
                 Text("Leaves the stocks IB won't let you buy (closing-only, no KID for your country, a compliance restriction) out of the lists and the charts that follow them. Each listed stock is checked with a what-if buy of one share, never placed, and again every 30 minutes. A stock you hold or have a working order in stays; one you load by hand shows.")
@@ -651,9 +622,9 @@ private struct AppearanceSettings: View {
                      : "Each timeframe keeps its own zoom and place, and switching back goes to them.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("⇧-swipe zooms charts adjusted by hand to the same zoom", isOn: $gridZoomResetsAdjusted)
+                Toggle("⇧- or ⌘-swipe zooms charts adjusted by hand to the same zoom", isOn: $gridZoomResetsAdjusted)
                 Text(gridZoomResetsAdjusted
-                     ? "⇧-swipe and the Zoom slider put every chart at the same zoom, those zoomed or panned by hand too."
+                     ? "⇧- or ⌘-swipe and the Zoom slider put every chart at the same zoom, those zoomed or panned by hand too."
                      : "Charts zoomed or panned by hand keep their own zoom and zoom in or out by as much as the rest.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
