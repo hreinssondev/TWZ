@@ -58,11 +58,14 @@ extension Workspace {
     /// where the grid last showed it (see `gridPlaces`), so the charts on screen stay as they are: on the
     /// grid's list, it loads by hand into the cell it was in; on another list, that list shows and loads
     /// into the grid, as ⌘⇧ and its letter do, and once its rows are in, the stock is shown there (see
-    /// `showPendingFocus`). A stock the grid never showed loads into the grid's 6th chart in reading order
-    /// (the last, in a smaller grid).
+    /// `showPendingFocus`). A stock the grid never showed goes to the list that has it now, and a forex
+    /// pair to the Forex list (see `listPlace`); one no list has loads into the grid's 6th chart in
+    /// reading order (the last, in a smaller grid).
     private func showChart(_ symbol: String, broker: Broker) {
         if selectChart(showing: symbol) { return }
-        if let place = gridPlaces[symbol], let kind = ScannerKind(rawValue: place.list) {
+        // A forex pair goes to the Forex list, wherever else it was shown.
+        let shown = gridPlaces[symbol].flatMap { !ForexPair.isForex(symbol) || $0.list == ScannerKind.forex.rawValue ? $0 : nil }
+        if let place = shown ?? listPlace(of: symbol, broker: broker), let kind = ScannerKind(rawValue: place.list) {
             if place.list == gridListKey {
                 show(symbol, at: place, broker: broker)
             } else {
@@ -76,6 +79,24 @@ extension Workspace {
             loadByHand(symbol, into: chart, broker: broker)
             selectedChartID = id
         }
+    }
+
+    /// Where to show a stock the grid never showed (or a forex pair it showed on another list): the
+    /// Forex list for a pair; else the list that has it now, the grid's own first, then the others in
+    /// their order, in its row's cell (the 6th chart's for a row past the grid). Nil when no list has it.
+    private func listPlace(of symbol: String, broker: Broker) -> GridPlace? {
+        let gridKind = gridScan?.kind ?? .gainers
+        var rows: [ScannerKind: [String]] = [:]
+        for (panel, kind) in shownLists { if let symbols = broker.scans[panel]?.symbols { rows[kind] = symbols } }
+        // The grid's own scan has the most rows.
+        if let symbols = broker.scans[MainGrid.scannerOwner]?.symbols { rows[gridKind] = symbols }
+        func place(_ kind: ScannerKind) -> GridPlace {
+            let row = rows[kind]?.firstIndex(of: symbol) ?? 5
+            return GridPlace(list: kind.rawValue, cell: row < mainCells.count ? row : 5, kept: 0)
+        }
+        if ForexPair.isForex(symbol) { return place(.forex) }
+        let kind = ([gridKind] + ScannerKind.allCases).first { $0 != .forex && rows[$0]?.contains(symbol) == true }
+        return kind.map(place)
     }
 
     /// The grid has followed its list: a double-click waiting for it (see `showChart`) shows its stock.

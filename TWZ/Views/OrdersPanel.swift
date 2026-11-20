@@ -26,7 +26,7 @@
 //  order shortcut has a symbol to act on until a chart is clicked again.
 //  Double-clicking a position (real or what-if), an order or a round trip selects the chart showing its
 //  stock; with none, the grid goes back to where it last showed it, its list and cell, rather than
-//  replacing a chart on screen (see `Workspace.showChart`).
+//  replacing a chart on screen, or to the list that has it now, a forex pair's Forex (see `Workspace.showChart`).
 //
 
 import SwiftUI
