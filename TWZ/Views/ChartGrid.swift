@@ -243,9 +243,7 @@ extension Workspace {
     /// ⇧-clicking a scale button in the top bar: the selected chart's view, saved under `slot`; false
     /// with no chart selected.
     func saveScale(_ slot: Int) -> Bool {
-        guard slot != ChartScale.defaultSlot, isChartSelected, let chart = chart(id: selectedChartID), !chart.symbol.isEmpty else {
-            return false
-        }
+        guard isChartSelected, let chart = chart(id: selectedChartID), !chart.symbol.isEmpty else { return false }
         chartScales[slot] = ChartScale(of: chart)
         activeScale = slot
         return true
@@ -260,11 +258,9 @@ extension Workspace {
         return true
     }
 
-    /// What scale button `slot` gives the charts: 5's default view, or the scale saved under it.
-    func gridScale(_ slot: Int?) -> GridScale? {
-        guard let slot else { return nil }
-        if slot == ChartScale.defaultSlot { return .defaultView }
-        return chartScales[slot].map(GridScale.saved)
+    /// The scale saved under button `slot`, if any.
+    func gridScale(_ slot: Int?) -> ChartScale? {
+        slot.flatMap { chartScales[$0] }
     }
 
     /// ⌥0: every other chart in the grid takes `source`'s view: as much time on screen (as many bars on
@@ -310,8 +306,6 @@ struct ChartScale: Codable, Equatable {
     static let storageKey = "chartScales"
     static let activeKey = "activeChartScale"
     static let slots = [1, 2, 3, 4, 5]
-    /// The default view, never saved over (see `GridScale.defaultView`).
-    static let defaultSlot = 5
 
     init(of chart: ChartModel) {
         timeframe = chart.timeframe
@@ -332,22 +326,6 @@ struct ChartScale: Codable, Equatable {
     /// Bars of one timeframe in the other's; daily bars count as they are.
     static func barRatio(from: Timeframe, to: Timeframe) -> Double {
         from.barSeconds.flatMap { s in to.barSeconds.map { s / $0 } } ?? 1
-    }
-}
-
-/// What a scale button gives the charts: a saved scale, or 5's default view: the grid's default zoom
-/// (its Zoom slider) at the latest bars, prices fitted to them, as right-clicking each chart would.
-enum GridScale: Equatable {
-    case saved(ChartScale)
-    case defaultView
-
-    func apply(to chart: ChartModel) {
-        switch self {
-        case .saved(let scale): scale.apply(to: chart)
-        case .defaultView:
-            chart.visibleBars = chart.defaultVisibleBars
-            chart.place = ChartModel.Place()
-        }
     }
 }
 

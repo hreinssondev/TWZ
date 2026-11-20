@@ -232,7 +232,7 @@ private struct TradingSettings: View {
             + "Top Gainers (M or A), Forex"),
         ("⌥1 2 3 4 5", "Every chart's timeframe: 1m / 5m / 15m / 1h / D"),
         ("⌥0  /  ⇧A", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes); ⇧A not while typing"),
-        ("1 2 3 4 5 (top bar)", "Click: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists and timeframes change until it's clicked again or Reset. ⇧-click on 1–4: save the selected chart's view as it. 5 is the default view (the Zoom slider's zoom at the latest bars) and can't be saved over"),
+        ("1 2 3 4 5 (top bar)", "Click: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists and timeframes change until it's clicked again or Reset. ⇧-click: save the selected chart's view as it"),
         ("Own shortcut", "Send that hotkey (set in the hotkey editor)"),
     ]
 

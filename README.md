@@ -18,9 +18,9 @@ management in one window built for quick entries and exits.
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
   as you scroll back; ⇧-swipe moves the top bar's Zoom slider, zooming every chart; ⌥0 or ⇧A gives every
-  chart the selected one's zoom, place and price scale; ⇧-clicking 1–4 in the top bar saves it as a scale,
+  chart the selected one's zoom, place and price scale; ⇧-clicking 1–5 in the top bar saves it as a scale,
   and clicking one gives it to every chart, also as lists and timeframes change, until it's clicked
-  again; 5 is the default view; kept across relaunches), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D; each timeframe
+  again; kept across relaunches), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D; each timeframe
   keeps its own zoom, and each stock where its view was left, also after switching lists or a
   relaunch, until Reset or a right-click on the chart;
   the bars a chart showed, on every timeframe, stay in memory, so coming back to them shows at once),
