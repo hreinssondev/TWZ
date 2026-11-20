@@ -266,6 +266,7 @@ struct CandleChart: View {
     private func setScrollBack(_ value: Double) {
         let maxBack = max(0, Double(chart.bars.count) - 10)
         chart.scrollBack = min(maxBack, max(-chart.visibleBars / 2, value))
+        chart.adjustedByHand = true
     }
 
     /// Positive points move the content right (revealing older bars).
@@ -288,10 +289,13 @@ struct CandleChart: View {
     /// Stretches (factor < 1) or squeezes (> 1) the price axis around the middle of the view.
     private func scalePrices(by factor: Double) {
         chart.priceScale = min(20, max(0.05, chart.priceScale * factor))
+        chart.adjustedByHand = true
     }
 
-    /// Latest bars at the right edge, default zoom, price range fitted to the bars again.
+    /// Latest bars at the right edge, default zoom, price range fitted to the bars again; no longer
+    /// adjusted by hand, so scales apply to it again.
     private func resetView() {
+        chart.adjustedByHand = false
         chart.scrollBack = 0
         chart.visibleBars = chart.defaultVisibleBars
         chart.priceShift = 0

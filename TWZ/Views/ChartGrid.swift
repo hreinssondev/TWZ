@@ -76,7 +76,7 @@ struct ChartGrid: View {
             broker.gridScale = workspace.gridScale(workspace.activeScale)
             broker.gridZoomOverride = workspace.manualZoom
             if let scale = broker.gridScale {
-                for chart in workspace.mainCharts {
+                for chart in workspace.mainCharts where !chart.adjustedByHand {
                     scale.apply(to: chart)
                     if let manual = workspace.manualZoom { chart.visibleBars = manual }
                 }
@@ -257,37 +257,51 @@ extension Workspace {
         return true
     }
 
-    /// Clicking a scale button: every chart in the grid takes the view saved under `slot`, and so does
-    /// every one loading a stock or timeframe from then on (see `activeScale`); false while none is.
-    func applyScale(_ slot: Int) -> Bool {
+    /// Every chart in the grid takes the view saved under `slot`, but those adjusted by hand when
+    /// `sparingAdjusted` (see `ChartModel.adjustedByHand`), and so does every one loading a stock or
+    /// timeframe from then on (see `activeScale`); false while none is.
+    func applyScale(_ slot: Int, sparingAdjusted: Bool) -> Bool {
         guard let scale = gridScale(slot) else { return false }
-        for chart in mainCells.compactMap(chart(id:)) where !chart.symbol.isEmpty { scale.apply(to: chart) }
+        for chart in mainCells.compactMap(chart(id:)) where !chart.symbol.isEmpty && !(sparingAdjusted && chart.adjustedByHand) {
+            scale.apply(to: chart)
+        }
         activeScale = slot
         return true
     }
 
-    /// Clicking scale button `slot` (`byClick`), or ⇧ and its number: lit, it goes off; otherwise every
-    /// chart takes it and it lights (see `applyScale`). A click puts every chart at the scale's own zoom,
-    /// dropping the zoom set by hand (and on the lit scale, does that rather than turn it off); ⇧ and the
-    /// number keeps the zoom set by hand (see `manualZoom`). Says which in the status line; beeps with
-    /// nothing saved.
+    /// Clicking scale button `slot` (`byClick`), or ⇧ and its number: lit, it goes off; otherwise the
+    /// charts take it and it lights (see `applyScale`).
+    /// A click resets every chart to the scale, its own zoom included: the zoom set by hand
+    /// (`manualZoom`) and the charts adjusted by hand (`ChartModel.adjustedByHand`, also those of stocks
+    /// not on screen) are dropped; on the lit scale, it does that rather than turn it off while there's
+    /// anything to drop. ⇧ and the number leaves both: charts adjusted by hand stay as they are, and the
+    /// others take the scale at the zoom set by hand. Says which in the status line; beeps with nothing
+    /// saved.
     func pickScale(_ slot: Int, byClick: Bool, broker: Broker) {
-        if activeScale == slot, !byClick || manualZoom == nil {
+        let shown = mainCells.compactMap(chart(id:)).filter { !$0.symbol.isEmpty }
+        let anyByHand = manualZoom != nil || shown.contains(where: \.adjustedByHand)
+        if activeScale == slot, !byClick || !anyByHand {
             // Lit: off again, so charts keep their own views as stocks and timeframes change.
             activeScale = nil
             broker.say("Scale \(slot) off: charts keep their own views")
-        } else if applyScale(slot) {
-            if byClick {
-                manualZoom = nil
-            } else if let manualZoom {
-                for chart in mainCells.compactMap(chart(id:)) where !chart.symbol.isEmpty { chart.visibleBars = manualZoom }
-            }
-            broker.say("Scale \(slot) on every chart, also as lists and timeframes change (pick it again to turn it off)"
-                       + (!byClick && manualZoom != nil ? ", at the zoom set by hand" : ""))
-        } else {
+            return
+        }
+        if byClick, gridScale(slot) != nil {
+            manualZoom = nil
+            broker.forgetChartAdjustments(of: mainCharts)
+        }
+        guard applyScale(slot, sparingAdjusted: !byClick) else {
             NSSound.beep()
             broker.say("Nothing saved as scale \(slot) yet: ⇧-click its number in the top bar to save the selected chart's view")
+            return
         }
+        if !byClick, let manualZoom {
+            for chart in shown where !chart.adjustedByHand { chart.visibleBars = manualZoom }
+        }
+        let spared = byClick ? 0 : shown.filter(\.adjustedByHand).count
+        broker.say("Scale \(slot) on every chart, also as lists and timeframes change (pick it again to turn it off)"
+                   + (!byClick && manualZoom != nil ? ", at the zoom set by hand" : "")
+                   + (spared > 0 ? "; \(spared) chart\(spared == 1 ? "" : "s") adjusted by hand kept as \(spared == 1 ? "it is" : "they are")" : ""))
     }
 
     /// The scale saved under button `slot`, if any.
@@ -316,6 +330,7 @@ extension Workspace {
             }
             chart.priceShift = source.priceShift
             chart.priceScale = source.priceScale
+            chart.adjustedByHand = false
         }
     }
 

@@ -50,6 +50,10 @@ final class ChartModel: Identifiable {
     /// as it was left; those not in it start at the default zoom. Reset clears it.
     /// Where the chart was left on the stock and timeframe it goes to comes first (see `ChartViews`).
     @ObservationIgnored var zooms: [Timeframe: Double] = [:]
+    /// Zoomed, panned or its prices moved by hand on what it shows: a lit scale picked with ⇧1–5, or one
+    /// that charts take as they load, leaves it as it is (see `ChartViews`). A click on a scale's number,
+    /// Reset, or a right-click / double-click on it clears it.
+    @ObservationIgnored var adjustedByHand = false
     /// The Charts window's charts (see `Workspace.secondaryCharts`) have ids from this on.
     static let chartsWindowFirstID = 100
     var inChartsWindow: Bool { id >= Self.chartsWindowFirstID }

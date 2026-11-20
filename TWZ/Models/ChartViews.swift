@@ -25,6 +25,8 @@ struct ChartViews: Codable {
         var zoom: Double?
         var place: ChartModel.Place
         var kept: Int
+        /// Adjusted by hand: it beats a lit scale (see `ChartModel.adjustedByHand`).
+        var manual: Bool?
     }
 
     /// Views kept at most; past that, the one kept longest ago goes.
@@ -34,16 +36,21 @@ struct ChartViews: Codable {
     private var views: [Key: View] = [:]
     private var keeps = 0
 
-    mutating func keep(zoom: Double, place: ChartModel.Place, for key: Key) {
+    mutating func keep(zoom: Double, place: ChartModel.Place, manual: Bool, for key: Key) {
         guard !key.bars.symbol.isEmpty else { return }
         keeps += 1
-        views[key] = View(zoom: zoom, place: place, kept: keeps)
+        views[key] = View(zoom: zoom, place: place, kept: keeps, manual: manual ? true : nil)
         if views.count > Self.capacity, let oldest = views.min(by: { $0.value.kept < $1.value.kept })?.key {
             views[oldest] = nil
         }
     }
 
     func view(for key: Key) -> View? { views[key] }
+
+    /// A click on a scale's number: no view of the window counts as adjusted by hand any more.
+    mutating func forgetManual(inChartsWindow: Bool) {
+        for key in views.keys where key.inChartsWindow == inChartsWindow { views[key]?.manual = nil }
+    }
 
     /// Reset: the window's charts start over at the latest bars.
     mutating func forget(inChartsWindow: Bool) {

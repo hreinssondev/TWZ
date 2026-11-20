@@ -183,14 +183,23 @@ final class Broker {
                                                   inChartsWindow: chart.inChartsWindow))
             chart.visibleBars = view?.zoom ?? zoom
             chart.place = view?.place ?? ChartModel.Place()
+            chart.adjustedByHand = view?.manual == true
         }
+    }
+
+    /// A click on a scale's number: these charts' window has no view adjusted by hand any more.
+    func forgetChartAdjustments(of charts: [ChartModel]) {
+        for chart in charts { chart.adjustedByHand = false }
+        for window in Set(charts.map(\.inChartsWindow)) { chartViews.forgetManual(inChartsWindow: window) }
+        chartViewsChanged()
     }
 
     /// Quitting: keeps where every chart is, then saves it all.
     func saveChartViews() {
         for chart in charts where !chart.symbol.isEmpty {
             let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
-            chartViews.keep(zoom: chart.visibleBars, place: chart.place, for: .init(bars: key, inChartsWindow: chart.inChartsWindow))
+            chartViews.keep(zoom: chart.visibleBars, place: chart.place, manual: chart.adjustedByHand,
+                            for: .init(bars: key, inChartsWindow: chart.inChartsWindow))
         }
         chartViewsSave?.cancel()
         chartViews.save()
@@ -291,17 +300,20 @@ final class Broker {
         if previous != key {
             // A timeframe switch has already kept the zoom it leaves in `zooms`.
             let zoom = previous.timeframe == key.timeframe ? chart.visibleBars : chart.zooms[previous.timeframe] ?? chart.visibleBars
-            chartViews.keep(zoom: zoom, place: chart.place, for: .init(bars: previous, inChartsWindow: window))
+            chartViews.keep(zoom: zoom, place: chart.place, manual: chart.adjustedByHand,
+                            for: .init(bars: previous, inChartsWindow: window))
             chartViewsChanged()
             view = chartViews.view(for: .init(bars: key, inChartsWindow: window))
         }
+        if previous != key { chart.adjustedByHand = view?.manual == true }
         if let view {
             if let zoom = view.zoom { chart.visibleBars = zoom }
             chart.place = view.place
         } else if previous.timeframe != key.timeframe {
             chart.place = ChartModel.Place()
         }
-        if previous != key, !chart.inChartsWindow, let gridScale {
+        // A lit scale, but not over a view adjusted by hand.
+        if previous != key, !chart.inChartsWindow, !chart.adjustedByHand, let gridScale {
             gridScale.apply(to: chart)
             if let gridZoomOverride { chart.visibleBars = gridZoomOverride }
         }

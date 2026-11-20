@@ -20,7 +20,8 @@ management in one window built for quick entries and exits.
   as you scroll back; ⇧-swipe moves the top bar's Zoom slider, zooming every chart; ⌥0 or ⇧A gives every
   chart the selected one's zoom, place and price scale; ⇧-clicking 1–5 in the top bar saves it as a scale,
   and clicking one (or ⇧ and its number) gives it to every chart, also as lists and timeframes change, until it's clicked
-  again; a zoom set by hand trumps its zoom until a number is clicked; kept across relaunches), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D; each timeframe
+  again; a zoom set by hand, or a chart zoomed or panned by hand (per stock and timeframe), trumps
+  it until a number is clicked; kept across relaunches), 1m to daily (⌥1–5 switches every chart: 1m, 5m, 15m, 1h, D; each timeframe
   keeps its own zoom, and each stock where its view was left, also after switching lists or a
   relaunch, until Reset or a right-click on the chart;
   the bars a chart showed, on every timeframe, stay in memory, so coming back to them shows at once),
