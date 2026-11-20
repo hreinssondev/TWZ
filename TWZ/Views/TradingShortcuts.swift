@@ -12,7 +12,7 @@
 //  `Workspace.fastChartIDs`); ⌘A, like ⌥<,
 //  cancels every order in the symbol, stop loss and take profit included; ⌘⌫ does too, then closes
 //  the whole position at market; both also remove the symbol's ⌃-click what-if, and ⌘⇧⌫ removes just that; ⌘Z, like ⌥Z, cancels the last order placed; ⌥⇧ and a color's letter
-//  (R, G, B, Y, O, P, M, W, K black, I pink, N brown, F turquoise) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
+//  (R, G, B, Y, O, P, M, W, K khaki, I pink, N brown, F turquoise) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  ⌥⇧1 / 2 / 3 / 4 buys a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 / $3,000 /
