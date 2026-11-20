@@ -22,8 +22,9 @@
 //  until it gets a new gainer, Reset or the account bar's switch. The Zoom slider sets every chart's
 //  default zoom, and Reset puts every chart's view back to it (as double-clicking a chart does).
 //  Each chart keeps its zoom per timeframe: switching back to one zooms it as it was left, until the
-//  Zoom slider or Reset (see `ChartModel.zooms`); while it stays on its stock, where its view was on it
-//  too, until Reset (see `ChartModel.places`).
+//  Zoom slider or Reset (see `ChartModel.zooms`). Where a chart was left on a stock and timeframe, zoom
+//  and place, is kept too: a chart coming back to them, after a list switched and back, say, picks up
+//  there, until Reset (see `ChartViews`).
 //  A grip at every crossing of four charts moves that column and row line together (see `SplitGrid`).
 //
 
@@ -69,7 +70,7 @@ struct ChartGrid: View {
             ChartPane(chart: chart)
         }
         .onAppear {
-            workspace.setZoom(zoom, of: workspace.mainCharts)
+            workspace.setZoom(zoom, of: workspace.mainCharts, broker: broker)
             workspace.arrangeMainGrid(columns: columns, rows: rows, gainers: gainers, broker: broker)
             broker.setScanner(scan, owner: MainGrid.scannerOwner)
             follow()
@@ -86,9 +87,9 @@ struct ChartGrid: View {
         .onChange(of: workspace.gainerResets) {
             follow()
             workspace.setMainTimeframe(timeframe, broker: broker)
-            workspace.resetViews(of: workspace.mainCharts, zoom: zoom)
+            workspace.resetViews(of: workspace.mainCharts, zoom: zoom, broker: broker)
         }
-        .onChange(of: zoom) { _, new in workspace.setZoom(new, of: workspace.mainCharts) }
+        .onChange(of: zoom) { _, new in workspace.setZoom(new, of: workspace.mainCharts, broker: broker) }
         .onChange(of: timeframe) { _, new in workspace.setMainTimeframe(new, broker: broker) }
         .onChange(of: workspace.layoutLoads) {
             columnSplits = Self.splits("mainChartColumnSplits", legacyKey: "chartColumnSplit")

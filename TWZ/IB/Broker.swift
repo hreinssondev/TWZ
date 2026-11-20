@@ -160,6 +160,17 @@ final class Broker {
     /// What each chart's bars are of: the symbol and timeframe it last loaded.
     @ObservationIgnored private var loadedBars: [Int: BarCache.Key] = [:]
     @ObservationIgnored private var barCache = BarCache()
+    @ObservationIgnored private var chartViews = ChartViews()
+
+    /// A Zoom slider set these charts' zoom: the zooms their window's charts were left at go too.
+    func forgetChartZooms(of charts: [ChartModel]) {
+        for window in Set(charts.map(\.inChartsWindow)) { chartViews.forgetZooms(inChartsWindow: window) }
+    }
+
+    /// Reset: these charts' window forgets where its charts were left (see `ChartViews`).
+    func forgetChartViews(of charts: [ChartModel]) {
+        for window in Set(charts.map(\.inChartsWindow)) { chartViews.forget(inChartsWindow: window) }
+    }
 
     /// What the bars kept for coming back to a timeframe or stock take (Settings › Trading shows it).
     var barCacheUsage: BarCache.Usage { barCache.usage }
@@ -237,15 +248,19 @@ final class Broker {
         let seed = barCache.bars(for: key, previous: previous, previousBars: shown, live: live)
         chart.bars = seed
         chart.error = nil
-        // Another timeframe of the same stock: the view goes where it was left on it, and its place on
-        // the one it leaves is kept. Another stock starts at the latest bars.
-        if previous.symbol == key.symbol, previous.timeframe != key.timeframe {
-            chart.places[previous.timeframe] = chart.place
-            chart.place = chart.places.removeValue(forKey: key.timeframe) ?? ChartModel.Place()
-        } else {
-            chart.places = [:]
-            chart.place = ChartModel.Place()
+        // Where it was left on the stock and timeframe it leaves is kept; where a chart of its window was
+        // left on the ones it goes to, it goes back to (see `ChartViews`). Otherwise: the zoom the
+        // timeframe switch left (`ChartModel.zooms`), at the latest bars.
+        let window = chart.inChartsWindow
+        var view: ChartViews.View?
+        if previous != key {
+            // A timeframe switch has already kept the zoom it leaves in `zooms`.
+            let zoom = previous.timeframe == key.timeframe ? chart.visibleBars : chart.zooms[previous.timeframe] ?? chart.visibleBars
+            chartViews.keep(zoom: zoom, place: chart.place, for: .init(bars: previous, inChartsWindow: window))
+            view = chartViews.view(for: .init(bars: key, inChartsWindow: window))
         }
+        if let zoom = view?.zoom { chart.visibleBars = zoom }
+        chart.place = view?.place ?? ChartModel.Place()
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
         engine.perform { $0.loadChart(spec, generation: generation) }

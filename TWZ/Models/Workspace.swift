@@ -48,10 +48,11 @@ final class ChartModel: Identifiable {
     var defaultVisibleBars: Double
     /// Bars on screen on the timeframes the chart was switched away from, so switching back zooms it
     /// as it was left; those not in it start at the default zoom. The Zoom sliders and Reset clear it.
+    /// Where the chart was left on the stock and timeframe it goes to comes first (see `ChartViews`).
     @ObservationIgnored var zooms: [Timeframe: Double] = [:]
-    /// Where the view was on the timeframes the chart was switched away from, in the stock it shows,
-    /// so switching back puts it there (see `Broker.loadChart`); a new stock starts at the latest bars.
-    @ObservationIgnored var places: [Timeframe: Place] = [:]
+    /// The Charts window's charts (see `Workspace.secondaryCharts`) have ids from this on.
+    static let chartsWindowFirstID = 100
+    var inChartsWindow: Bool { id >= Self.chartsWindowFirstID }
 
     /// The view's place: how far back from the latest bar, and moved and zoomed up or down.
     struct Place {
@@ -249,7 +250,7 @@ final class Workspace {
         let secondaryTimeframe = defaults.string(forKey: SecondaryCharts.timeframeKey)
             .flatMap(Timeframe.init(rawValue:)) ?? .m1
         secondaryCharts = (0..<SecondaryCharts.count).map { i in
-            ChartModel(id: 100 + i, symbol: "", timeframe: secondaryTimeframe)
+            ChartModel(id: ChartModel.chartsWindowFirstID + i, symbol: "", timeframe: secondaryTimeframe)
         }
 
         if let data = defaults.data(forKey: "hotkeys"),

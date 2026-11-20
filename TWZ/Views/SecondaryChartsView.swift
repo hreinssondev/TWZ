@@ -76,9 +76,10 @@ extension Workspace {
         }
     }
 
-    /// Sets the charts' default zoom and zooms them to it, on every timeframe (the zooms they kept for
-    /// their other timeframes are dropped).
-    func setZoom(_ zoom: Double, of charts: [ChartModel]) {
+    /// Sets the charts' default zoom and zooms them to it, on every timeframe and stock (the zooms they
+    /// were left at are dropped).
+    func setZoom(_ zoom: Double, of charts: [ChartModel], broker: Broker) {
+        broker.forgetChartZooms(of: charts)
         for chart in charts {
             chart.zooms = [:]
             if chart.defaultVisibleBars != zoom || chart.visibleBars != zoom {
@@ -90,9 +91,9 @@ extension Workspace {
 
     /// Puts the charts' view back to `zoom`, as double-clicking one does: latest bars at the right
     /// edge, price range fitted to the bars again.
-    func resetViews(of charts: [ChartModel], zoom: Double) {
-        setZoom(zoom, of: charts)
-        for chart in charts { chart.places = [:] }
+    func resetViews(of charts: [ChartModel], zoom: Double, broker: Broker) {
+        setZoom(zoom, of: charts, broker: broker)
+        broker.forgetChartViews(of: charts)
         for chart in charts where chart.scrollBack != 0 || chart.priceShift != 0 || chart.priceScale != 1 {
             chart.scrollBack = 0
             chart.priceShift = 0
@@ -240,7 +241,7 @@ struct SecondaryChartsView: View {
 
     /// Sets every chart's default zoom for the current view and zooms them to it.
     private func applyZoom() {
-        workspace.setZoom(layout == .all ? allZoom : customZoom, of: workspace.secondaryCharts)
+        workspace.setZoom(layout == .all ? allZoom : customZoom, of: workspace.secondaryCharts, broker: broker)
     }
 
     private func start() {
