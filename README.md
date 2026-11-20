@@ -18,7 +18,7 @@ management in one window built for quick entries and exits.
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
   as you scroll back), 1m to daily, pre-market, after hours and overnight shading, VWAP and SMA 9 / 21,
-  volume, tick-by-tick trades on the selected chart. ⌥1–6 (or ⌘1–6 while the order shortcuts are off) switches every chart (1m, 5m, 15m, 30m, 1h, D),
+  volume, tick-by-tick trades on the selected chart. ⌥1–6 or ⌥⇧1–6 (or ⌘1–6 while the order shortcuts are off) switches every chart (1m, 5m, 15m, 30m, 1h, D),
   keeping each chart's view: the same time on screen, only the candles change (or, with that off in
   Settings › Appearance, each timeframe going back to its own zoom and place).
 - **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the
@@ -44,7 +44,7 @@ management in one window built for quick entries and exits.
   the mid; ⌘⌫ cancels the symbol's orders and closes the position at market. The shortcuts that send
   orders work only after ⌘ and the Globe (fn) key turn them on (again: off; off at every launch, KEYS
   ON in the top bar); while on, ⌘1–9 are free for hotkeys instead of switching timeframes.
-- **What-if trades**: ⌥⇧1–4 buys (⌃⌥⇧1–4 shorts) $1,000 / $2,000 / $3,000 / 85% of the buying power
+- **What-if trades**: ⌃⌥⇧1–4 shorts $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB; on the chart, an arrow, green for a long
   and red for a short, ringed in pink, points at each of its fills. It shows like a position, its symbol in pink,
   with its P/L and IB's commission estimate, and ⌃-click gives it a simulated stop loss or take profit.

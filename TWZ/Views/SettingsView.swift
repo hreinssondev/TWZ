@@ -228,13 +228,12 @@ private struct TradingSettings: View {
         ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market; removes its ⌃-click what-if too"),
         ("⌘⇧⌫", "Remove the chart's ⌃-click what-if (so does double-clicking anywhere on the chart)"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
-        ("⌥⇧1 2 3 4", "What-if trade: buy $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
+        ("⌃⌥⇧1 2 3 4", "What-if trade: sell (short) $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
             + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),
-        ("⌃⌥⇧1 2 3 4", "The same what-if trade, selling (short)"),
         ("⌘⇧S L H A F", "Show that list and load it into the chart grid: Most Active $, Top Losers, AH Gainers, "
             + "Top Gainers, Forex (S, H and L wait a moment for a second letter)"),
         ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red); Mode hotkeys buy while LONG, sell short while SHORT"),
-        ("⌥ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D (also ⌘ 1–6 with KEYS off)"),
+        ("⌥ or ⌥⇧ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D (also ⌘ 1–6 with KEYS off)"),
         ("⌘ 1–9 with KEYS ON", "Free for hotkeys: give a hotkey button one as its shortcut to send its order"),
         ("⌘⌥ 1–9", "A Mode order (buy while LONG, short while SHORT) of 10–90% of the buying power IB allows in the stock: limit at the mid, no offset, outside regular hours too (with KEYS ON)"),
         ("⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),

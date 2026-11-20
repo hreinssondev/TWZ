@@ -18,9 +18,9 @@
 //  (R, G, B, Y, O, P, M, W, K khaki, I pink, N brown, F turquoise, L lime) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
-//  ⌥⇧1 / 2 / 3 / 4 buys a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 / $3,000 /
-//  85% of the buying power in the selected chart's symbol; ⌃⌥⇧1–4 sells (shorts) the same. Matched by
-//  key, number row or keypad, whatever the keyboard layout types there.
+//  ⌃⌥⇧1 / 2 / 3 / 4 sells (shorts) a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 /
+//  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 no longer buys one: ⌥⇧ and
+//  numbers are timeframes). Matched by key, number row or keypad, whatever the keyboard layout types there.
 //  ⌘⇧R does what the top bar's Reset does; ⌘R puts the charts back to the lit number in the top bar,
 //  as saved (see `Workspace.reapplyNumber`).
 //  ⌘⇧ with two letters held together switches the trade mode (see `TradeMode`): S + H SHORT, L + O LONG;
@@ -29,7 +29,7 @@
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  ⌘⌥ and 1–9 sends a Mode order of 10–90% of the buying power at the mid (see `OrderKeys`), with the
 //  order shortcuts on.
-//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌘1–6 while the order shortcuts are off; on, ⌘1–9 are for hotkeys) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
+//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off; on, ⌘1–9 are for hotkeys) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
 //  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field does what clicking
@@ -115,14 +115,13 @@ struct TradingShortcuts: ViewModifier {
                         broker.run(workspace.activeHotkey, symbol: workspace.targetSymbol)
                         return nil
                     }
-                    // ⌥⇧1–4 buys, ⌃⌥⇧1–4 sells a what-if trade in the selected chart's symbol.
-                    if inMainWindow, modifiers == [.option, .shift] || modifiers == [.control, .option, .shift],
-                       let size = SimSize(keyCode: event.keyCode) {
+                    // ⌃⌥⇧1–4 sells a what-if trade in the selected chart's symbol (⌥⇧ and numbers are timeframes).
+                    if inMainWindow, modifiers == [.control, .option, .shift], let size = SimSize(keyCode: event.keyCode) {
                         let symbol = workspace.targetSymbol
                         if symbol.isEmpty {
                             NSSound.beep()
                         } else {
-                            broker.placeSim(modifiers.contains(.control) ? "SELL" : "BUY", size, symbol: symbol)
+                            broker.placeSim("SELL", size, symbol: symbol)
                         }
                         return nil
                     }
@@ -216,8 +215,9 @@ struct TradingShortcuts: ViewModifier {
                         broker.say("\(KeyShortcut(event).display) has no hotkey (KEYS ON: ⌘1–9 are for hotkeys)")
                         return nil
                     }
-                    // ⌥1–6, or ⌘1–6 while the order shortcuts are off: the account bar's timeframe.
-                    if modifiers == .option || modifiers == .command, inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
+                    // ⌥1–6 or ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off: the account bar's timeframe.
+                    if modifiers == .option || modifiers == [.option, .shift] || modifiers == .command, inMainWindow,
+                       let timeframe = Timeframe(keyCode: event.keyCode) {
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
                         workspace.setMainTimeframe(timeframe, broker: broker)
                         return nil
@@ -348,11 +348,11 @@ extension KeyShortcut {
         if command, option, !shift, !control, let number = OrderKeys.number(keyCode: keyCode) {
             return "\(display) sends a MID order of \(number * 10)% of the buying power"
         }
-        if option, !shift, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
+        if option, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
             return "\(display) sets every chart to \(timeframe.rawValue)"
         }
-        if option, shift, !command, SimSize.keyCodes.contains(keyCode) {
-            return "\(display) \(control ? "sells" : "buys") a what-if trade"
+        if control, option, shift, !command, SimSize.keyCodes.contains(keyCode) {
+            return "\(display) sells a what-if trade"
         }
         return nil
     }
