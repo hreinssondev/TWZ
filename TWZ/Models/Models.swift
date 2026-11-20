@@ -540,7 +540,7 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
     }
 }
 
-nonisolated struct ScannerFilter: Codable, Equatable {
+nonisolated struct ScannerFilter: Codable, Hashable {
     var minPrice: Double? = 1
     var maxPrice: Double?
     var minVolume: Int? = 100_000

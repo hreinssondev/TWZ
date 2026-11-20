@@ -115,6 +115,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var phase = MarketSession.phase()
 
     private var scanSpecs: [String: ScanSpec] = [:]
+    /// Each list's latest rows, whichever owner scanned it, so a list switched back to shows them
+    /// while its own scan starts (see `setScanner`).
+    private var lastScans: [ScanKey: ScanResult] = [:]
     private var scanReqByOwner: [String: Int] = [:]
     private var scanOwnerByReq: [Int: String] = [:]
     private var closeKeyByReq: [Int: String] = [:]
@@ -871,7 +874,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard scanSpecs[owner] != spec else { return }
         stopScan(owner)
         scanSpecs[owner] = spec
-        scans[owner] = nil
+        // A list shown before (by any owner) shows its last rows until its own scan comes in.
+        scans[owner] = spec.flatMap { spec in
+            lastScans[ScanKey(spec)].map { ScanResult(symbols: Array($0.symbols.prefix(spec.rows)), updated: $0.updated) }
+        }
         syncForexList()
         startScan(owner)
     }
@@ -897,6 +903,17 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             false, Int.unset, "", "ALL",              // excludeConvertible, avgOptionVolume, settingPairs, stockType
             "", "",                                   // filter options, subscription options
         ])
+    }
+
+    /// A scan's list and filter, whatever its row count.
+    private struct ScanKey: Hashable {
+        var kind: ScannerKind
+        var filter: ScannerFilter
+
+        init(_ spec: ScanSpec) {
+            kind = spec.kind
+            filter = spec.filter
+        }
     }
 
     private func stopScan(_ owner: String) {
@@ -2706,6 +2723,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             i += stride
         }
         scans[owner] = ScanResult(symbols: symbols, updated: Date())
+        if let spec = scanSpecs[owner] { lastScans[ScanKey(spec)] = scans[owner] }
         if scanSpecs[owner]?.kind == .afterHours { requestSessionCloses(symbols) }
     }
 

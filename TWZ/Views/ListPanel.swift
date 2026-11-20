@@ -174,7 +174,8 @@ struct ListPanel: View {
             ?? (shown["list-single"] != nil ? "list-single" : "list-left")
         guard target == panelId else { return }
         let spec = ScanSpec(kind: kind, filter: workspace.scanFilter(panel: panelId, kind))
-        // A list just switched has no rows yet: the grid follows its own scan of the list as that comes in.
+        // A list just switched has no rows of its own yet: the grid follows its own scan of the list, which
+        // starts at the list's last rows if it was shown before (see `TradingEngine.setScanner`).
         let rows = scanner == kind ? symbols : []
         scanner = kind
         workspace.loadList(rows, scan: spec, timeframe: gridTimeframe, broker: broker)
