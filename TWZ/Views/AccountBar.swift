@@ -30,7 +30,9 @@ struct AccountBar: View {
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Capsule().fill(broker.isLivePort ? Color.red : Color.blue))
 
-                OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
+                TradeModeBadge()
+
+            OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
 
                 // Account values are in the base currency (NOK), shown as bare numbers.
                 HStack(spacing: 12) {
@@ -180,6 +182,20 @@ private struct ScaleButtons: View {
         } else {
             workspace.pickScale(slot, byClick: true, broker: broker)
         }
+    }
+}
+
+/// The trade mode Open hotkeys go by (see `TradeMode`): LONG in green, SHORT in red.
+private struct TradeModeBadge: View {
+    @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
+
+    var body: some View {
+        Text(mode == .long ? "LONG" : "SHORT")
+            .font(.system(size: 10, weight: .heavy))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(mode == .long ? Color.green.opacity(0.8) : Color.red.opacity(0.85)))
+            .help("Open hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O held together: LONG; with S and H: SHORT")
     }
 }
 

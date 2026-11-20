@@ -23,7 +23,9 @@
 //  key, number row or keypad, whatever the keyboard layout types there.
 //  ⌘⇧R does what the top bar's Reset does; ⌘R puts the charts back to the lit number in the top bar,
 //  as saved (see `Workspace.reapplyNumber`).
-//  ⌘⇧ and a list's letter (T or S Most Active $, L Top Losers, H AH Gainers, M or A Top Gainers, F Forex)
+//  ⌘⇧ with two letters held together switches the trade mode (see `TradeMode`): S + H SHORT, L + O LONG;
+//  S, H and L alone (lists' letters too) wait a moment for the other letter first.
+//  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌘1–6) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
@@ -44,11 +46,29 @@ struct TradingShortcuts: ViewModifier {
     @Environment(Workspace.self) private var workspace
     @State private var monitor: Any?
 
+    /// The two-letter ⌘⇧ shortcuts, by either letter's key: the other letter's, and the trade mode they
+    /// switch to. S + H SHORT, L + O LONG (by position, as on a US keyboard).
+    private static let chords: [UInt16: (partner: CGKeyCode, mode: TradeMode)] = [
+        1: (4, .short), 4: (1, .short),          // S, H
+        37: (31, .long), 31: (37, .long),        // L, O
+    ]
+    /// How long S, H or L alone wait for the other letter before showing their list.
+    private static let chordWait = 0.15
+    private static var pendingList: DispatchWorkItem?
+    /// Keys down now (by key code), from the key-down and key-up events seen.
+    private static var heldKeys: Set<UInt16> = []
+
     func body(content: Content) -> some View {
         content
             .onAppear {
                 guard monitor == nil else { return }
-                monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [broker, workspace] event in
+                monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [broker, workspace] event in
+                    // The letters held down, for the two-letter ⌘⇧ shortcuts.
+                    if event.type == .keyUp {
+                        Self.heldKeys.remove(event.keyCode)
+                        return event
+                    }
+                    if event.type == .flagsChanged, !event.modifierFlags.contains(.command) { Self.heldKeys.removeAll() }
                     if ShortcutRecorder.isRecording { return event }
                     // ⌘ and the Globe (fn) key, pressed in either order, turn the shortcuts that send orders on
                     // or off. The keys go on to the rest of the app either way.
@@ -114,6 +134,28 @@ struct TradingShortcuts: ViewModifier {
                     // ⌘⇧R: the top bar's Reset.
                     if inMainWindow, modifiers == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "r" {
                         workspace.resetToGainers()
+                        return nil
+                    }
+                    // ⌘⇧ with two letters held together: S + H the SHORT trade mode, L + O the LONG one (see
+                    // `TradeMode`). S, H and L alone are lists' letters too: those wait a moment for the other
+                    // letter before showing the list.
+                    if inMainWindow, modifiers == [.command, .shift], let chord = Self.chords[event.keyCode] {
+                        if event.isARepeat { return nil }
+                        let partnerHeld = Self.heldKeys.contains(chord.partner)
+                            || CGEventSource.keyState(.combinedSessionState, key: chord.partner)
+                        Self.heldKeys.insert(event.keyCode)
+                        if partnerHeld {
+                            Self.pendingList?.cancel()
+                            Self.pendingList = nil
+                            UserDefaults.standard.set(chord.mode.rawValue, forKey: TradeMode.storageKey)
+                            return nil
+                        }
+                        if let kind = ScannerKind.forShortcut(event.charactersIgnoringModifiers?.lowercased() ?? "") {
+                            Self.pendingList?.cancel()
+                            let show = DispatchWorkItem { workspace.listShortcut = Workspace.ListShortcut(kind: kind) }
+                            Self.pendingList = show
+                            DispatchQueue.main.asyncAfter(deadline: .now() + Self.chordWait, execute: show)
+                        }
                         return nil
                     }
                     // ⌘⇧ and a list's letter shows that list and loads it into the chart grid.
@@ -258,6 +300,9 @@ extension KeyShortcut {
         let k = key.lowercased()
         if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
             return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
+        }
+        if command, shift, !option, !control, k == "o" {
+            return "⌘⇧ with L and O held together switches to LONG"
         }
         if command, shift, !option, !control, k == "r" {
             return "⌘⇧R resets the chart grid, as the top bar's Reset"

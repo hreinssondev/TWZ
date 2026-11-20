@@ -1412,6 +1412,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
 
         switch hotkey.action {
+        case .open:
+            // Resolved to a buy or sell by the trade mode before it gets here (see `Broker.resolved`).
+            lastMessage = "\"\(hotkey.label)\" has no side, so no order was sent"
         case .cancelAll:
             cancelAllOrders()
         case .cancelSymbol:
@@ -1644,6 +1647,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                             outsideRth: hotkey.outsideRth, summary: "\(label) (\(note ?? hotkey.label))")
         }
         switch hotkey.action {
+        case .open:
+            lastMessage = "\"\(hotkey.label)\" has no side, so no order was sent"
         case .buy, .sell:
             let action = hotkey.action == .buy ? "BUY" : "SELL"
             let price = tickRounded(clickedPrice, for: symbol)

@@ -100,6 +100,18 @@ enum TimeframeSwitch {
     static var keepsView: Bool { UserDefaults.standard.object(forKey: keepViewKey) as? Bool ?? defaultKeepView }
 }
 
+/// Which way Open hotkeys go: LONG buys, SHORT sells short (see `Hotkey.Action.open`). ⌘⇧ with L and O
+/// held together switches to LONG, with S and H to SHORT; the top bar shows it. Saved, so it's as it
+/// was at the next launch.
+enum TradeMode: String {
+    case long, short
+    static let storageKey = "tradeMode"
+
+    static var current: TradeMode {
+        UserDefaults.standard.string(forKey: storageKey).flatMap(TradeMode.init(rawValue:)) ?? .long
+    }
+}
+
 /// The Positions column shows real positions or what-if trades (simulated, see `SimTrades.swift`),
 /// switched by clicking its header; the charts follow: trade arrows of the one shown (real ones with the
 /// top bar's Trades on), and the what-if trades' badge, stop loss / take profit lines, hover P/L and

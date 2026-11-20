@@ -349,6 +349,8 @@ nonisolated struct KeyShortcut: Codable, Hashable {
 
 nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     enum Action: String, Codable, CaseIterable, Identifiable {
+        /// Buys while the trade mode is LONG, sells (short) while it's SHORT (see `TradeMode`).
+        case open = "Open"
         case buy = "Buy"
         case sell = "Sell"
         case closeHalf = "Close 50%"
@@ -358,12 +360,13 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         case flattenAll = "Flatten All"
         var id: String { rawValue }
 
-        var needsSize: Bool { self == .buy || self == .sell }
+        var needsSize: Bool { self == .open || self == .buy || self == .sell }
         var placesOrder: Bool { self != .cancelSymbol && self != .cancelAll }
 
         /// Button color when the hotkey has no color of its own.
         var defaultColor: HotkeyColor {
             switch self {
+            case .open: .blue          // shown green while LONG, red while SHORT (see `HotkeyPanel`)
             case .buy: .green
             case .sell: .red
             case .closeHalf, .closeAll: .orange
@@ -462,7 +465,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     /// What a hotkey for these settings is called automatically, e.g. "Buy 100", "Sell 1000$" or "Buy 80% BP".
     static func autoLabel(action: Action, sizing: Sizing, amount: Double) -> String {
         switch action {
-        case .buy, .sell:
+        case .open, .buy, .sell:
             let n = amount.formatted(.number.grouping(.never).precision(.fractionLength(0...2)))
             return "\(action.rawValue) \(n)\(sizing.suffix)"
         case .closeHalf, .closeAll: return action.rawValue
@@ -477,7 +480,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     static func isAutoLabel(_ label: String, action: Action, sizing: Sizing, amount: Double) -> Bool {
         if label.trimmingCharacters(in: .whitespaces).isEmpty { return true }
         if label == autoLabel(action: action, sizing: sizing, amount: amount) { return true }
-        if (action == .buy || action == .sell), sizing == .dollars, amount >= 1_000,
+        if (action == .open || action == .buy || action == .sell), sizing == .dollars, amount >= 1_000,
            amount.truncatingRemainder(dividingBy: 1_000) == 0 {
             return label == "\(action.rawValue) $\(Int(amount / 1_000))K"
         }

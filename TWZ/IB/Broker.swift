@@ -492,7 +492,16 @@ final class Broker {
     }
 
     func run(_ hotkey: Hotkey, symbol: String) {
+        let hotkey = Self.resolved(hotkey)
         order { $0.run(hotkey, symbol: symbol) }
+    }
+
+    /// An Open hotkey goes the trade mode's way: a buy while LONG, a sell (short) while SHORT.
+    static func resolved(_ hotkey: Hotkey) -> Hotkey {
+        guard hotkey.action == .open else { return hotkey }
+        var hotkey = hotkey
+        hotkey.action = TradeMode.current == .short ? .sell : .buy
+        return hotkey
     }
 
     /// Alt-click on a chart with no hotkey selected: a DAY buy for `nok` worth of `symbol` at the clicked price.
@@ -507,6 +516,7 @@ final class Broker {
 
     /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price.
     func run(_ hotkey: Hotkey, symbol: String, at clickedPrice: Double) {
+        let hotkey = Self.resolved(hotkey)
         order { $0.run(hotkey, symbol: symbol, at: clickedPrice) }
     }
 

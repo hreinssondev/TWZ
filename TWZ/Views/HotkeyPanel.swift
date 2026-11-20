@@ -115,6 +115,17 @@ struct HotkeyPanel: View {
 private extension Hotkey {
     var tint: Color { (color ?? action.defaultColor).color }
 
+    /// An Open hotkey as the trade mode makes it: "Long …", green, while LONG; "Short …", red, while SHORT.
+    func shown(in mode: TradeMode) -> Hotkey {
+        guard action == .open else { return self }
+        var hotkey = self
+        if hotkey.label.hasPrefix(Action.open.rawValue) {
+            hotkey.label = (mode == .long ? "Long" : "Short") + hotkey.label.dropFirst(Action.open.rawValue.count)
+        }
+        if hotkey.color == nil { hotkey.color = mode == .long ? .green : .red }
+        return hotkey
+    }
+
     /// One-line label for buttons too short for a subtitle: the price it sends at and the size,
     /// e.g. "Mid 1000$", "Ask 100", "MKT 500" or "Ask 80% BP"; other actions keep their label.
     var compactLabel: String {
@@ -149,6 +160,7 @@ private extension Hotkey {
 
 private struct HotkeyButton: View {
     let hotkey: Hotkey
+    @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
     var height: CGFloat = HotkeyPanel.buttonHeight
     var selected = false
     /// Fire as the mouse goes down instead of on release (the panel's buttons; the customizer keeps
@@ -185,7 +197,8 @@ private struct HotkeyButton: View {
     }
 
     private var face: some View {
-        VStack(spacing: 1) {
+        let hotkey = hotkey.shown(in: mode)
+        return VStack(spacing: 1) {
             if height >= Self.subtitleMinHeight {
                 Text(hotkey.label).font(.system(size: 12, weight: .bold))
                 Text(hotkey.subtitle).font(.system(size: 9)).opacity(0.75)
@@ -406,7 +419,7 @@ extension Workspace {
     @discardableResult
     func addHotkey() -> UUID? {
         guard hotkeys.count < Hotkey.maxCount else { return nil }
-        let hotkey = Hotkey(label: Hotkey.autoLabel(action: .buy, sizing: .shares, amount: 100), action: .buy)
+        let hotkey = Hotkey(label: Hotkey.autoLabel(action: .open, sizing: .shares, amount: 100), action: .open)
         hotkeys.insert(hotkey, at: hotkeys.count.isMultiple(of: 2) ? hotkeys.count / 2 : hotkeys.count)
         return hotkey.id
     }

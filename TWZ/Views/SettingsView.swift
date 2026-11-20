@@ -234,8 +234,9 @@ private struct TradingSettings: View {
         ("⌥⇧1 2 3 4", "What-if trade: buy $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
             + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),
         ("⌃⌥⇧1 2 3 4", "The same what-if trade, selling (short)"),
-        ("⌘⇧T/S L H M/A F", "Show that list and load it into the chart grid: Most Active $ (T or S), Top Losers, AH Gainers, "
-            + "Top Gainers (M or A), Forex"),
+        ("⌘⇧S L H A F", "Show that list and load it into the chart grid: Most Active $, Top Losers, AH Gainers, "
+            + "Top Gainers, Forex (S, H and L wait a moment for a second letter)"),
+        ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (shown in the top bar); Open hotkeys buy while LONG, sell short while SHORT"),
         ("⌥ or ⌘ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D"),
         ("⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("⌘R", "The charts back to the lit number in the top bar as saved (its view set, or its scale at its own zoom)"),
