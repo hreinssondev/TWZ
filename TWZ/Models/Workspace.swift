@@ -301,7 +301,8 @@ final class Workspace {
         gridScan = defaults.data(forKey: MainGrid.scanKey).flatMap { try? JSONDecoder().decode(ScanSpec.self, from: $0) }
         chartScales = defaults.data(forKey: ChartScale.storageKey)
             .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
-        activeScale = (defaults.object(forKey: ChartScale.activeKey) as? Int).flatMap { chartScales[$0] != nil ? $0 : nil }
+        activeScale = (defaults.object(forKey: ChartScale.activeKey) as? Int)
+            .flatMap { $0 == ChartScale.defaultSlot || chartScales[$0] != nil ? $0 : nil }
 
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }

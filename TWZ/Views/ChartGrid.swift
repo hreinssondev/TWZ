@@ -73,7 +73,7 @@ struct ChartGrid: View {
         .onAppear {
             broker.restoreChartViews(workspace.mainCharts, zoom: zoom)
             // A scale picked before the relaunch goes on.
-            broker.gridScale = workspace.activeScale.flatMap { workspace.chartScales[$0] }
+            broker.gridScale = workspace.gridScale(workspace.activeScale)
             if let scale = broker.gridScale { workspace.mainCharts.forEach(scale.apply) }
             workspace.arrangeMainGrid(columns: columns, rows: rows, gainers: gainers, broker: broker)
             broker.setScanner(scan, owner: MainGrid.scannerOwner)
@@ -94,7 +94,7 @@ struct ChartGrid: View {
             workspace.resetViews(of: workspace.mainCharts, zoom: zoom, broker: broker)
         }
         .onChange(of: zoom) { _, new in workspace.setZoom(new, of: workspace.mainCharts, broker: broker) }
-        .onChange(of: workspace.activeScale.flatMap { workspace.chartScales[$0] }) { _, scale in broker.gridScale = scale }
+        .onChange(of: workspace.gridScale(workspace.activeScale)) { _, scale in broker.gridScale = scale }
         .onChange(of: timeframe) { _, new in workspace.setMainTimeframe(new, broker: broker) }
         .onChange(of: workspace.layoutLoads) {
             columnSplits = Self.splits("mainChartColumnSplits", legacyKey: "chartColumnSplit")
@@ -243,7 +243,9 @@ extension Workspace {
     /// ⇧-clicking a scale button in the top bar: the selected chart's view, saved under `slot`; false
     /// with no chart selected.
     func saveScale(_ slot: Int) -> Bool {
-        guard isChartSelected, let chart = chart(id: selectedChartID), !chart.symbol.isEmpty else { return false }
+        guard slot != ChartScale.defaultSlot, isChartSelected, let chart = chart(id: selectedChartID), !chart.symbol.isEmpty else {
+            return false
+        }
         chartScales[slot] = ChartScale(of: chart)
         activeScale = slot
         return true
@@ -252,10 +254,17 @@ extension Workspace {
     /// Clicking a scale button: every chart in the grid takes the view saved under `slot`, and so does
     /// every one loading a stock or timeframe from then on (see `activeScale`); false while none is.
     func applyScale(_ slot: Int) -> Bool {
-        guard let scale = chartScales[slot] else { return false }
+        guard let scale = gridScale(slot) else { return false }
         for chart in mainCells.compactMap(chart(id:)) where !chart.symbol.isEmpty { scale.apply(to: chart) }
         activeScale = slot
         return true
+    }
+
+    /// What scale button `slot` gives the charts: 5's default view, or the scale saved under it.
+    func gridScale(_ slot: Int?) -> GridScale? {
+        guard let slot else { return nil }
+        if slot == ChartScale.defaultSlot { return .defaultView }
+        return chartScales[slot].map(GridScale.saved)
     }
 
     /// ⌥0: every other chart in the grid takes `source`'s view: as much time on screen (as many bars on
@@ -300,7 +309,9 @@ struct ChartScale: Codable, Equatable {
 
     static let storageKey = "chartScales"
     static let activeKey = "activeChartScale"
-    static let slots = [1, 2, 3]
+    static let slots = [1, 2, 3, 4, 5]
+    /// The default view, never saved over (see `GridScale.defaultView`).
+    static let defaultSlot = 5
 
     init(of chart: ChartModel) {
         timeframe = chart.timeframe
@@ -321,6 +332,22 @@ struct ChartScale: Codable, Equatable {
     /// Bars of one timeframe in the other's; daily bars count as they are.
     static func barRatio(from: Timeframe, to: Timeframe) -> Double {
         from.barSeconds.flatMap { s in to.barSeconds.map { s / $0 } } ?? 1
+    }
+}
+
+/// What a scale button gives the charts: a saved scale, or 5's default view: the grid's default zoom
+/// (its Zoom slider) at the latest bars, prices fitted to them, as right-clicking each chart would.
+enum GridScale: Equatable {
+    case saved(ChartScale)
+    case defaultView
+
+    func apply(to chart: ChartModel) {
+        switch self {
+        case .saved(let scale): scale.apply(to: chart)
+        case .defaultView:
+            chart.visibleBars = chart.defaultVisibleBars
+            chart.place = ChartModel.Place()
+        }
     }
 }
 
