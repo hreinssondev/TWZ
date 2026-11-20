@@ -331,18 +331,18 @@ private struct ScanFilterEditor: View {
 
 extension ScannerKind {
     /// ⌘⇧ + a letter shows that list and loads it into the chart grid (see `TradingShortcuts`): T or S Top
-    /// Gainers, L Top Losers, H AH Gainers, M or A Most Active $, F Forex.
+    /// Most Active $, L Top Losers, H AH Gainers, M or A Top Gainers, F Forex.
     static func forShortcut(_ key: String) -> ScannerKind? {
         switch key {
-        case "t", "s": .gainers
+        case "t", "s": .dollarVolume
         case "l": .losers
         case "h": .afterHours
-        case "m", "a": .dollarVolume
+        case "m", "a": .gainers
         case "f": .forex
         default: nil
         }
     }
 
-    static let shortcutHelp = "⌘⇧T or ⌘⇧S Top Gainers · ⌘⇧L Top Losers · ⌘⇧H AH Gainers · ⌘⇧M or ⌘⇧A Most Active $ · ⌘⇧F Forex: "
+    static let shortcutHelp = "⌘⇧T or ⌘⇧S Most Active $ · ⌘⇧L Top Losers · ⌘⇧H AH Gainers · ⌘⇧M or ⌘⇧A Top Gainers · ⌘⇧F Forex: "
         + "shows the list and loads it into the chart grid"
 }

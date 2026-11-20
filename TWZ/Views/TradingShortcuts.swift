@@ -21,7 +21,7 @@
 //  ⌥⇧1 / 2 / 3 / 4 buys a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 / $3,000 /
 //  85% of the buying power in the selected chart's symbol; ⌃⌥⇧1–4 sells (shorts) the same. Matched by
 //  key, number row or keypad, whatever the keyboard layout types there.
-//  ⌘⇧ and a list's letter (T or S Top Gainers, L Top Losers, H AH Gainers, M or A Most Active $, F Forex)
+//  ⌘⇧ and a list's letter (T or S Most Active $, L Top Losers, H AH Gainers, M or A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  ⌥1 / 2 / 3 / 4 / 5 sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
