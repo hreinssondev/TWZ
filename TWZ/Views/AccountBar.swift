@@ -27,6 +27,8 @@ struct AccountBar: View {
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(Capsule().fill(broker.isLivePort ? Color.red : Color.blue))
 
+            OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
+
             // Account values are in the base currency (NOK), shown as bare numbers.
             HStack(spacing: 12) {
                 stat("Equity", Fmt.amount(broker.netLiquidation))
@@ -106,6 +108,21 @@ struct AccountBar: View {
         }
         .font(.system(size: 10).monospacedDigit())
         .offset(y: 1)
+    }
+}
+
+/// Whether the keyboard shortcuts that send orders work: KEYS ON in orange while they do, dimmed while off.
+private struct OrderShortcutsBadge: View {
+    let isOn: Bool
+
+    var body: some View {
+        Text(isOn ? "KEYS ON" : "KEYS OFF")
+            .font(.system(size: 10, weight: isOn ? .heavy : .regular))
+            .foregroundStyle(isOn ? Color.white : Color.secondary.opacity(0.7))
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(isOn ? Color.orange : Color.primary.opacity(0.08)))
+            .help("Order shortcuts (hotkeys' own keys, ⌘⇧↩ and ⌘⌫) \(isOn ? "send orders" : "are off")."
+                  + " ⌘⇧↑ turns them on, ⌘⇧↓ off; they're off at every launch. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) and what-if trades always work.")
     }
 }
 
