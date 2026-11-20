@@ -2,12 +2,14 @@
 //  HotkeyPanel.swift
 //  TWZ
 //
-//  Two-row grid (6 × 2 by default) of configurable order buttons acting on the selected chart's symbol.
-//  Clicking a button selects it (never sends it): ⌘⇧↩ sends the selected one (see TradingShortcuts),
-//  and ⌥-clicking a chart places its order at the clicked price. New buttons go in on the left.
-//  Click the "Hotkeys" title to customize them all, or right-click a button to edit just that one.
-//  Beside the buttons, the NOK amount that ⌥-clicking buys instead when no hotkey is selected:
-//  clicking it selects it.
+//  The order pad on the left (see `OrderPad`): $ or %, the price or order type, and 1–9, each a
+//  button that picks that setting, lit while picked. Its order is the one ⌥-click on a chart and
+//  ⌘⇧↩ send while no hotkey button is selected.
+//  On the right, a two-row grid of configurable hotkey buttons (closing, cancelling, or orders of
+//  their own) acting on the selected chart's symbol. Clicking one selects it (never sends it):
+//  ⌘⇧↩ sends it, ⌥-clicking a chart places its order at the clicked price, and its own shortcut
+//  sends it any time. New buttons go in on the left. Click the "Hotkeys" title to customize them
+//  all, or right-click a button to edit just that one.
 //
 
 import SwiftUI
@@ -56,14 +58,19 @@ struct HotkeyPanel: View {
                 }
             }
             .frame(height: Self.headerHeight)
-            // The order amount box, two buttons tall, keeps a seventh of the width; the hotkeys share
-            // the rest in two rows, narrowing as buttons are added beyond 6 × 2.
-            // Buttons are full height when there's room, any extra becoming space above and below
-            // them; a shorter panel shrinks them (and the amount box) down to minButtonHeight.
+            // The order pad, nine columns, on the left; the hotkey buttons on the right in two rows, every
+            // column the same width. Buttons are full height when there's room, any extra becoming space
+            // above and below them; a shorter panel shrinks them down to minButtonHeight.
             GeometryReader { geo in
-                let column = (geo.size.width - Self.spacing * 6) / 7
+                let hotkeyColumns = workspace.hotkeys.isEmpty ? 0 : Hotkey.columns(for: workspace.hotkeys.count)
+                let columns = CGFloat(OrderPad.numbers.count + hotkeyColumns)
+                let gap = Self.spacing * 3
+                let column = (geo.size.width - gap - Self.spacing * (columns - 2)) / columns
+                let padWidth = column * CGFloat(OrderPad.numbers.count) + Self.spacing * CGFloat(OrderPad.numbers.count - 1)
                 let height = min(Self.buttonHeight, max(Self.minButtonHeight, (geo.size.height - Self.spacing) / 2))
-                HStack(spacing: Self.spacing) {
+                HStack(spacing: gap) {
+                    OrderPadView(height: height, spacing: Self.spacing)
+                        .frame(width: max(0, padWidth))
                     LazyVGrid(columns: Self.gridColumns(workspace.hotkeys.count), spacing: Self.spacing) {
                         ForEach(Array(workspace.hotkeys.enumerated()), id: \.element.id) { index, hotkey in
                             HotkeyButton(hotkey: hotkey, height: height,
@@ -78,9 +85,7 @@ struct HotkeyPanel: View {
                             }
                         }
                     }
-                    .frame(width: max(0, geo.size.width - column - Self.spacing))
-                    OrderAmountBox(height: height * 2 + Self.spacing)
-                        .frame(width: max(0, column))
+                    .frame(maxWidth: .infinity)
                 }
                 .frame(height: height * 2 + Self.spacing)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -227,128 +232,92 @@ private struct HotkeyButton: View {
     }
 }
 
-/// The NOK amount ⌥-clicking a chart buys (a DAY limit at the clicked price) while no hotkey is
-/// selected, converted to shares at the live USD.NOK rate. Clicking it (or its field) selects it in
-/// place of a hotkey, outlined like one. Type it, or step it in 5 000 NOK steps with ↑/↓ or the arrows.
-/// When the panel is short it drops the title, then the size line, keeping just the field.
-private struct OrderAmountBox: View {
-    let height: CGFloat
-    @Environment(Broker.self) private var broker
+/// The order pad (see `OrderPad`): two rows of nine buttons: $ and % (what the numbers are), the price or
+/// order type, and 1–9. Each click picks that button's setting, lit in the trade mode's color (green
+/// LONG, red SHORT), and makes the pad's order the one ⌥-click and ⌘⇧↩ send (no hotkey button selected);
+/// while a hotkey button is selected the lit buttons dim. Fires on mouse-down, like the hotkey buttons.
+private struct OrderPadView: View {
     @Environment(Workspace.self) private var workspace
-    @AppStorage(OrderAmount.storageKey) private var amount = OrderAmount.initial
-    @State private var text = ""
-    @FocusState private var focused: Bool
-    /// The field editor whose caret is hidden, and its original color.
-    @State private var caretEditor: (NSTextView, NSColor)?
+    @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
+    let height: CGFloat
+    let spacing: CGFloat
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            if height >= 64 {
-                Text("⌥-click buy")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            HStack(spacing: 2) {
-                TextField("", text: $text)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13, weight: .bold).monospacedDigit())
-                    .focused($focused)
-                    .onSubmit(commit)
-                    .onExitCommand { focused = false }
-                    .onKeyPress(.upArrow) { step(up: true); return .handled }
-                    .onKeyPress(.downArrow) { step(up: false); return .handled }
-                VStack(spacing: 0) {
-                    stepButton(up: true)
-                    stepButton(up: false)
+        let pad = workspace.orderPad
+        VStack(spacing: spacing) {
+            HStack(spacing: spacing) {
+                button("$", "Dollars", lit: !pad.buyingPower, help: "The numbers are dollars: 1 is $1,000, 9 is $9,000") {
+                    workspace.orderPad.buyingPower = false
+                }
+                button("%", "Buying power", lit: pad.buyingPower,
+                       help: "The numbers are a share of the buying power IB's margin allows in the stock: 1 is 10%, 9 is 90%") {
+                    workspace.orderPad.buyingPower = true
+                }
+                ForEach(OrderPad.Kind.allCases) { kind in
+                    button(kind.rawValue, kind.detail, lit: pad.kind == kind, help: kind.detail + ", no offset") {
+                        workspace.orderPad.kind = kind
+                    }
                 }
             }
-            .padding(.leading, 5)
-            .padding(.trailing, 2)
-            .padding(.vertical, 2)
-            .background(RoundedRectangle(cornerRadius: 4).fill(Color(nsColor: .textBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.15)))
-            Spacer(minLength: 0)
-            if height >= 44 {
-                Text(sizeText)
-                    .font(.system(size: 10).monospacedDigit())
+            HStack(spacing: spacing) {
+                ForEach(OrderPad.numbers, id: \.self) { number in
+                    button("\(number)", pad.amountText(number), lit: pad.number == number,
+                           help: "\(pad.amountText(number))\(pad.buyingPower ? " of the buying power" : "")") {
+                        workspace.orderPad.number = number
+                    }
+                }
             }
+        }
+    }
+
+    private func button(_ title: String, _ subtitle: String, lit: Bool, help: String,
+                        pick: @escaping () -> Void) -> some View {
+        PadButton(title: title, subtitle: height >= 30 ? subtitle : nil, height: height,
+                  fill: lit ? (mode == .long ? Color.green : Color.red).opacity(workspace.selectedHotkeyID == nil ? 0.75 : 0.3)
+                            : Color.primary.opacity(0.12)) {
+            pick()
+            // Picking on the pad makes its order the one ⌥-click and ⌘⇧↩ send.
+            workspace.selectedHotkeyID = nil
+        }
+        .help(help + " · ⌥-click a chart sends the pad's order there, ⌘⇧↩ sends it now")
+    }
+}
+
+/// One order pad button: picks on mouse-down.
+private struct PadButton: View {
+    let title: String
+    let subtitle: String?
+    let height: CGFloat
+    let fill: Color
+    let pick: () -> Void
+    @State private var pressed = false
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(title).font(.system(size: 12, weight: .bold))
+            if let subtitle { Text(subtitle).font(.system(size: 9)).opacity(0.75) }
         }
         .lineLimit(1)
         .minimumScaleFactor(0.7)
-        .padding(height >= 64 ? 5 : 3)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
-        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.accentColor, lineWidth: isSelected ? 2.5 : 0))
+        .padding(.horizontal, 2)
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .foregroundStyle(.white)
+        .background(RoundedRectangle(cornerRadius: 5).fill(fill))
+        .brightness(pressed ? -0.12 : 0)
         .contentShape(Rectangle())
-        .simultaneousGesture(TapGesture().onEnded { workspace.selectedHotkeyID = nil })
-        .help("Selected (click it), ⌥-click a chart to place a limit buy for this many NOK at the clicked price; "
-              + "with a hotkey selected, ⌥-click places that instead. ↑/↓ step 5 000 NOK (500–300 000).")
-        .onAppear { text = OrderAmount.format(amount) }
-        .onChange(of: text) { _, new in
-            if let typed = OrderAmount.parse(new) { amount = OrderAmount.clamp(typed) }
-        }
-        .onChange(of: focused) { _, isFocused in
-            if isFocused {
-                workspace.selectedHotkeyID = nil
-                hideCaret()
-            } else {
-                restoreCaret()
-                commit()
-            }
-        }
-    }
-
-    /// What ⌥-click places when no hotkey is selected (a selection whose hotkey was deleted counts as none).
-    private var isSelected: Bool { workspace.selectedHotkey == nil }
-
-    /// The window's field editor is shared by every text field, so the caret is hidden only while
-    /// this one is being edited. Deferred a tick: focus flips before the editor becomes first responder.
-    private func hideCaret() {
-        DispatchQueue.main.async {
-            guard focused, let editor = NSApp.keyWindow?.firstResponder as? NSTextView else { return }
-            if caretEditor == nil { caretEditor = (editor, editor.insertionPointColor) }
-            editor.insertionPointColor = .clear
-        }
-    }
-
-    private func restoreCaret() {
-        guard let (editor, color) = caretEditor else { return }
-        editor.insertionPointColor = color
-        caretEditor = nil
-    }
-
-    /// "≈ $4,566 · 45 AAPL": the USD value, and what it buys of the selected symbol at its last price.
-    private var sizeText: String {
-        guard let rate = broker.usdNok, rate > 0 else { return "No USD.NOK rate" }
-        var text = "≈ $" + Int(amount / rate).formatted()
-        let symbol = workspace.targetSymbol
-        if let last = broker.quote(symbol)?.last, let shares = broker.shares(forNOK: amount, of: symbol, at: last) {
-            text += " · \(Fmt.shares(shares)) \(symbol)"
-        }
-        return text
-    }
-
-    private func stepButton(up: Bool) -> some View {
-        Button { step(up: up) } label: {
-            Image(systemName: up ? "chevron.up" : "chevron.down")
-                .font(.system(size: 7, weight: .bold))
-                .frame(width: 12, height: 9)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-    }
-
-    private func step(up: Bool) {
-        amount = OrderAmount.stepped(OrderAmount.parse(text) ?? amount, up: up)
-        text = OrderAmount.format(amount)
-    }
-
-    private func commit() {
-        amount = OrderAmount.clamp(OrderAmount.parse(text) ?? amount)
-        text = OrderAmount.format(amount)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    guard !pressed else { return }
+                    pressed = true
+                    pick()
+                }
+                .onEnded { _ in pressed = false }
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { pick() }
     }
 }
 

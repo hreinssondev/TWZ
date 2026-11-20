@@ -1595,30 +1595,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return orderType == .market && regular ? .stop(price) : .stopLimit(price)
     }
 
-    /// Alt-click on a chart with no hotkey selected: a DAY buy for `nok` worth of `symbol` at the
-    /// clicked price; a limit below the last trade, a stop-limit above it.
-    func buyNOK(_ nok: Double, symbol rawSymbol: String, at clickedPrice: Double) {
-        let symbol = rawSymbol.uppercased()
-        guard chartOrderReady(symbol) else { return }
-        let plan = chartOrder(symbol: symbol, action: "BUY", clicked: clickedPrice)
-        if case .unavailable(let reason) = plan {
-            lastMessage = "\(reason), so the order wasn't sent"
-            return
-        }
-        guard let limit = plan.price,
-              let quantity = Self.shares(forNOK: nok, at: limit, usdNok: usdNok, usdPerUnit: usdPerPriceUnit(symbol)) else {
-            lastMessage = usdNok == nil ? "No USD.NOK rate yet, so the order can't be sized"
-                : "No dollar rate for \(symbol) yet, so the order can't be sized"
-            return
-        }
-        guard quantity >= 1, let label = plan.label("BUY", shares: quantity, symbol: symbol) else {
-            lastMessage = "\(OrderAmount.format(nok)) NOK is less than one share of \(symbol) at \(Fmt.price(limit, for: symbol))"
-            return
-        }
-        placeChartOrder(symbol: symbol, action: "BUY", quantity: quantity, plan: plan, tif: .day,
-                        outsideRth: true, summary: "\(label) (\(OrderAmount.format(nok)) NOK)")
-    }
-
     /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price instead
     /// of at its quote. Buy / Sell (a Mode hotkey, resolved to one) size as the hotkey does (dollars and
     /// % of buying power at the clicked price), Close 50% / 100% from the position; its order type

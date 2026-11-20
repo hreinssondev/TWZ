@@ -392,7 +392,6 @@ struct TradingChart: View {
     /// What-if trades shown instead of real ones, as the Positions header switches (see `PositionsView`).
     @AppStorage(PositionsView.showsSimKey) private var showsSim = false
 
-    @AppStorage(OrderAmount.storageKey) private var orderNOK = OrderAmount.initial
     @AppStorage(AltClickOrders.enabledKey) private var altClickOrders = true
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
@@ -425,16 +424,12 @@ struct TradingChart: View {
         CandleChart(
             chart: chart, lines: priceLines, pointers: simPointers,
             // Switched off in the top bar: no handler, so ⌥ neither tints the price tag nor places orders.
-            // The selected hotkey's order at the clicked price, with its amount, order type and time in
-            // force (see `TradingEngine.run(_:symbol:at:)`), or with none selected (the ⌥-click buy box
-            // is), a buy for its NOK amount. ⌘-click does nothing for now.
+            // The selected hotkey button's order, or with none selected the order pad's (see `OrderPad`),
+            // at the clicked price, with its amount, order type and time in force (see
+            // `TradingEngine.run(_:symbol:at:)`). ⌘-click does nothing for now.
             onAltClick: allowsAltClick && altClickOrders ? { price in
                 onTrade()
-                if let hotkey = workspace.selectedHotkey {
-                    broker.run(hotkey, symbol: chart.symbol, at: price)
-                } else {
-                    broker.buyNOK(OrderAmount.clamp(orderNOK), symbol: chart.symbol, at: price)
-                }
+                broker.run(workspace.activeHotkey, symbol: chart.symbol, at: price)
             } : nil,
             onControlClick: { price in
                 guard !chart.symbol.isEmpty else { return }

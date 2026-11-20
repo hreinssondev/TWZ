@@ -504,11 +504,6 @@ final class Broker {
         return hotkey
     }
 
-    /// Alt-click on a chart with no hotkey selected: a DAY buy for `nok` worth of `symbol` at the clicked price.
-    func buyNOK(_ nok: Double, symbol: String, at clickedPrice: Double) {
-        order { $0.buyNOK(nok, symbol: symbol, at: clickedPrice) }
-    }
-
     /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price.
     func run(_ hotkey: Hotkey, symbol: String, at clickedPrice: Double) {
         let hotkey = Self.resolved(hotkey)

@@ -304,20 +304,68 @@ nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// The number keys' orders, ⌘ or ⌘⌥ and 1–9 (number row or keypad): a Mode order (see `TradeMode`) at
-/// the mid, limit, no offset, outside regular hours too, DAY; ⌘ sizes it in dollars ($1,000 a step),
-/// ⌘⌥ in buying power (10% of what IB's margin allows in the stock, a step). Sent only with KEYS ON.
+/// The number keys' orders, ⌘⌥ and 1–9 (number row or keypad): a Mode order (see `TradeMode`) of 10–90%
+/// of the buying power IB's margin allows in the stock, limit at the mid, no offset, outside regular
+/// hours too, DAY. Sent only with KEYS ON.
 nonisolated enum OrderKeys {
     static func number(keyCode: UInt16) -> Int? {
         [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9,
          83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9][keyCode]
     }
 
-    static func hotkey(number: Int, buyingPower: Bool) -> Hotkey {
+    static func hotkey(number: Int) -> Hotkey {
+        OrderPad(buyingPower: true, kind: .mid, number: number).hotkey
+    }
+}
+
+/// The hotkey panel's order, set with its buttons: in dollars ($1,000 a step) or buying power (10% of
+/// what IB's margin allows in the stock, a step), the price or order type, and 1–9. While no hotkey
+/// button is selected, ⌥-click and ⌘⇧↩ send it: a Mode order (see `TradeMode`), no offset, outside
+/// regular hours too, DAY. Saved.
+nonisolated struct OrderPad: Codable, Equatable {
+    enum Kind: String, Codable, CaseIterable, Identifiable {
+        case mid = "MID", bid = "BID", ask = "ASK", last = "LAST", cross = "B/A", market = "MKT", midprice = "MIDPX"
+        var id: String { rawValue }
+
+        var detail: String {
+            switch self {
+            case .mid: "Limit at the mid"
+            case .bid: "Limit at the bid"
+            case .ask: "Limit at the ask"
+            case .last: "Limit at the last"
+            case .cross: "Limit across the spread"
+            case .market: "Market"
+            case .midprice: "IBKR MIDPRICE"
+            }
+        }
+    }
+
+    var buyingPower = false
+    var kind = Kind.mid
+    var number = 1
+
+    static let storageKey = "orderPad"
+    static let numbers = Array(1...9)
+
+    func amount(_ number: Int) -> Double { Double(number * (buyingPower ? 10 : 1000)) }
+
+    /// "$3,000" or "30%".
+    func amountText(_ number: Int) -> String {
+        buyingPower ? "\(number * 10)%" : "$" + (number * 1000).formatted()
+    }
+
+    var hotkey: Hotkey {
         let sizing: Hotkey.Sizing = buyingPower ? .buyingPower : .dollars
-        let amount = Double(number * (buyingPower ? 10 : 1000))
-        var hotkey = Hotkey(label: Hotkey.autoLabel(action: .mode, sizing: sizing, amount: amount), action: .mode,
-                            sizing: sizing, amount: amount, orderType: .limit, priceReference: .mid, offset: 0)
+        let orderType: OrderType = kind == .market ? .market : kind == .midprice ? .midprice : .limit
+        let reference: PriceReference = switch kind {
+        case .bid: .bid
+        case .ask: .ask
+        case .last: .last
+        case .cross: .cross
+        case .mid, .market, .midprice: .mid
+        }
+        var hotkey = Hotkey(label: Hotkey.autoLabel(action: .mode, sizing: sizing, amount: amount(number)), action: .mode,
+                            sizing: sizing, amount: amount(number), orderType: orderType, priceReference: reference, offset: 0)
         hotkey.outsideRth = true
         hotkey.tif = .day
         return hotkey

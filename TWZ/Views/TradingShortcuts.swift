@@ -27,9 +27,9 @@
 //  S, H and L alone (lists' letters too) wait a moment for the other letter first.
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
-//  ⌘ and 1–9 sends a Mode order of $1,000–9,000 at the mid, ⌘⌥ and 1–9 of 10–90% of the buying power
-//  (see `OrderKeys`), with the order shortcuts on.
-//  ⌥1 / 2 / 3 / 4 / 5 / 6 sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
+//  ⌘⌥ and 1–9 sends a Mode order of 10–90% of the buying power at the mid (see `OrderKeys`), with the
+//  order shortcuts on.
+//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌘1–6) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
 //  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field does what clicking
@@ -108,11 +108,8 @@ struct TradingShortcuts: ViewModifier {
                     if modifiers == [.command, .shift], isReturn, inMainWindow, let window = event.window {
                         if window.firstResponder is NSTextView { return event }
                         guard workspace.orderShortcutsOn else { return refuse() }
-                        if let hotkey = workspace.selectedHotkey {
-                            broker.run(hotkey, symbol: workspace.targetSymbol)
-                        } else {
-                            NSSound.beep()
-                        }
+                        // The selected hotkey button, or the order pad's order (see `OrderPad`).
+                        broker.run(workspace.activeHotkey, symbol: workspace.targetSymbol)
                         return nil
                     }
                     // ⌥⇧1–4 buys, ⌃⌥⇧1–4 sells a what-if trade in the selected chart's symbol.
@@ -203,17 +200,15 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    // ⌘ and 1–9: a Mode order of $1,000–9,000 at the mid; ⌘⌥ and 1–9: of 10–90% of the buying
-                    // power (see `OrderKeys`). Only with the order shortcuts on.
-                    if inMainWindow, modifiers == .command || modifiers == [.command, .option],
-                       let number = OrderKeys.number(keyCode: event.keyCode) {
+                    // ⌘⌥ and 1–9: a Mode order of 10–90% of the buying power at the mid (see `OrderKeys`). Only
+                    // with the order shortcuts on.
+                    if inMainWindow, modifiers == [.command, .option], let number = OrderKeys.number(keyCode: event.keyCode) {
                         guard workspace.orderShortcutsOn else { return refuse() }
-                        broker.run(OrderKeys.hotkey(number: number, buyingPower: modifiers.contains(.option)),
-                                   symbol: workspace.targetSymbol)
+                        broker.run(OrderKeys.hotkey(number: number), symbol: workspace.targetSymbol)
                         return nil
                     }
-                    // ⌥1–6: the account bar's timeframe.
-                    if modifiers == .option, inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
+                    // ⌥1–6 or ⌘1–6: the account bar's timeframe.
+                    if modifiers == .option || modifiers == .command, inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
                         workspace.setMainTimeframe(timeframe, broker: broker)
                         return nil
@@ -341,9 +336,11 @@ extension KeyShortcut {
         if shift, !option, !command, !control, k == "a" {
             return "⇧A gives every chart the selected chart's view"
         }
-        if command, !shift, !control, let number = OrderKeys.number(keyCode: keyCode) {
-            return option ? "\(display) sends a MID order of \(number * 10)% of the buying power"
-                          : "\(display) sends a MID order of $\(number * 1000)"
+        if command, option, !shift, !control, let number = OrderKeys.number(keyCode: keyCode) {
+            return "\(display) sends a MID order of \(number * 10)% of the buying power"
+        }
+        if command, !option, !shift, !control, let timeframe = Timeframe(keyCode: keyCode) {
+            return "\(display) sets every chart to \(timeframe.rawValue)"
         }
         if option, !shift, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
             return "\(display) sets every chart to \(timeframe.rawValue)"

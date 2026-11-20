@@ -146,6 +146,12 @@ final class Workspace {
         didSet { defaults.set(selectedHotkeyID?.uuidString, forKey: "selectedHotkey") }
     }
     var selectedHotkey: Hotkey? { hotkeys.first { $0.id == selectedHotkeyID } }
+    /// The hotkey panel's order (see `OrderPad`). Saved.
+    var orderPad = OrderPad() {
+        didSet { defaults.set(try? JSONEncoder().encode(orderPad), forKey: OrderPad.storageKey) }
+    }
+    /// What ⌥-click and ⌘⇧↩ send: the selected hotkey button, or with none selected, the order pad's order.
+    var activeHotkey: Hotkey { selectedHotkey ?? orderPad.hotkey }
     /// Scanner filters per list panel and scanner, keyed "panelId|scanner".
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
     /// What-if buys by symbol.
@@ -322,6 +328,7 @@ final class Workspace {
         }
 
         selectedHotkeyID = defaults.string(forKey: "selectedHotkey").flatMap(UUID.init(uuidString:))
+        orderPad = defaults.data(forKey: OrderPad.storageKey).flatMap { try? JSONDecoder().decode(OrderPad.self, from: $0) } ?? OrderPad()
 
         if let data = defaults.data(forKey: "scanFilters"),
            let filters = try? JSONDecoder().decode([String: ScannerFilter].self, from: data) {
