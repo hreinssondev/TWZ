@@ -278,8 +278,9 @@ final class Broker {
         chart.bars = seed
         chart.error = nil
         // Where it was left on the stock and timeframe it leaves is kept; where a chart of its window was
-        // left on the ones it goes to, it goes back to (see `ChartViews`). Otherwise: the zoom the
-        // timeframe switch left (`ChartModel.zooms`), at the latest bars.
+        // left on the ones it goes to, it goes back to (see `ChartViews`). Otherwise another timeframe
+        // starts at the zoom the timeframe switch left (`ChartModel.zooms`), at the latest bars, and
+        // another stock on the same timeframe (a list loaded, a new gainer) keeps the view as it is.
         let window = chart.inChartsWindow
         var view: ChartViews.View?
         if previous != key {
@@ -289,8 +290,12 @@ final class Broker {
             chartViewsChanged()
             view = chartViews.view(for: .init(bars: key, inChartsWindow: window))
         }
-        if let zoom = view?.zoom { chart.visibleBars = zoom }
-        chart.place = view?.place ?? ChartModel.Place()
+        if let view {
+            if let zoom = view.zoom { chart.visibleBars = zoom }
+            chart.place = view.place
+        } else if previous.timeframe != key.timeframe {
+            chart.place = ChartModel.Place()
+        }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
         engine.perform { $0.loadChart(spec, generation: generation) }

@@ -6,7 +6,8 @@
 //  from the latest bar, moved and zoomed up or down), kept as a chart moves to another stock or
 //  timeframe, and for every chart when the app quits. A chart of the same window coming back to that
 //  stock and timeframe, whichever of its charts it is (switching lists and back, or after a relaunch),
-//  picks up as it was left (see `Broker.loadChart`). Saved across relaunches; the top bar's Reset
+//  picks up as it was left (see `Broker.loadChart`); a stock it wasn't left on keeps the chart's view
+//  as it is (on another timeframe, the latest bars). Saved across relaunches; the top bar's Reset
 //  forgets the main window's, and right-click or double-click on a chart puts that one back to the
 //  default zoom at the latest bars, which is what's kept for it from then on.
 //

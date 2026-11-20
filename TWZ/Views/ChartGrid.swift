@@ -24,7 +24,8 @@
 //  Each chart keeps its zoom per timeframe: switching back to one zooms it as it was left, until Reset
 //  (see `ChartModel.zooms`). Where a chart was left on a stock and timeframe, zoom and place, is kept
 //  too, across relaunches: a chart coming back to them, after a list switched and back, say, picks up
-//  there, until Reset, or a right-click or double-click on it (see `ChartViews`).
+//  there, until Reset, or a right-click or double-click on it (see `ChartViews`). A stock a chart wasn't
+//  left on (a list loaded, a new gainer) keeps the chart's zoom and place as they are.
 //  A grip at every crossing of four charts moves that column and row line together (see `SplitGrid`).
 //
 
