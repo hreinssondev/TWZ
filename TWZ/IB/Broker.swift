@@ -390,6 +390,11 @@ final class Broker {
         // Bars kept from a while ago (from disk, after a relaunch): the full history, so the fresh bars
         // reach back to them and the older ones stay (see `TradingEngine.historicalData`).
         if let newest = seed.last?.time, newest < Date().addingTimeInterval(-6 * 3600) { spec.fullHistory = true }
+        // Bars kept with the overnight session in them (from a full history): the full history again, which
+        // has it, so it doesn't show and then vanish when the short one comes in.
+        if key.timeframe.isIntraday, !ForexPair.isForex(key.symbol), seed.contains(where: { $0.phase == .overnight }) {
+            spec.fullHistory = true
+        }
         engine.perform { $0.loadChart(spec, generation: generation) }
     }
 

@@ -1132,6 +1132,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         c.olderReq = nil
         c.reachedStart = false
         c.fullHistoryIn = false
+        c.overnightStandIns = false
         if !keepingBars {
             c.keepsOlder = false
             c.bars = []
@@ -2688,14 +2689,27 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 overnightReqByChart[id] = nil
             }
             if !c.isLoading, !c.bars.isEmpty {
-                c.bars = Self.merge(c.bars, bars)
+                // The overnight bars shown meanwhile (see below) make way for these.
+                let base = c.overnightStandIns ? c.bars.filter { $0.phase != .overnight } : c.bars
+                c.overnightStandIns = false
+                c.bars = Self.merge(base, bars)
                 chartChanged(c, all: true)
             }
             return
         }
         guard let id = chartByReq[reqId], let c = charts[id] else { return }
         Self.log.notice("History #\(reqId) \(c.symbol, privacy: .public): \(bars.count) bars from \(bars.first?.time.description ?? "-", privacy: .public)")
-        var merged = Self.merge(bars, overnightBars[id] ?? [])
+        var extra = overnightBars[id] ?? []
+        // The overnight bars still on their way: those shown (bars kept from before) stand in until they're
+        // in, so the overnight session doesn't vanish and come back.
+        if overnightBars[id] == nil, overnightReqByChart[id] != nil {
+            let shownOvernight = c.bars.filter { $0.phase == .overnight }
+            if !shownOvernight.isEmpty {
+                extra = shownOvernight
+                c.overnightStandIns = true
+            }
+        }
+        var merged = Self.merge(bars, extra)
         // Bars kept from before reaching further back than these: kept in front of them where the two
         // meet, so a view zoomed far out doesn't load them again.
         if c.keepsOlder, let first = merged.first, let shownLast = c.bars.last, shownLast.time >= first.time {
@@ -2932,6 +2946,8 @@ nonisolated private final class ChartState {
     var reachedStart = false
     /// The bars shown are kept from before (see `BarCache`): the fresh history keeps those older than it.
     var keepsOlder = false
+    /// The overnight bars shown are kept from before, standing in for the overnight history on its way.
+    var overnightStandIns = false
     var generation = 0
     var bars: [Bar] = []
     var isLoading = false
