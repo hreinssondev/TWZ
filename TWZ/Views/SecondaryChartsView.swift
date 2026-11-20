@@ -97,13 +97,15 @@ extension Workspace {
     }
 
     /// Puts the charts' view back to `zoom`, as double-clicking one does: latest bars at the right
-    /// edge, price range fitted to the bars again.
-    func resetViews(of charts: [ChartModel], zoom: Double, broker: Broker) {
+    /// edge, price range fitted to the bars again. Given a `timeframe` (the top bar's Reset), only on it:
+    /// charts on another one, and the views kept on others, stay as they are.
+    func resetViews(of charts: [ChartModel], zoom: Double, broker: Broker, timeframe: Timeframe? = nil) {
+        let charts = charts.filter { chart in timeframe.map { chart.timeframe == $0 } ?? true }
         setZoom(zoom, of: charts, broker: broker)
-        broker.forgetChartViews(of: charts)
+        broker.forgetChartViews(of: charts, timeframe: timeframe)
         for chart in charts {
             chart.adjustedByHand = false
-            chart.zooms = [:]
+            if let timeframe { chart.zooms[timeframe] = nil } else { chart.zooms = [:] }
         }
         for chart in charts where chart.scrollBack != 0 || chart.priceShift != 0 || chart.priceScale != 1 {
             chart.scrollBack = 0

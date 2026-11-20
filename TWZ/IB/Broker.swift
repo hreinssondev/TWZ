@@ -172,9 +172,10 @@ final class Broker {
     @ObservationIgnored var gridZoomOverride: Double?
     @ObservationIgnored private var chartViewsSave: Task<Void, Never>?
 
-    /// Reset: these charts' window forgets where its charts were left (see `ChartViews`).
-    func forgetChartViews(of charts: [ChartModel]) {
-        for window in Set(charts.map(\.inChartsWindow)) { chartViews.forget(inChartsWindow: window) }
+    /// Reset: these charts' window forgets where its charts were left (see `ChartViews`), on `timeframe`
+    /// only if given.
+    func forgetChartViews(of charts: [ChartModel], timeframe: Timeframe? = nil) {
+        for window in Set(charts.map(\.inChartsWindow)) { chartViews.forget(inChartsWindow: window, timeframe: timeframe) }
         chartViewsChanged()
     }
 

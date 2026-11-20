@@ -98,7 +98,7 @@ struct ChartGrid: View {
         .onChange(of: workspace.gainerResets) {
             follow()
             workspace.setMainTimeframe(timeframe, broker: broker)
-            workspace.resetViews(of: workspace.mainCharts, zoom: zoom, broker: broker)
+            workspace.resetViews(of: workspace.mainCharts, zoom: zoom, broker: broker, timeframe: timeframe)
         }
         .onChange(of: zoom) { old, new in workspace.setZoom(new, of: workspace.mainCharts, broker: broker, from: old) }
         .onChange(of: workspace.gridScale(workspace.activeScale)) { workspace.syncGridScale(to: broker) }
