@@ -6,6 +6,7 @@
 //  between them; clicking one of their headers stacks them instead, Positions on top (clicking again
 //  puts them side by side). Rows are two lines so they fit the narrow columns.
 //  Orders lists the working orders and, once done, what each filled: dimmed, at its average fill price.
+//  Positions lists the newest first, what-if trades among them (see `positionItems`).
 //  A ⌃-click what-if buy shows among them too, as What-if, with IB's preview of its commissions and fees
 //  and the margin it would take (it's never sent); its ✕ removes it, like ⌃-clicking its line.
 //  Fills of orders entered in TWS (which IB reports without an order id) in the same symbol, side and
@@ -448,43 +449,88 @@ struct OrdersPanel: View {
         return Array(groups.values)
     }
 
-    @ViewBuilder private var positionRows: some View {
-        let positions = broker.positions.values.sorted { $0.symbol < $1.symbol }
-        let openTripOrders = tripOrders.open
-        if positions.isEmpty, broker.simPositions.isEmpty { empty("No positions") }
-        ForEach(positions) { p in
-            let last = broker.quote(p.symbol)?.last
-            // In dollars: a forex pair's at its currency's dollar rate.
-            let usd = broker.usdPerPriceUnit(p.symbol)
-            let pnl = last.flatMap { last in usd.map { (last - p.avgCost) * p.quantity * $0 } }
-            // Market value in NOK (at cost until there's a quote), under the symbol: green long, red short.
-            let valueNOK = usd.flatMap { usd in broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * usd * $0 } }
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    // Double-click is told apart from the symbol's single click (loading it into the selected chart).
-                    Text(p.symbol).fontWeight(.semibold)
-                        .onTapGesture(count: 2) { workspace.focusPosition(p.symbol, broker: broker) }
-                        .onTapGesture { workspace.loadIntoSelectedChart(p.symbol, broker: broker) }
-                    tripOrdersText(openTripOrders[p.symbol])
-                    Spacer(minLength: 2)
-                    // In NOK at the current rate, like the chart's position badge (dollars without a rate).
-                    Text(pnl.map { usd in broker.usdNok.map { Fmt.nok(usd * $0, signed: true, groupedFrom: Self.groupedFrom) }
-                                       ?? Fmt.amount(usd, signed: true) } ?? "—")
-                        .foregroundStyle(sideColors.of((pnl ?? 0) >= 0))
-                }
-                HStack(spacing: 4) {
-                    if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(p.quantity > 0)) }
-                    Text("\(Fmt.shares(p.quantity, groupedFrom: Self.groupedFrom)) - \(Fmt.price(p.avgCost, for: p.symbol))")
-                    Spacer(minLength: 0)
-                }
-                .font(.system(size: 10).monospacedDigit())
+    /// A row of the Positions column: a position, or a what-if trade.
+    private enum PositionItem: Identifiable {
+        case real(Position), sim(SimPosition)
+
+        var id: String {
+            switch self {
+            case .real(let p): "position \(p.symbol)"
+            case .sim(let sim): "sim \(sim.id)"
             }
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2) { workspace.focusPosition(p.symbol, broker: broker) }
-            .help("Double-click to show \(p.symbol)'s chart")
-            .rowStyle()
         }
-        ForEach(broker.simPositions.values.sorted { $0.symbol < $1.symbol }) { simRow($0) }
+
+        var symbol: String {
+            switch self {
+            case .real(let p): p.symbol
+            case .sim(let sim): sim.symbol
+            }
+        }
+    }
+
+    /// Positions and what-if trades, newest first: by the first fill of the position's open round trip,
+    /// a what-if by when it was bought. Positions held from before today's fills, whose opening isn't
+    /// known, go last, by symbol.
+    private var positionItems: [PositionItem] {
+        let opened = Dictionary(
+            RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions)
+                .filter { $0.isOpen && $0.carried == 0 }.map { ($0.symbol, $0.start) },
+            uniquingKeysWith: max)
+        let items = broker.positions.values.map { (item: PositionItem.real($0), opened: opened[$0.symbol]) }
+            + broker.simPositions.values.map { (item: PositionItem.sim($0), opened: Optional($0.opened)) }
+        return items.sorted { a, b in
+            switch (a.opened, b.opened) {
+            case let (x?, y?) where x != y: x > y
+            case (.some, nil): true
+            case (nil, .some): false
+            default: (a.item.symbol, a.item.id) < (b.item.symbol, b.item.id)
+            }
+        }.map(\.item)
+    }
+
+    @ViewBuilder private var positionRows: some View {
+        let items = positionItems
+        let openTripOrders = tripOrders.open
+        if items.isEmpty { empty("No positions") }
+        ForEach(items) { item in
+            switch item {
+            case .real(let p): positionRow(p, tripOrders: openTripOrders[p.symbol])
+            case .sim(let sim): simRow(sim)
+            }
+        }
+    }
+
+    private func positionRow(_ p: Position, tripOrders: Int?) -> some View {
+        let last = broker.quote(p.symbol)?.last
+        // In dollars: a forex pair's at its currency's dollar rate.
+        let usd = broker.usdPerPriceUnit(p.symbol)
+        let pnl = last.flatMap { last in usd.map { (last - p.avgCost) * p.quantity * $0 } }
+        // Market value in NOK (at cost until there's a quote), under the symbol: green long, red short.
+        let valueNOK = usd.flatMap { usd in broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * usd * $0 } }
+        return VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                // Double-click is told apart from the symbol's single click (loading it into the selected chart).
+                Text(p.symbol).fontWeight(.semibold)
+                    .onTapGesture(count: 2) { workspace.focusPosition(p.symbol, broker: broker) }
+                    .onTapGesture { workspace.loadIntoSelectedChart(p.symbol, broker: broker) }
+                tripOrdersText(tripOrders)
+                Spacer(minLength: 2)
+                // In NOK at the current rate, like the chart's position badge (dollars without a rate).
+                Text(pnl.map { usd in broker.usdNok.map { Fmt.nok(usd * $0, signed: true, groupedFrom: Self.groupedFrom) }
+                                   ?? Fmt.amount(usd, signed: true) } ?? "—")
+                    .foregroundStyle(sideColors.of((pnl ?? 0) >= 0))
+            }
+            HStack(spacing: 4) {
+                if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(p.quantity > 0)) }
+                Text("\(Fmt.shares(p.quantity, groupedFrom: Self.groupedFrom)) - \(Fmt.price(p.avgCost, for: p.symbol))")
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 10).monospacedDigit())
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { workspace.focusPosition(p.symbol, broker: broker) }
+        .help("Double-click to show \(p.symbol)'s chart")
+        .rowStyle()
     }
 
     /// A what-if trade (simulated, see `SimTrades.swift`) laid out like a position, marked SIM in the
