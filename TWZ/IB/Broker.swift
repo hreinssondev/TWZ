@@ -160,6 +160,9 @@ final class Broker {
     /// What each chart's bars are of: the symbol and timeframe it last loaded.
     @ObservationIgnored private var loadedBars: [Int: BarCache.Key] = [:]
     @ObservationIgnored private var barCache = BarCache()
+
+    /// What the bars kept for coming back to a timeframe or stock take (Settings › Trading shows it).
+    var barCacheUsage: BarCache.Usage { barCache.usage }
     /// Last prices sampled by `recentChange(_:)`, oldest first, per symbol.
     @ObservationIgnored private var priceSamples: [String: [(time: Date, price: Double)]] = [:]
 

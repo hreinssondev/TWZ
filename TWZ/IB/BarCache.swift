@@ -40,6 +40,18 @@ struct BarCache {
     private var series: [Key: (bars: [Bar], kept: Int)] = [:]
     private var keeps = 0
 
+    /// The series kept, their bars, and those bars' size in bytes.
+    struct Usage {
+        var series = 0
+        var bars = 0
+        var bytes = 0
+    }
+
+    var usage: Usage {
+        let bars = series.values.reduce(0) { $0 + $1.bars.count }
+        return Usage(series: series.count, bars: bars, bytes: bars * MemoryLayout<Bar>.stride)
+    }
+
     /// Keeps the last of the bars a chart showed for `key` (see `Key.span`), if they're kept at all.
     mutating func keep(_ bars: [Bar], for key: Key) {
         guard key.isKept, let newest = bars.last?.time, let oldest = bars.first?.time else { return }

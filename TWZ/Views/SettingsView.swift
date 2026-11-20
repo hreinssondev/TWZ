@@ -162,6 +162,48 @@ private struct ConnectionSettings: View {
 
 // MARK: - Trading
 
+/// What the app takes in memory, as Activity Monitor's Memory column shows it, and what the bars kept
+/// for coming back to a timeframe or stock take of it (see `BarCache`); every 2 seconds.
+private struct MemoryUsage: View {
+    @Environment(Broker.self) private var broker
+    @State private var app: UInt64?
+    @State private var cache = BarCache.Usage()
+
+    var body: some View {
+        LabeledContent("TWZ") {
+            Text(app.map { Self.bytes(Int64($0)) } ?? "—").monospacedDigit()
+        }
+        LabeledContent("Saved candlesticks") {
+            Text("\(Self.bytes(Int64(cache.bytes))) · \(cache.series) of \(BarCache.capacity) series, \(cache.bars.formatted()) bars")
+                .monospacedDigit()
+        }
+        .help("Bars kept in memory for switching back to a timeframe or stock, so it shows at once")
+        .task {
+            while !Task.isCancelled {
+                app = Self.footprint()
+                cache = broker.barCacheUsage
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+    }
+
+    private static func bytes(_ count: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: count, countStyle: .memory)
+    }
+
+    /// The app's physical footprint, what Activity Monitor shows as its Memory.
+    private static func footprint() -> UInt64? {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? info.phys_footprint : nil
+    }
+}
+
 private struct TradingSettings: View {
     @Environment(Workspace.self) private var workspace
     @Environment(Broker.self) private var broker
@@ -194,6 +236,7 @@ private struct TradingSettings: View {
 
     var body: some View {
         Form {
+            Section("Memory") { MemoryUsage() }
             Section("Hotkey buttons") {
                 Picker("Clicking a button", selection: $clickMode) {
                     ForEach(HotkeyClickMode.allCases) { Text($0.rawValue).tag($0) }
