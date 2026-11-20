@@ -2,11 +2,13 @@
 //  BarCache.swift
 //  TWZ
 //
-//  The last day of 1m and 5m bars of the stocks the chart grids follow (the main grid's list and the
-//  Charts window's top gainers), kept in memory when a chart moves off them, so coming back shows them
-//  at once instead of Loading…, while IB's fresh bars load behind them (see `Broker.loadChart`).
-//  Going from 1m to 5m in the same stock, its live 1m bars also bring the kept 5m bars up to date, or
-//  make them the first time. A stock off both lists drops its bars the next time a chart moves.
+//  1m and 5m bars (a forex pair's 1h too) kept in memory when a chart moves off them, to another
+//  timeframe or stock, so a chart coming back to them shows them at once instead of Loading…, while
+//  IB's fresh bars load behind them (see `Broker.loadChart`). Nothing is downloaded for it: only bars a
+//  chart already showed are kept, the last day of them (a pair's 1h, the 10 days it loads). A chart
+//  showing the same bars live gives them instead, and going from 1m to 5m in the same stock, its live
+//  1m bars bring the kept 5m bars up to date, or make them the first time. Up to `capacity` series;
+//  past that, the one kept longest ago goes.
 //
 
 import Foundation
@@ -17,29 +19,45 @@ struct BarCache {
         var symbol: String
         var timeframe: Timeframe
 
-        /// Only 1m and 5m bars are kept.
-        var isKept: Bool { !symbol.isEmpty && (timeframe == .m1 || timeframe == .m5) }
+        /// 1m and 5m bars are kept, and a forex pair's 1h.
+        var isKept: Bool {
+            guard !symbol.isEmpty else { return false }
+            switch timeframe {
+            case .m1, .m5: return true
+            case .h1: return ForexPair.isForex(symbol)
+            case .m15, .d1: return false
+            }
+        }
+
+        /// How far back from its newest bar a series is kept.
+        var span: TimeInterval { timeframe == .h1 ? 10 * 24 * 3600 : 24 * 3600 }
     }
 
-    /// How far back from its newest bar a series is kept.
-    static let span: TimeInterval = 24 * 3600
+    /// Series kept at most: some 10–20 MB of bars when full (about 64 bytes a bar).
+    static let capacity = 200
 
-    private var series: [Key: [Bar]] = [:]
+    private var series: [Key: (bars: [Bar], kept: Int)] = [:]
+    private var keeps = 0
 
-    /// Keeps the last day of the bars a chart showed for `key`, if it's a followed stock's 1m or 5m, and
-    /// drops the bars of stocks no longer followed.
-    mutating func keep(_ bars: [Bar], for key: Key, followed: Set<String>) {
-        series = series.filter { followed.contains($0.key.symbol) }
-        guard key.isKept, followed.contains(key.symbol), let newest = bars.last?.time else { return }
-        let from = newest.addingTimeInterval(-Self.span)
-        series[key] = Array(bars.drop { $0.time < from })
+    /// Keeps the last of the bars a chart showed for `key` (see `Key.span`), if they're kept at all.
+    mutating func keep(_ bars: [Bar], for key: Key) {
+        guard key.isKept, let newest = bars.last?.time, let oldest = bars.first?.time else { return }
+        let from = newest.addingTimeInterval(-key.span)
+        keeps += 1
+        // Shared with the chart's own until either changes, unless older bars are cut off.
+        series[key] = (oldest >= from ? bars : Array(bars.drop { $0.time < from }), keeps)
+        if series.count > Self.capacity, let oldestKept = series.min(by: { $0.value.kept < $1.value.kept })?.key {
+            series[oldestKept] = nil
+        }
     }
 
-    /// The bars a chart about to show `key` starts with (none: it loads as usual): those kept, made up
-    /// to date from the 1m bars it showed (`previous`) when it goes from 1m to 5m in the same stock.
-    func bars(for key: Key, previous: Key, previousBars: [Bar], followed: Set<String>) -> [Bar] {
-        guard key.isKept, followed.contains(key.symbol), previous != key else { return [] }
-        let kept = series[key] ?? []
+    /// The bars a chart about to show `key` starts with (none: it loads as usual): `live`, another
+    /// chart's showing them now; or those kept, made up to date from the 1m bars it showed
+    /// (`previous`) when it goes from 1m to 5m in the same stock.
+    func bars(for key: Key, previous: Key, previousBars: [Bar], live: [Bar]?) -> [Bar] {
+        guard key.isKept, previous != key else { return [] }
+        if let live, !live.isEmpty { return live }
+        let kept = series[key]?.bars ?? []
         guard key.timeframe == .m5, previous == Key(symbol: key.symbol, timeframe: .m1), !previousBars.isEmpty else { return kept }
         return Self.fiveMinute(previousBars, after: kept)
     }

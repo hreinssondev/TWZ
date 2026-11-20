@@ -160,12 +160,6 @@ final class Broker {
     /// What each chart's bars are of: the symbol and timeframe it last loaded.
     @ObservationIgnored private var loadedBars: [Int: BarCache.Key] = [:]
     @ObservationIgnored private var barCache = BarCache()
-
-    /// The stocks the chart grids follow, whose 1m / 5m bars are kept (see `BarCache`): the main grid's
-    /// list and the Charts window's top gainers.
-    private var followedSymbols: Set<String> {
-        Set((scans[MainGrid.scannerOwner]?.symbols ?? []) + (scans[SecondaryCharts.scannerOwner]?.symbols ?? []))
-    }
     /// Last prices sampled by `recentChange(_:)`, oldest first, per symbol.
     @ObservationIgnored private var priceSamples: [String: [(time: Date, price: Double)]] = [:]
 
@@ -226,17 +220,18 @@ final class Broker {
         engine.perform { $0.setSelectedChart(id) }
     }
 
-    /// Loads the chart's symbol and timeframe. A followed stock's 1m / 5m bars kept from before show at
-    /// once, fresh ones replacing them when they're in; the bars it showed are kept (see `BarCache`).
+    /// Loads the chart's symbol and timeframe. Its 1m / 5m bars (a forex pair's 1h too) kept from before,
+    /// or another chart's showing them, show at once, fresh ones replacing them when they're in; the
+    /// bars it showed are kept (see `BarCache`).
     func loadChart(_ chart: ChartModel) {
         let generation = (chartGeneration[chart.id] ?? 0) + 1
         chartGeneration[chart.id] = generation
         let key = BarCache.Key(symbol: chart.symbol, timeframe: chart.timeframe)
         let previous = loadedBars.updateValue(key, forKey: chart.id) ?? key
-        let followed = followedSymbols
         let shown = chart.isLoading ? [] : chart.bars
-        if previous != key { barCache.keep(shown, for: previous, followed: followed) }
-        let seed = barCache.bars(for: key, previous: previous, previousBars: shown, followed: followed)
+        if previous != key { barCache.keep(shown, for: previous) }
+        let live = charts.first { $0 !== chart && loadedBars[$0.id] == key && !$0.isLoading && !$0.bars.isEmpty }?.bars
+        let seed = barCache.bars(for: key, previous: previous, previousBars: shown, live: live)
         chart.bars = seed
         chart.error = nil
         chart.scrollBack = 0
