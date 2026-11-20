@@ -146,8 +146,10 @@ struct ChartPane: View {
             header
             Divider().opacity(0.5)
             TradingChart(chart: chart, allowsAltClick: true, onTrade: { workspace.selectedChartID = chart.id }) { factor in
-                // The top bar's Zoom slider: every main chart.
-                gridZoom = min(ChartModel.maxVisibleBars, max(30, gridZoom * factor))
+                // The top bar's Zoom slider: every main chart. As far as zooming one chart goes: in to 15 bars,
+                // out to all the bars the grid's charts have loaded (older ones load as the view reaches them).
+                let most = workspace.mainCells.compactMap(workspace.chart(id:)).map { Double($0.bars.count) }.max() ?? 0
+                gridZoom = min(max(ChartModel.maxVisibleBars, most), max(15, gridZoom * factor))
                 workspace.manualZoom = gridZoom
             }
         }
