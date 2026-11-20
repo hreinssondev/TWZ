@@ -1050,7 +1050,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         c.timeframe = spec.timeframe
         c.fullHistory = spec.fullHistory
         c.generation = generation
-        requestChart(spec.id)
+        if spec.bars.isEmpty {
+            requestChart(spec.id)
+        } else {
+            // Bars kept from before (see `BarCache`) show until the fresh ones replace them.
+            c.bars = spec.bars
+            c.error = nil
+            c.isLoading = false
+            requestChart(spec.id, keepingBars: true)
+        }
         if symbolChanged { syncTickByTick() }
     }
 
@@ -2919,6 +2927,8 @@ nonisolated struct ChartSpec: Sendable {
     var symbol: String
     var timeframe: Timeframe
     var fullHistory = false
+    /// Bars to show until its own are in, kept from before (see `BarCache`); none: it shows Loading….
+    var bars: [Bar] = []
 }
 
 /// What changed in the engine since the last snapshot; nil fields didn't change.

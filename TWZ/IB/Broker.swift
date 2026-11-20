@@ -157,6 +157,15 @@ final class Broker {
     @ObservationIgnored private var charts: [ChartModel] = []
     /// Bumped on every chart load, so bars still on their way from the previous load are dropped.
     @ObservationIgnored private var chartGeneration: [Int: Int] = [:]
+    /// What each chart's bars are of: the symbol and timeframe it last loaded.
+    @ObservationIgnored private var loadedBars: [Int: BarCache.Key] = [:]
+    @ObservationIgnored private var barCache = BarCache()
+
+    /// The stocks the chart grids follow, whose 1m / 5m bars are kept (see `BarCache`): the main grid's
+    /// list and the Charts window's top gainers.
+    private var followedSymbols: Set<String> {
+        Set((scans[MainGrid.scannerOwner]?.symbols ?? []) + (scans[SecondaryCharts.scannerOwner]?.symbols ?? []))
+    }
     /// Last prices sampled by `recentChange(_:)`, oldest first, per symbol.
     @ObservationIgnored private var priceSamples: [String: [(time: Date, price: Double)]] = [:]
 
@@ -202,6 +211,7 @@ final class Broker {
 
     func registerCharts(_ charts: [ChartModel]) {
         self.charts = charts
+        for chart in charts { loadedBars[chart.id] = BarCache.Key(symbol: chart.symbol, timeframe: chart.timeframe) }
         let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe) }
         engine.perform { $0.registerCharts(specs) }
     }
@@ -216,16 +226,24 @@ final class Broker {
         engine.perform { $0.setSelectedChart(id) }
     }
 
+    /// Loads the chart's symbol and timeframe. A followed stock's 1m / 5m bars kept from before show at
+    /// once, fresh ones replacing them when they're in; the bars it showed are kept (see `BarCache`).
     func loadChart(_ chart: ChartModel) {
         let generation = (chartGeneration[chart.id] ?? 0) + 1
         chartGeneration[chart.id] = generation
-        chart.bars = []
+        let key = BarCache.Key(symbol: chart.symbol, timeframe: chart.timeframe)
+        let previous = loadedBars.updateValue(key, forKey: chart.id) ?? key
+        let followed = followedSymbols
+        let shown = chart.isLoading ? [] : chart.bars
+        if previous != key { barCache.keep(shown, for: previous, followed: followed) }
+        let seed = barCache.bars(for: key, previous: previous, previousBars: shown, followed: followed)
+        chart.bars = seed
         chart.error = nil
         chart.scrollBack = 0
         chart.priceShift = 0
         chart.priceScale = 1
-        chart.isLoading = state == .connected && !chart.symbol.isEmpty
-        let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe)
+        chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
+        let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
         engine.perform { $0.loadChart(spec, generation: generation) }
     }
 
