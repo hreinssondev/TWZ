@@ -283,7 +283,7 @@ extension Workspace {
     /// Either way the scale's own zoom replaces the one set with the Zoom slider or ⇧-swipe
     /// (`manualZoom`). A click also resets the charts adjusted by hand (`ChartModel.adjustedByHand`, also
     /// those of stocks not on screen), and on the lit scale does that rather than turn it off while there's
-    /// anything to reset; ⇧ and the number leaves charts adjusted by hand as they are. Says which in the
+    /// anything to reset; without `byClick` charts adjusted by hand stay as they are. Says which in the
     /// status line; beeps with nothing saved.
     func pickScale(_ slot: Int, byClick: Bool, broker: Broker) {
         let shown = mainCells.compactMap(chart(id:)).filter { !$0.symbol.isEmpty }
