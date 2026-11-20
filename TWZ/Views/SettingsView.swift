@@ -236,7 +236,7 @@ private struct TradingSettings: View {
         ("⌃⌥⇧1 2 3 4", "The same what-if trade, selling (short)"),
         ("⌘⇧T/S L H M/A F", "Show that list and load it into the chart grid: Most Active $ (T or S), Top Losers, AH Gainers, "
             + "Top Gainers (M or A), Forex"),
-        ("⌥1 2 3 4 5", "Every chart's timeframe: 1m / 5m / 15m / 1h / D"),
+        ("⌥ or ⌘ 1 2 3 4 5", "Every chart's timeframe: 1m / 5m / 15m / 1h / D"),
         ("⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("⌘R", "The charts back to the lit number in the top bar as saved (its view set, or its scale at its own zoom)"),
         ("⌥0  /  ⇧A", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes); ⇧A not while typing"),

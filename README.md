@@ -18,7 +18,7 @@ management in one window built for quick entries and exits.
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
   as you scroll back), 1m to daily, pre-market, after hours and overnight shading, VWAP and SMA 9 / 21,
-  volume, tick-by-tick trades on the selected chart. ⌥1–5 switches every chart (1m, 5m, 15m, 1h, D),
+  volume, tick-by-tick trades on the selected chart. ⌥1–5 or ⌘1–5 switches every chart (1m, 5m, 15m, 1h, D),
   keeping each chart's view: the same time on screen, only the candles change (or, with that off in
   Settings › Appearance, each timeframe going back to its own zoom and place).
 - **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the

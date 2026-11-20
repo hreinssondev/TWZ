@@ -25,7 +25,7 @@
 //  as saved (see `Workspace.reapplyNumber`).
 //  ⌘⇧ and a list's letter (T or S Most Active $, L Top Losers, H AH Gainers, M or A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
-//  ⌥1 / 2 / 3 / 4 / 5 sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
+//  ⌥1 / 2 / 3 / 4 / 5 (or ⌘1–5) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
 //  place and price scale (see `Workspace.matchViews`). ⇧1–5 outside a text field does what clicking
@@ -159,7 +159,8 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    if modifiers == .option, inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
+                    // ⌥1–5 or ⌘1–5: the account bar's timeframe.
+                    if modifiers == .option || modifiers == .command, inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
                         workspace.setMainTimeframe(timeframe, broker: broker)
                         return nil
@@ -282,6 +283,9 @@ extension KeyShortcut {
         }
         if shift, !option, !command, !control, k == "a" {
             return "⇧A gives every chart the selected chart's view"
+        }
+        if command, !shift, !option, !control, let timeframe = Timeframe(keyCode: keyCode) {
+            return "\(display) sets every chart to \(timeframe.rawValue)"
         }
         if option, !shift, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
             return "\(display) sets every chart to \(timeframe.rawValue)"
