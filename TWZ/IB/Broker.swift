@@ -231,8 +231,12 @@ final class Broker {
         chartViewsChanged()
     }
 
-    /// Quitting: keeps where every chart is, then saves it all.
+    /// Quitting: keeps where every chart is, and the bars they show (see `BarStore`), then saves it all.
     func saveChartViews() {
+        for chart in charts where !chart.symbol.isEmpty && !chart.isLoading {
+            barCache.keep(chart.bars, for: loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe))
+        }
+        BarStore.shared.flush()
         for chart in charts where !chart.symbol.isEmpty {
             let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
             let list = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
@@ -275,6 +279,7 @@ final class Broker {
         let checks = hideRestricted
         engine.perform { $0.setChecksRestrictions(checks) }
         setQuoteSymbols(Array(simPositions.keys), owner: Self.simQuoteOwner)
+        BarStore.shared.prune()
     }
 
     // MARK: - Commands
@@ -381,7 +386,10 @@ final class Broker {
             }
         }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
-        let spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
+        var spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
+        // Bars kept from a while ago (from disk, after a relaunch): the full history, so the fresh bars
+        // reach back to them and the older ones stay (see `TradingEngine.historicalData`).
+        if let newest = seed.last?.time, newest < Date().addingTimeInterval(-6 * 3600) { spec.fullHistory = true }
         engine.perform { $0.loadChart(spec, generation: generation) }
     }
 

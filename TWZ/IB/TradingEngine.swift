@@ -1070,8 +1070,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if spec.bars.isEmpty {
             requestChart(spec.id)
         } else {
-            // Bars kept from before (see `BarCache`) show until the fresh ones replace them.
+            // Bars kept from before (see `BarCache`) show until the fresh ones replace them; older ones
+            // than those reach stay in front of them (see `historicalData`).
             c.bars = spec.bars
+            c.keepsOlder = true
             c.error = nil
             c.isLoading = false
             requestChart(spec.id, keepingBars: true)
@@ -1131,6 +1133,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         c.reachedStart = false
         c.fullHistoryIn = false
         if !keepingBars {
+            c.keepsOlder = false
             c.bars = []
             c.error = nil
             c.isLoading = apiReady && !c.symbol.isEmpty
@@ -2692,7 +2695,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         guard let id = chartByReq[reqId], let c = charts[id] else { return }
         Self.log.notice("History #\(reqId) \(c.symbol, privacy: .public): \(bars.count) bars from \(bars.first?.time.description ?? "-", privacy: .public)")
-        c.bars = Self.merge(bars, overnightBars[id] ?? [])
+        var merged = Self.merge(bars, overnightBars[id] ?? [])
+        // Bars kept from before reaching further back than these: kept in front of them where the two
+        // meet, so a view zoomed far out doesn't load them again.
+        if c.keepsOlder, let first = merged.first, let shownLast = c.bars.last, shownLast.time >= first.time {
+            let older = c.bars.prefix { $0.time < first.time }
+            if !older.isEmpty { merged = Array(older) + merged }
+        }
+        c.keepsOlder = false
+        c.bars = merged
         c.fullHistoryIn = c.fullHistory
         c.isLoading = false
         c.error = c.bars.isEmpty ? "No data" : nil
@@ -2919,6 +2930,8 @@ nonisolated private final class ChartState {
     var olderReq: Int?
     /// IB had nothing before the oldest bar.
     var reachedStart = false
+    /// The bars shown are kept from before (see `BarCache`): the fresh history keeps those older than it.
+    var keepsOlder = false
     var generation = 0
     var bars: [Bar] = []
     var isLoading = false

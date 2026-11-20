@@ -27,7 +27,8 @@ management in one window built for quick entries and exits.
   place and price scale. ⇧-clicking 1–5 in the top bar saves that as a scale; clicking one gives it to
   every chart (and those loading another stock) until it's clicked again, ⇧ and a number just to the
   selected chart; a chart zoomed or panned by hand keeps its view until a number is clicked. The bars
-  a chart showed, on every timeframe, stay in memory, so coming back to them shows at once.
+  a chart showed, on every timeframe, stay in memory and on disk (two days after last shown), so coming
+  back to them, also after a relaunch or zoomed far out, shows at once.
 - **Trading from the chart**: ⌥-click places the selected hotkey's order (or a fixed NOK amount) at
   the clicked price, ⌃-click a stop loss or take profit, and order lines show their fill as it
   happens. Double-click an order line to cancel it.

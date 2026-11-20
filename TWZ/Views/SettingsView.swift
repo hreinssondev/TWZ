@@ -168,20 +168,26 @@ private struct MemoryUsage: View {
     @Environment(Broker.self) private var broker
     @State private var app: UInt64?
     @State private var cache = BarCache.Usage()
+    @State private var disk: (files: Int, bytes: Int) = (0, 0)
 
     var body: some View {
         LabeledContent("TWZ") {
             Text(app.map { Self.bytes(Int64($0)) } ?? "—").monospacedDigit()
         }
         LabeledContent("Saved candlesticks") {
-            Text("\(Self.bytes(Int64(cache.bytes))) · \(cache.series) of \(BarCache.capacity) series, \(cache.bars.formatted()) bars")
+            Text("\(Self.bytes(Int64(cache.bytes))) · \(cache.series) series, \(cache.bars.formatted()) bars")
                 .monospacedDigit()
         }
         .help("Bars kept in memory for switching back to a timeframe or stock, so it shows at once")
+        LabeledContent("Saved candlesticks on disk") {
+            Text("\(Self.bytes(Int64(disk.bytes))) · \(disk.files) series").monospacedDigit()
+        }
+        .help("Bars kept on disk, so they're there after a relaunch; a series not shown for two days is deleted at launch")
         .task {
             while !Task.isCancelled {
                 app = Self.footprint()
                 cache = broker.barCacheUsage
+                disk = await Task.detached(priority: .utility) { BarStore.shared.usage() }.value
                 try? await Task.sleep(for: .seconds(2))
             }
         }
