@@ -20,69 +20,76 @@ struct AccountBar: View {
     private static let trafficLightsWidth: CGFloat = 80
 
     var body: some View {
-        HStack(spacing: 18) {
-            Text(broker.isLivePort ? "LIVE" : "PAPER")
-                .font(.system(size: 10, weight: .heavy))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Capsule().fill(broker.isLivePort ? Color.red : Color.blue))
+        // Two groups with a small least gap between them, so the left one can come close to the right one
+        // in a narrow window before anything in it is squeezed.
+        HStack(spacing: 0) {
+            HStack(spacing: 18) {
+                Text(broker.isLivePort ? "LIVE" : "PAPER")
+                    .font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Capsule().fill(broker.isLivePort ? Color.red : Color.blue))
 
-            OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
+                OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
 
-            // Account values are in the base currency (NOK), shown as bare numbers.
-            HStack(spacing: 12) {
-                stat("Equity", Fmt.amount(broker.netLiquidation))
-                stat("P/L Today", Fmt.amount(broker.dailyPnL, signed: true))
-                stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true))
-                stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
+                // Account values are in the base currency (NOK), shown as bare numbers.
+                HStack(spacing: 12) {
+                    stat("Equity", Fmt.amount(broker.netLiquidation))
+                    stat("P/L Today", Fmt.amount(broker.dailyPnL, signed: true))
+                    stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true))
+                    stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
+                }
+
+                // The chart grid's size, its charts' zoom and timeframe (see `ChartGrid`).
+                GridSliders(columns: $gridColumns, rows: $gridRows, zoom: $gridZoom,
+                            columnRange: 2...MainGrid.maxColumns, rowRange: 2...MainGrid.maxRows)
+                    .background(NoWindowDrag())
+
+                HStack(spacing: 8) {
+                    TimeframePicker(selection: $gridTimeframe)
+                        .help("Every chart's timeframe (⌥1–5: 1m, 5m, 15m, 1h, D); a chart's own switch changes just that chart, until it gets a new gainer or Reset")
+
+                    Button {
+                        workspace.resetToGainers()
+                    } label: {
+                        Text("Reset")
+                            .font(.system(size: 10).monospacedDigit())
+                            .foregroundStyle(Color.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(0.08)))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Every chart follows the list loaded into the grid in order again (the top gainers unless another list was loaded), on the timeframe beside it and at the Zoom slider's zoom; charts set by hand let go of their stock")
+
+                    ScaleButtons()
+                }
+                .fixedSize()
             }
 
-            // The chart grid's size, its charts' zoom and timeframe (see `ChartGrid`).
-            GridSliders(columns: $gridColumns, rows: $gridRows, zoom: $gridZoom,
-                        columnRange: 2...MainGrid.maxColumns, rowRange: 2...MainGrid.maxRows)
-                .background(NoWindowDrag())
+            Spacer(minLength: 10)
 
-            HStack(spacing: 8) {
-                TimeframePicker(selection: $gridTimeframe)
-                    .help("Every chart's timeframe (⌥1–5: 1m, 5m, 15m, 1h, D); a chart's own switch changes just that chart, until it gets a new gainer or Reset")
+            HStack(spacing: 18) {
+                IndicatorToggles()
+
+                // The status text (e.g. why it disconnected) shows on hover.
+                Circle().fill(statusColor).frame(width: 8, height: 8)
+                    .help(broker.statusText)
+
+                Button(broker.state == .disconnected ? "Connect" : "Disconnect") {
+                    broker.state == .disconnected ? broker.connect() : broker.disconnect()
+                }
+                .controlSize(.small)
 
                 Button {
-                    workspace.resetToGainers()
+                    workspace.showsSettings = true
                 } label: {
-                    Text("Reset")
-                        .font(.system(size: 10).monospacedDigit())
-                        .foregroundStyle(Color.secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(0.08)))
-                        .contentShape(Rectangle())
+                    Image(systemName: "gearshape")
                 }
-                .buttonStyle(.plain)
-                .help("Every chart follows the list loaded into the grid in order again (the top gainers unless another list was loaded), on the timeframe beside it and at the Zoom slider's zoom; charts set by hand let go of their stock")
-
-                ScaleButtons()
+                .buttonStyle(.borderless)
+                .help("Settings")
             }
-
-            Spacer()
-
-            IndicatorToggles()
-
-            // The status text (e.g. why it disconnected) shows on hover.
-            Circle().fill(statusColor).frame(width: 8, height: 8)
-                .help(broker.statusText)
-
-            Button(broker.state == .disconnected ? "Connect" : "Disconnect") {
-                broker.state == .disconnected ? broker.connect() : broker.disconnect()
-            }
-            .controlSize(.small)
-
-            Button {
-                workspace.showsSettings = true
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(.borderless)
-            .help("Settings")
         }
         // At the top, beside the window controls and centered on them, so the stats line up with them;
         // at the bottom (controls hidden), from the window's edge.
