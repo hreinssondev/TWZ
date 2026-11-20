@@ -238,7 +238,7 @@ private struct TradingSettings: View {
         ("⌘⌥ 1–9", "A Mode order (buy while LONG, short while SHORT) of 10–90% of the buying power IB allows in the stock: limit at the mid, no offset, outside regular hours too (with KEYS ON)"),
         ("⌘R, ⇧R or ⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("⌥0  /  ⇧A", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes); ⇧A not while typing"),
-        ("1 2 3 4 5 (top bar)", "View sets (by default): ⇧-click a number saves every chart's zoom and place on every timeframe; a click puts them back. With Appearance's \"Top bar numbers are scales\" on, scales: a click: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists change until it's clicked again or Reset (a timeframe switch keeps each chart's view). The Zoom slider or ⇧- / ⌘-swipe trumps its zoom until a scale is picked; a chart zoomed or panned by hand keeps its view (per stock and timeframe) through list switches, until a number is clicked (or a right-click on that chart). Each list keeps its own views and lit scale. ⇧-click: save the selected chart's view as it"),
+        ("1 2 3 4 5 (top bar)", "View sets (by default): ⇧-click a number saves every chart's zoom and place on every timeframe; a click puts them back. With Appearance's \"Top bar numbers are scales\" on, scales: a click: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists change until it's clicked again or Reset (a timeframe switch keeps each chart's view). The Zoom slider or ⇧- / ⌘- / ⌥-swipe trumps its zoom until a scale is picked; a chart zoomed or panned by hand keeps its view (per stock and timeframe) through list switches, until a number is clicked (or a right-click on that chart). Each list keeps its own views and lit scale. ⇧-click: save the selected chart's view as it"),
         ("Own shortcut", "Send that hotkey (set in the hotkey editor)"),
     ]
 
@@ -622,9 +622,9 @@ private struct AppearanceSettings: View {
                      : "Each timeframe keeps its own zoom and place, and switching back goes to them.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Toggle("⇧- or ⌘-swipe zooms charts adjusted by hand to the same zoom", isOn: $gridZoomResetsAdjusted)
+                Toggle("⇧-, ⌘- or ⌥-swipe zooms charts adjusted by hand to the same zoom", isOn: $gridZoomResetsAdjusted)
                 Text(gridZoomResetsAdjusted
-                     ? "⇧- or ⌘-swipe and the Zoom slider put every chart at the same zoom, those zoomed or panned by hand too."
+                     ? "⇧-, ⌘- or ⌥-swipe and the Zoom slider put every chart at the same zoom, those zoomed or panned by hand too."
                      : "Charts zoomed or panned by hand keep their own zoom and zoom in or out by as much as the rest.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

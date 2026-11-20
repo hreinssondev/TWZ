@@ -25,7 +25,7 @@ final class ChartModel: Identifiable {
     var scrollBack: Double = 0
     /// Vertical drag, as a fraction of the auto-fitted price range (positive = moved down).
     var priceShift: Double = 0
-    /// ⌘⇧-swipe vertical zoom: the auto-fitted price range times this (above 1 = zoomed out).
+    /// ⌃-swipe vertical zoom: the auto-fitted price range times this (above 1 = zoomed out).
     var priceScale: Double = 1
     /// When the chart last loaded a symbol, counted across charts: of two main-window charts showing
     /// the same stock, the lower one showed it first (see `Workspace.timeframe(showing:in:otherwise:)`).
@@ -279,7 +279,7 @@ final class Workspace {
     }
     /// The scale last saved or picked, lit or not (`reapplyNumber` goes back to it).
     var lastScale: Int?
-    /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧- / ⌘-swipe on a chart): it trumps the
+    /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧- / ⌘- / ⌥-swipe on a chart): it trumps the
     /// lit scale's zoom, on the charts now and on those loading another stock, until a scale is
     /// picked (its number clicked) or saved, or Reset. Saved.
     var manualZoom: Double? {
