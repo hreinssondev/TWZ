@@ -332,6 +332,8 @@ final class Broker {
         if previous != key { barCache.keep(shown, for: previous) }
         let live = charts.first { $0 !== chart && loadedBars[$0.id] == key && !$0.isLoading && !$0.bars.isEmpty }?.bars
         let seed = barCache.bars(for: key, previous: previous, previousBars: shown, live: live)
+        chart.bars = seed
+        chart.error = nil
         // Views are kept per list in the main grid: the one it leaves under the list it was in.
         let list = chart.inChartsWindow ? nil : viewList
         let previousList = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
@@ -383,34 +385,12 @@ final class Broker {
                 if let gridZoomOverride { chart.visibleBars = gridZoomOverride }
             }
         }
-        // Bars kept that don't reach back to the view's left edge aren't shown: part of the view would be
-        // empty and the prices fitted to the few bars there, seeming zoomed in until the rest came in. It
-        // loads as usual instead.
-        let reach = chart.visibleBars + max(0, chart.scrollBack)
-        let start = Double(seed.count) >= reach ? seed : []
-        chart.bars = start
-        chart.error = nil
-        chart.isLoading = start.isEmpty && state == .connected && !chart.symbol.isEmpty
-        var spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: start)
-        // The full history at once where the view reaches further back than the short one a chart starts
-        // with, so it comes in whole rather than in two steps; and behind bars kept from a while ago (from
-        // disk, after a relaunch), so the fresh ones reach back to them and the older ones stay (see
-        // `TradingEngine.historicalData`).
-        if reach > Self.compactBars(key.timeframe) { spec.fullHistory = true }
-        if let newest = start.last?.time, newest < Date().addingTimeInterval(-6 * 3600) { spec.fullHistory = true }
+        chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
+        var spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
+        // Bars kept from a while ago (from disk, after a relaunch): the full history, so the fresh bars
+        // reach back to them and the older ones stay (see `TradingEngine.historicalData`).
+        if let newest = seed.last?.time, newest < Date().addingTimeInterval(-6 * 3600) { spec.fullHistory = true }
         engine.perform { $0.loadChart(spec, generation: generation) }
-    }
-
-    /// About how many bars the short history a chart starts with holds (`Timeframe.compactDuration`), for
-    /// a stock's 16 extended hours a day, a bit under.
-    static func compactBars(_ timeframe: Timeframe) -> Double {
-        switch timeframe {
-        case .m1: 850            // 1 D
-        case .m5: 340            // 2 D
-        case .m15: 280           // 5 D
-        case .h1: 140            // 10 D
-        case .d1: 115            // 6 M
-        }
     }
 
     /// How far back from the latest of `bars` the bar holding `edge` is: to keep it the right-most one.
