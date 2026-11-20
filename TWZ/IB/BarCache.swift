@@ -2,10 +2,10 @@
 //  BarCache.swift
 //  TWZ
 //
-//  1m, 5m and 1h bars kept in memory when a chart moves off them, to another
+//  A chart's bars, on every timeframe, kept in memory when it moves off them, to another
 //  timeframe or stock, so a chart coming back to them shows them at once instead of Loading…, while
 //  IB's fresh bars load behind them (see `Broker.loadChart`). Nothing is downloaded for it: only bars a
-//  chart already showed are kept, the last day of them (of 1h, the 10 days it loads). A chart
+//  chart already showed are kept, as far back as a chart first loads (`Key.span`). A chart
 //  showing the same bars live gives them instead, and going from 1m to 5m in the same stock, its live
 //  1m bars bring the kept 5m bars up to date, or make them the first time. Up to `capacity` series;
 //  past that, the one kept longest ago goes.
@@ -19,21 +19,23 @@ struct BarCache {
         var symbol: String
         var timeframe: Timeframe
 
-        /// 1m, 5m and 1h bars are kept.
-        var isKept: Bool {
-            guard !symbol.isEmpty else { return false }
+        var isKept: Bool { !symbol.isEmpty }
+
+        /// How far back from its newest bar a series is kept: about what a chart first loads
+        /// (`Timeframe.compactDuration`), but a day of 5m.
+        var span: TimeInterval {
+            let day: TimeInterval = 24 * 3600
             switch timeframe {
-            case .m1, .m5, .h1: return true
-            case .m15, .d1: return false
+            case .m1, .m5: return day
+            case .m15: return 5 * day
+            case .h1: return 10 * day
+            case .d1: return 183 * day
             }
         }
-
-        /// How far back from its newest bar a series is kept.
-        var span: TimeInterval { timeframe == .h1 ? 10 * 24 * 3600 : 24 * 3600 }
     }
 
-    /// Series kept at most: some 10–20 MB of bars when full (about 64 bytes a bar).
-    static let capacity = 200
+    /// Series kept at most, some 60 stocks on every timeframe: 10–25 MB of bars when full (64 bytes a bar).
+    static let capacity = 300
 
     private var series: [Key: (bars: [Bar], kept: Int)] = [:]
     private var keeps = 0
