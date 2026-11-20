@@ -411,7 +411,7 @@ struct TradingChart: View {
 
     var body: some View {
         CandleChart(
-            chart: chart, lines: priceLines,
+            chart: chart, lines: priceLines, pointers: simPointers,
             // Switched off in the top bar: no handler, so ⌥ neither tints the price tag nor places orders.
             // The selected hotkey's order at the clicked price, or with none selected (the ⌥-click
             // buy box is), a buy for its NOK amount.
@@ -608,6 +608,11 @@ struct TradingChart: View {
         kind == .stopLoss
             ? LineColors.resolve(stopLossHex, default: LineColors.defaultStopLoss)
             : LineColors.resolve(takeProfitHex, default: LineColors.defaultTakeProfit)
+    }
+
+    /// A what-if trade's fills: an arrow in its line's color pointing right at each.
+    private var simPointers: [PricePointer] {
+        broker.simPositions[chart.symbol]?.entryPoints.map { PricePointer(time: $0.time, price: $0.price, color: Self.whatIfColor) } ?? []
     }
 
     /// Line colors and solid / dashes / dots come from Settings.

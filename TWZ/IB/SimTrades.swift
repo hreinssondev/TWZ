@@ -30,6 +30,17 @@ nonisolated struct SimPosition: Codable, Equatable, Identifiable {
     var entryCommission: OrderPreview.Commission?
     /// P/L of the fills that reduced it, in its price's currency (dollars for a stock).
     var realized = 0.0
+    /// The fills that opened or added to it; its chart points an arrow at each. nil for what-if trades
+    /// saved before these were kept (see `entryPoints`).
+    var entries: [Entry]?
+
+    struct Entry: Codable, Equatable {
+        var time: Date
+        var price: Double
+    }
+
+    /// Its fills in, or for one saved without them, its opening at the average price.
+    var entryPoints: [Entry] { entries ?? [Entry(time: opened, price: avgCost)] }
 
     var isLong: Bool { quantity > 0 }
 
@@ -241,6 +252,7 @@ extension Broker {
         }
         var sim = simPositions[symbol] ?? SimPosition(symbol: symbol, quantity: 0, avgCost: price)
         let held = abs(sim.quantity)
+        sim.entries = (held > 0 ? sim.entryPoints : []) + [SimPosition.Entry(time: Date(), price: price)]
         sim.avgCost = (sim.avgCost * held + price * shares) / (held + shares)
         sim.quantity += isBuy ? shares : -shares
         simPositions[symbol] = sim

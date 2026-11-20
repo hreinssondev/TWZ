@@ -54,6 +54,14 @@ struct PriceLine {
     var followsLastPrice = false
 }
 
+/// A sideways arrow pointing right at a price at a time, its tip just left of that time's candle
+/// (a what-if trade's fills).
+struct PricePointer {
+    var time: Date
+    var price: Double
+    var color: Color
+}
+
 /// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
 enum RightSpace {
     static let key = "chartRightSpaceBars"
@@ -66,6 +74,7 @@ struct CandleChart: View {
     @Environment(\.sideColors) private var sideColors
     let chart: ChartModel
     var lines: [PriceLine] = []
+    var pointers: [PricePointer] = []
     /// ⌥-click in the price area: called with the price under the cursor.
     var onAltClick: ((Double) -> Void)?
     /// ⌘-click in the price area: called with the price under the cursor.
@@ -544,6 +553,9 @@ struct CandleChart: View {
 
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
         if showTrades || !shownFillIds.isEmpty { drawTrades(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y) }
+        if !pointers.isEmpty {
+            drawPointers(in: &plotCtx, bars: bars, start: start, end: end, bodyWidth: bodyWidth, x: x, y: y)
+        }
 
         // Position / order lines; orders and the ones that move aside for the last price (avg cost) go
         // on top of it.
@@ -672,6 +684,29 @@ struct CandleChart: View {
             arrow.closeSubpath()
             ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
             ctx.fill(arrow, with: .color(sideColors.of(m.isBuy)))
+        }
+    }
+
+    /// `pointers` on the visible bars: arrows pointing right, the size of the trade arrows, their tips
+    /// just left of the candle.
+    private func drawPointers(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, bodyWidth: CGFloat,
+                              x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
+        let head: CGFloat = 7, halfWidth: CGFloat = 5, stem: CGFloat = 7, stemHalf: CGFloat = 1.25
+        for p in pointers {
+            guard let bar = Self.barIndex(of: p.time, in: bars, barSeconds: chart.timeframe.barSeconds),
+                  bar >= start, bar < end else { continue }
+            let tip = CGPoint(x: x(bar) - bodyWidth / 2 - 1, y: y(p.price))
+            var arrow = Path()
+            arrow.move(to: tip)
+            arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y - halfWidth))
+            arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y - stemHalf))
+            arrow.addLine(to: CGPoint(x: tip.x - head - stem, y: tip.y - stemHalf))
+            arrow.addLine(to: CGPoint(x: tip.x - head - stem, y: tip.y + stemHalf))
+            arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y + stemHalf))
+            arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y + halfWidth))
+            arrow.closeSubpath()
+            ctx.stroke(arrow, with: .color(.black.opacity(0.6)), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+            ctx.fill(arrow, with: .color(p.color))
         }
     }
 
