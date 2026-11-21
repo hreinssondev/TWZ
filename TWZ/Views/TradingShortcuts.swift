@@ -89,6 +89,19 @@ struct TradingShortcuts: ViewModifier {
                     }
                     let modifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
                     let inMainWindow = event.window.map { $0 === NSApp.mainWindow && $0.attachedSheet == nil } ?? false
+                    /// ⌘A (Hyper A, Hyper ⌫): every order in the selected chart's symbol, and its ⌃-click what-if; with no
+                    /// chart selected, the last order placed, as ⌘Z and ⌥Z.
+                    func cancelSymbolOrders() {
+                        let symbol = workspace.targetSymbol
+                        if !workspace.isChartSelected {
+                            broker.cancelLastOrder()
+                        } else if symbol.isEmpty {
+                            NSSound.beep()
+                        } else {
+                            workspace.whatIfs[symbol] = nil
+                            broker.cancelOrders(for: symbol)
+                        }
+                    }
                     /// An order: with KEYS ON for real, with them off (SIM) as a what-if trade (see `Broker.runSim`);
                     /// Positions shows the real positions or the what-if trades to match.
                     func place(_ hotkey: Hotkey) {
@@ -206,6 +219,12 @@ struct TradingShortcuts: ViewModifier {
                         workspace.setMainTimeframe(timeframe, broker: broker)
                         return nil
                     }
+                    // Hyper A or Hyper ⌫ (⌃⌥⇧⌘, Raycast's Caps Lock say, and A or ⌫): as ⌘A, also while typing.
+                    if modifiers == [.command, .option, .control, .shift], inMainWindow,
+                       event.keyCode == 51 || event.charactersIgnoringModifiers?.lowercased() == "a" {
+                        if !event.isARepeat { cancelSymbolOrders() }
+                        return nil
+                    }
                     if modifiers == .command, inMainWindow, let window = event.window {
                         let symbol = workspace.targetSymbol
                         let typing = window.firstResponder is NSTextView
@@ -221,15 +240,7 @@ struct TradingShortcuts: ViewModifier {
                         switch event.keyCode == 51 ? "⌫" : event.charactersIgnoringModifiers?.lowercased() {
                         case "a":
                             if typing { return event }
-                            if !workspace.isChartSelected {
-                                // No chart selected: the last order placed, as ⌘Z and ⌥Z.
-                                broker.cancelLastOrder()
-                            } else if symbol.isEmpty {
-                                NSSound.beep()
-                            } else {
-                                workspace.whatIfs[symbol] = nil
-                                broker.cancelOrders(for: symbol)
-                            }
+                            cancelSymbolOrders()
                         case "⌫":
                             if typing { return event }
                             // KEYS ON: the real position; SIM (KEYS off): the what-if trade.
@@ -325,6 +336,9 @@ extension KeyShortcut {
         }
         if command, shift, !option, !control, let kind = ScannerKind.forShortcut(k) {
             return "\(display) shows the \(kind.rawValue) list"
+        }
+        if command, option, control, shift, k == "a" || keyCode == 51 {
+            return "\(display) cancels the symbol's orders, as ⌘A"
         }
         if command, !option, !control {
             if keyCode == 36 || keyCode == 76 {

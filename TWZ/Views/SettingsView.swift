@@ -339,7 +339,7 @@ private struct OrderKeysSettings: View {
         ("⌘⇧↩  /  ⌥⌘⇧↩", "Send the selected hotkey button's order; with none selected, buy (⌘⇧↩) or sell short (⌥⌘⇧↩) the order pad's"),
         ("⌘⇧M", "Switch the order numbers between dollars ($1,000 a step: 1–9 are $1,000–$9,000) and a percent of the buying power (20% a step: 1–4 are 20–80%, 5–9 none): KEYS $ or KEYS % in the top bar, and the order pad's $ and %"),
         ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market; removes its ⌃-click what-if too. In SIM it closes the chart's what-if trade instead"),
-        ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if); with no chart selected, ⌘A cancels the last order placed, as ⌘Z"),
+        ("⌘A  /  ⌥<  /  Hyper A, Hyper ⌫", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if); with no chart selected, ⌘A cancels the last order placed, as ⌘Z"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
         ("⌘⇧⌫", "Remove the chart's ⌃-click what-if (so does double-clicking anywhere on the chart)"),
         ("⌃⌥⇧1 2 3 4", "What-if trade: sell (short) $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
