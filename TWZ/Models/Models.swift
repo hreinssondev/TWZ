@@ -304,7 +304,8 @@ nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// The number keys' orders, ⌘⌥ and 1–9 (number row or keypad): a Mode order (see `TradeMode`) of 10–90%
+/// The number keys' orders, with KEYS ON (number row or keypad): ⌘1–4 buy and ⌘⌥1–4 sell short (see
+/// `sizedHotkey`); ⌘⌥ and 5–9: a Mode order (see `TradeMode`) of 50–90%
 /// of the buying power IB's margin allows in the stock, limit at the mid, no offset, outside regular
 /// hours too, DAY. Sent only with KEYS ON.
 nonisolated enum OrderKeys {
@@ -317,15 +318,16 @@ nonisolated enum OrderKeys {
         OrderPad(buyingPower: true, kind: .mid, number: number).hotkey
     }
 
-    /// ⌘1 / 2 / 3 / 4 with KEYS ON: a buy of $1,000 / $2,000 / $3,000 / 85% of the buying power IB's margin
-    /// allows in the stock, limit at the mid (not MIDPRICE), no offset, outside regular hours too, DAY (with
-    /// KEYS off they switch timeframes); nil for the other numbers.
-    static let buyNumbers = 1...4
-    static func buyHotkey(number: Int) -> Hotkey? {
-        guard buyNumbers.contains(number) else { return nil }
+    /// ⌘1 / 2 / 3 / 4 with KEYS ON (`.buy`), or ⌘⌥ and them (`.sell`, short): $1,000 / $2,000 / $3,000 / 85% of
+    /// the buying power IB's margin allows in the stock (a new long, or a new short), limit at the mid (not
+    /// MIDPRICE), no offset, outside regular hours too, DAY (with KEYS off ⌘1–4 switch timeframes); nil for
+    /// the other numbers.
+    static let sizedNumbers = 1...4
+    static func sizedHotkey(_ action: Hotkey.Action, number: Int) -> Hotkey? {
+        guard sizedNumbers.contains(number) else { return nil }
         let sizing: Hotkey.Sizing = number == 4 ? .buyingPower : .dollars
         let amount = number == 4 ? 85 : Double(number * 1000)
-        var hotkey = Hotkey(label: Hotkey.autoLabel(action: .buy, sizing: sizing, amount: amount), action: .buy,
+        var hotkey = Hotkey(label: Hotkey.autoLabel(action: action, sizing: sizing, amount: amount), action: action,
                             sizing: sizing, amount: amount, orderType: .limit, priceReference: .mid, offset: 0)
         hotkey.outsideRth = true
         hotkey.tif = .day

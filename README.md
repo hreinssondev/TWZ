@@ -40,8 +40,8 @@ management in one window built for quick entries and exits.
   held together switches to LONG, with S and H to SHORT; the top bar's LIVE / PAPER badge is green
   while LONG, red while SHORT). Beside it, configurable hotkey buttons (closing, cancelling, or orders of
   their own), each with an optional keyboard shortcut; clicking one selects it in place of the pad's
-  order. ⌘⇧↩ sends the selected order; ⌘⌥ and 1–9 sends a Mode order of 10–90% of the buying power at
-  the mid; ⌘⌫ cancels the symbol's orders and closes the position at market. The shortcuts that send
+  order. ⌘⇧↩ sends the selected order; ⌘⌥ and 1 / 2 / 3 / 4 shorts $1,000 / $2,000 / $3,000 / 85% of the
+  buying power at the mid (no offset, outside regular hours too), and 5–9 sends a Mode order of 50–90% of it; ⌘⌫ cancels the symbol's orders and closes the position at market. The shortcuts that send
   orders work only after ⌘ and the Globe (fn) key turn them on (again: off; off at every launch, KEYS
   ON in the top bar); while on, ⌘1 / 2 / 3 / 4 buys $1,000 / $2,000 / $3,000 / 85% of the buying power at
   the mid (no offset, outside regular hours too) and ⌘5–9 are free for hotkeys, instead of switching timeframes.
