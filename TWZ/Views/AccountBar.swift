@@ -25,7 +25,7 @@ struct AccountBar: View {
         HStack(spacing: 0) {
             HStack(spacing: 18) {
                 // LIVE (red) or PAPER (blue).
-                AccountBadge(isLive: broker.isLivePort)
+                AccountBadge(isLive: broker.isLivePort, isLit: workspace.orderShortcutsOn)
 
                 OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
 
@@ -180,17 +180,18 @@ private struct ScaleButtons: View {
     }
 }
 
-/// LIVE (red) or PAPER (blue), the gateway port, always lit (KEYS ON or SIM).
+/// LIVE (red) or PAPER (blue), the gateway port: lit with KEYS ON, dimmed like SIM's badge in SIM.
 private struct AccountBadge: View {
     let isLive: Bool
+    let isLit: Bool
 
     var body: some View {
         Text(isLive ? "LIVE" : "PAPER")
-            .font(.system(size: 10, weight: .heavy))
-            .foregroundStyle(.white)
+            .font(.system(size: 10, weight: isLit ? .heavy : .regular))
+            .foregroundStyle(isLit ? Color.white : Color.secondary.opacity(0.7))
             .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Capsule().fill(isLive ? Color.red.opacity(0.85) : Color.blue.opacity(0.8)))
-            .help("\(isLive ? "Live" : "Paper") account")
+            .background(Capsule().fill(isLit ? (isLive ? Color.red.opacity(0.85) : Color.blue.opacity(0.8)) : Color.primary.opacity(0.08)))
+            .help("\(isLive ? "Live" : "Paper") account\(isLit ? "" : "; dimmed in SIM, where order shortcuts don't go to it")")
     }
 }
 
