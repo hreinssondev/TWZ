@@ -134,11 +134,23 @@ struct ModifierRecorder: View {
     var body: some View {
         LabeledContent(title) {
             VStack(alignment: .trailing, spacing: 2) {
-                Button(monitor == nil ? current.display + " 1–9" : held.isEmpty ? "Hold the keys, then ↩" : held.display + " … ↩") {
-                    monitor == nil ? start() : stop()
+                HStack(spacing: 6) {
+                    Button(monitor == nil ? current.display + " 1–9" : held.isEmpty ? "Hold the keys, then ↩" : held.display + " … ↩") {
+                        monitor == nil ? start() : stop()
+                    }
+                    .monospacedDigit()
+                    .help(monitor != nil ? "Hold the modifier keys, then press ↩ · Esc cancels" : "Click, hold the modifier keys, then press ↩")
+                    // A Hyper key (Raycast's Caps Lock, say) may send no modifier key events of its own, only ⌃⌥⇧⌘ on
+                    // the keys pressed with it: this sets all four at once.
+                    if !current.isHyper {
+                        Button("Hyper") {
+                            stop()
+                            problem = save(.hyper)
+                        }
+                        .controlSize(.small)
+                        .help("⌃⌥⇧⌘ at once: what a Hyper key (Raycast's Caps Lock, say) sends")
+                    }
                 }
-                .monospacedDigit()
-                .help(monitor != nil ? "Hold the modifier keys, then press ↩ · Esc cancels" : "Click, hold the modifier keys, then press ↩")
                 if let problem {
                     Text(problem).font(.caption).foregroundStyle(.red)
                 }
@@ -160,6 +172,9 @@ struct ModifierRecorder: View {
             if event.keyCode == 53 { stop() }                                   // Esc
             else if event.keyCode == 36 || event.keyCode == 76 {               // Return or keypad Enter
                 if let reason = save(set) { problem = reason } else { stop() }
+            } else {
+                // Another key: the modifiers it came with (a Hyper key adds them to keys, without key events of its own).
+                held = set
             }
             return nil
         }

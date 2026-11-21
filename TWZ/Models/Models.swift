@@ -374,10 +374,14 @@ nonisolated struct ModifierSet: Codable, Equatable {
     }
 
     var isEmpty: Bool { !command && !option && !control && !shift }
+    /// All four, as a Hyper key (Raycast's Caps Lock, say) sends them.
+    var isHyper: Bool { command && option && control && shift }
+    static let hyper = ModifierSet(command: true, option: true, control: true, shift: true)
 
-    /// "⌥⌘", in the order macOS menus use.
+    /// "⌥⌘", in the order macOS menus use; "Hyper" for all four.
     var display: String {
-        (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "")
+        if isHyper { return "Hyper" }
+        return (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "")
     }
 
     /// These and `digit` (1–9) on the number row.
@@ -467,9 +471,10 @@ nonisolated struct KeyShortcut: Codable, Hashable {
     /// What the key types (lowercase unless ⇧ is part of it).
     var typed: String { shift ? key.uppercased() : key.lowercased() }
 
-    /// "⌃⌥⇧⌘K", in the order macOS menus use.
+    /// "⌃⌥⇧⌘K", in the order macOS menus use; "Hyper K" with all four (a Hyper key, Raycast's Caps Lock say).
     var display: String {
-        (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "") + key
+        if control && option && shift && command { return "Hyper " + key }
+        return (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "") + key
     }
 
     static func == (a: KeyShortcut, b: KeyShortcut) -> Bool {
