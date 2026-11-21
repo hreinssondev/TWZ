@@ -718,11 +718,14 @@ struct CandleChart: View {
         ctx.fill(arrow, with: .color(color))
     }
 
-    /// `pointers` on the visible bars, like the trade arrows, their tips just left of the candle.
+    /// `pointers` on the visible bars, like the trade arrows, their tips just left of the candle. One after the
+    /// last bar points at the last bar: its own bar isn't in yet, or never comes (a what-if trade with the
+    /// market closed, on a weekend, say).
     private func drawPointers(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, bodyWidth: CGFloat,
                               x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
         for p in pointers {
-            guard let bar = Self.barIndex(of: p.time, in: bars, barSeconds: chart.timeframe.barSeconds),
+            let latest = bars.last.flatMap { p.time >= $0.time ? bars.count - 1 : nil }
+            guard let bar = Self.barIndex(of: p.time, in: bars, barSeconds: chart.timeframe.barSeconds) ?? latest,
                   bar >= start, bar < end else { continue }
             Self.drawPointer(at: CGPoint(x: x(bar) - bodyWidth / 2 - 1, y: y(p.price)), color: p.color, outline: p.outline, in: &ctx)
         }
