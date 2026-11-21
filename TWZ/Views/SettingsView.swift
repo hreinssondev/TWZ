@@ -407,6 +407,13 @@ private struct OrderKeysSettings: View {
                     }
                 }
             }
+            Section("Reset") {
+                @Bindable var workspace = workspace
+                ShortcutRecorder(title: "Another Reset shortcut", shortcut: $workspace.resetShortcut, owner: .reset)
+                Text("Does what ⌘R, ⇧R, ⌥R, ⌃R and ⌘⇧R do: every chart follows the grid's list again. Try ⌃ and a letter; one text fields use (⌃A, ⌃E, ⌃K…) resets there too instead of moving the cursor.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .sheet(item: $editing) { target in

@@ -187,6 +187,8 @@ final class Workspace {
     var fastChartIDs: Set<Int> { didSet { save() } }
     /// System-wide shortcut that shows and hides the Charts window (see `ChartsWindowShortcut`).
     var chartsWindowShortcut: KeyShortcut? { didSet { save() } }
+    /// One more shortcut for the top bar's Reset, as ⌘R / ⇧R / ⌥R / ⌃R / ⌘⇧R (Settings › Order Keys). Saved.
+    var resetShortcut: KeyShortcut? { didSet { save() } }
     /// Main-window charts given a stock by hand (a list, a symbol field): they keep it and their cell
     /// instead of following the gainers, until Reset (see `ChartGrid`). Saved with their stock
     /// (see `mainGridPins`).
@@ -433,6 +435,8 @@ final class Workspace {
 
         chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
+        resetShortcut = defaults.data(forKey: "resetShortcut")
+            .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
 
         let pins = defaults.data(forKey: MainGrid.pinsKey)
             .flatMap { try? JSONDecoder().decode([MainGridPin].self, from: $0) } ?? []
@@ -480,5 +484,6 @@ final class Workspace {
         if let data = try? JSONEncoder().encode(whatIfs) { defaults.set(data, forKey: "whatIfs") }
         defaults.set(fastChartIDs.sorted(), forKey: "fastChartIDs")
         defaults.set(chartsWindowShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "chartsWindowShortcut")
+        defaults.set(resetShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "resetShortcut")
     }
 }

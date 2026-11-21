@@ -26,6 +26,7 @@ struct ShortcutRecorder: View {
         case hotkey(UUID)
         case orderKey(UUID)
         case chartsWindow
+        case reset
     }
 
     var body: some View {
@@ -87,6 +88,10 @@ struct ShortcutRecorder: View {
         }
         if let other = workspace.orderKeys.first(where: { owner != .orderKey($0.id) && $0.shortcut?.numberRow == new.numberRow }) {
             problem = "\(new.display) is already the order key \"\(other.label)\". Try another."
+            return
+        }
+        if owner != .reset, workspace.resetShortcut == new {
+            problem = "\(new.display) already resets the chart grid. Try another."
             return
         }
         if owner != .chartsWindow, workspace.chartsWindowShortcut == new {

@@ -24,7 +24,8 @@
 //  ⌃⌥⇧1 / 2 / 3 / 4 sells (shorts) a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 /
 //  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 no longer buys one: ⌥⇧ and
 //  numbers are timeframes). Matched by key, number row or keypad, whatever the keyboard layout types there.
-//  ⌘R, ⇧R (outside a text field), ⌥R, ⌃R or ⌘⇧R does what the top bar's Reset does.
+//  ⌘R, ⇧R (outside a text field), ⌥R, ⌃R or ⌘⇧R does what the top bar's Reset does, and so does the extra Reset
+//  shortcut set in Settings › Order Keys (see `Workspace.resetShortcut`).
 //  ⌘⇧M switches the order numbers between dollars and a percent of the buying power (see `SizeMode`): KEYS $ or
 //  KEYS % in the top bar.
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
@@ -81,6 +82,12 @@ struct TradingShortcuts: ViewModifier {
                         } else {
                             broker.runSim(hotkey, symbol: workspace.targetSymbol)
                         }
+                    }
+                    // The extra Reset shortcut (Settings › Order Keys), as ⌘R.
+                    if inMainWindow, let reset = workspace.resetShortcut, KeyShortcut(event) == reset {
+                        if event.window?.firstResponder is NSTextView, reset.isPlain { return event }
+                        if !event.isARepeat { workspace.resetToGainers() }
+                        return nil
                     }
                     // An order key (Settings › Order Keys): its order, once per press (a held key doesn't send another).
                     if inMainWindow, let orderKey = workspace.orderKey(for: KeyShortcut(event)) {
