@@ -4,7 +4,7 @@
 //
 //  What-if trades: simulated positions, never sent to IB. ⌃⌥⇧1 / 2 / 3 sells (shorts) $1,000 / $2,000 /
 //  $3,000 of the selected chart's symbol, ⌃⌥⇧4 85% of the largest position IB's margin allows in it
-//  (⌥⇧1–4 buying the same is off for now; ⌃-click with no position buys one). The trade fills at once at the ask (a buy) or the bid (a
+//  (⌥⇧1–4 buying the same is off; ⌃-click with no position buys one). The trade fills at once at the ask (a buy) or the bid (a
 //  sell), and IB's preview of the order (asked, never placed) gives its commissions and fees. While
 //  it's open the app shows it as it shows a position, marked as simulated: the chart's SIM badge,
 //  arrows at its fills and hover P/L, and a row under Positions, its symbol in the what-if pink. ⌃-clicking its chart puts a simulated stop loss
