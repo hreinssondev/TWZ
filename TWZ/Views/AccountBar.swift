@@ -25,7 +25,7 @@ struct AccountBar: View {
         HStack(spacing: 0) {
             HStack(spacing: 18) {
                 // LIVE or PAPER, in the trade mode's color: green while LONG, red while SHORT.
-                AccountBadge(isLive: broker.isLivePort)
+                AccountBadge(isLive: broker.isLivePort, keysOn: workspace.orderShortcutsOn)
 
                 OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
 
@@ -181,17 +181,19 @@ private struct ScaleButtons: View {
 }
 
 /// LIVE or PAPER (the gateway port), in the color of the trade mode Mode hotkeys go by (see
-/// `TradeMode`): green while LONG, red while SHORT.
+/// `TradeMode`): green while LONG, red while SHORT; dimmed grey, as KEYS OFF, while the order shortcuts are off.
 private struct AccountBadge: View {
     let isLive: Bool
+    let keysOn: Bool
     @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
 
     var body: some View {
         Text(isLive ? "LIVE" : "PAPER")
             .font(.system(size: 10, weight: .heavy))
-            .foregroundStyle(.white)
+            .foregroundStyle(keysOn ? Color.white : Color.secondary.opacity(0.7))
             .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Capsule().fill(mode == .long ? Color.green.opacity(0.8) : Color.red.opacity(0.85)))
+            .background(Capsule().fill(!keysOn ? Color.primary.opacity(0.08)
+                                       : mode == .long ? Color.green.opacity(0.8) : Color.red.opacity(0.85)))
             .help("\(isLive ? "Live" : "Paper") account · \(mode == .long ? "LONG" : "SHORT"): Mode hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O held together: LONG; with S and H: SHORT")
     }
 }
