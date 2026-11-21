@@ -51,7 +51,7 @@ struct ShortcutRecorder: View {
                 if let problem {
                     Text(problem).font(.caption).foregroundStyle(.red)
                 } else if isHotkey, let shortcut, monitor == nil,
-                          let key = workspace.orderKeys.first(where: { $0.shortcut?.numberRow == shortcut.numberRow }) {
+                          let key = workspace.orderKey(for: shortcut) {
                     Text("Overrides the order key \"\(key.label)\" while this button has it; that one works again once this changes or the button goes.")
                         .font(.caption)
                         .foregroundStyle(.orange)
@@ -101,7 +101,8 @@ struct ShortcutRecorder: View {
         }
         // A hotkey button may take an order key's shortcut: it overrides the order key while it has it (see
         // `Workspace.hotkeyOverriding`); anything else may not.
-        if !isHotkey, let other = workspace.orderKeys.first(where: { owner != .orderKey($0.id) && $0.shortcut?.numberRow == new.numberRow }) {
+        if !isHotkey, let other = workspace.orderKey(for: new) ?? workspace.orderKeys.first(where: { $0.shortcut?.numberRow == new.numberRow }),
+           owner != .orderKey(other.id) {
             problem = "\(new.display) is already the order key \"\(other.label)\". Try another."
             return
         }
@@ -119,14 +120,19 @@ struct ShortcutRecorder: View {
     }
 }
 
-/// Records the modifier keys the 1–9 order keys are pressed with (see `Workspace.setNumberModifiers`): click,
-/// hold the modifiers (⌘, ⌥, ⌃, ⇧), shown as they're held, then ↩ saves them; Esc cancels. A set that can't be
-/// used is refused with the reason.
+/// Records a modifier set the 1–9 buy or sell order keys are pressed with (see `Workspace.setNumberModifiers`):
+/// click, hold the modifiers (⌘, ⌥, ⌃, ⇧), shown as they're held, then ↩ saves them in place of this one (or, on
+/// the Add… row, as one more); ⌫ takes this one off; Esc cancels. A set that can't be used is refused with the reason.
 struct ModifierRecorder: View {
     let title: String
-    let current: ModifierSet
+    /// The set this row shows and records over; nil: the row adding one.
+    let current: ModifierSet?
     /// Saves the set: nil once saved, else why not.
     let save: (ModifierSet) -> String?
+    /// ⌫ while recording: takes `current` off.
+    var remove: (() -> Void)?
+    /// A Hyper button beside it: ⌃⌥⇧⌘ at once.
+    var offersHyper = false
     @State private var monitor: Any?
     @State private var held = ModifierSet()
     @State private var problem: String?
@@ -135,20 +141,22 @@ struct ModifierRecorder: View {
         LabeledContent(title) {
             VStack(alignment: .trailing, spacing: 2) {
                 HStack(spacing: 6) {
-                    Button(monitor == nil ? current.display + " 1–9" : held.isEmpty ? "Hold the keys, then ↩" : held.display + " … ↩") {
+                    Button(monitor == nil ? current.map { $0.display + " 1–9" } ?? "Add…"
+                           : held.isEmpty ? "Hold the keys, then ↩" : held.display + " … ↩") {
                         monitor == nil ? start() : stop()
                     }
                     .monospacedDigit()
-                    .help(monitor != nil ? "Hold the modifier keys, then press ↩ · Esc cancels" : "Click, hold the modifier keys, then press ↩")
+                    .help(monitor != nil ? "Hold the modifier keys, then press ↩\(remove != nil ? " · ⌫ takes these off" : "") · Esc cancels"
+                          : "Click, hold the modifier keys, then press ↩\(remove != nil ? " (⌫ takes these off)" : "")")
                     // A Hyper key (Raycast's Caps Lock, say) may send no modifier key events of its own, only ⌃⌥⇧⌘ on
-                    // the keys pressed with it: this sets all four at once.
-                    if !current.isHyper {
+                    // the keys pressed with it: this adds all four at once.
+                    if offersHyper {
                         Button("Hyper") {
                             stop()
                             problem = save(.hyper)
                         }
                         .controlSize(.small)
-                        .help("⌃⌥⇧⌘ at once: what a Hyper key (Raycast's Caps Lock, say) sends")
+                        .help("Adds ⌃⌥⇧⌘ at once: what a Hyper key (Raycast's Caps Lock, say) sends")
                     }
                 }
                 if let problem {
@@ -169,10 +177,15 @@ struct ModifierRecorder: View {
                 held = set
                 return event
             }
-            if event.keyCode == 53 { stop() }                                   // Esc
-            else if event.keyCode == 36 || event.keyCode == 76 {               // Return or keypad Enter
+            switch event.keyCode {
+            case 53:                                                            // Esc
+                stop()
+            case 51, 117:                                                       // ⌫ or ⌦
+                stop()
+                remove?()
+            case 36, 76:                                                        // Return or keypad Enter
                 if let reason = save(set) { problem = reason } else { stop() }
-            } else {
+            default:
                 // Another key: the modifiers it came with (a Hyper key adds them to keys, without key events of its own).
                 held = set
             }

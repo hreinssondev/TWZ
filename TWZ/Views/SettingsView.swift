@@ -346,6 +346,19 @@ private struct OrderKeysSettings: View {
             + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),
     ]
 
+    /// A side's modifier sets, each changed (↩) or taken off (⌫) by recording over it, and a row adding one (Hyper
+    /// offered while no side has it).
+    @ViewBuilder private func numberRows(_ title: String, sets: [ModifierSet], selling: Bool) -> some View {
+        ForEach(Array(sets.enumerated()), id: \.element.display) { index, set in
+            ModifierRecorder(title: index == 0 ? title : "", current: set,
+                             save: { workspace.setNumberModifiers($0, selling: selling, replacing: set) },
+                             remove: { workspace.removeNumberModifiers(set, selling: selling) })
+        }
+        ModifierRecorder(title: sets.isEmpty ? title : "", current: nil,
+                         save: { workspace.setNumberModifiers($0, selling: selling) },
+                         offersHyper: !(workspace.buyModifierSets + workspace.sellModifierSets).contains(.hyper))
+    }
+
     /// By modifiers (⌘ before ⌥⌘), then key; keys still without a shortcut last.
     private var sortedKeys: [Hotkey] {
         workspace.orderKeys.sorted { a, b in
@@ -360,12 +373,12 @@ private struct OrderKeysSettings: View {
     var body: some View {
         Form {
             Section {
-                ModifierRecorder(title: "Buy", current: workspace.buyModifiers) { workspace.setNumberModifiers($0, selling: false) }
-                ModifierRecorder(title: "Sell", current: workspace.sellModifiers) { workspace.setNumberModifiers($0, selling: true) }
+                numberRows("Buy", sets: workspace.buyModifierSets, selling: false)
+                numberRows("Sell", sets: workspace.sellModifierSets, selling: true)
             } header: {
                 Text("Number keys")
             } footer: {
-                Text("The modifier keys of the 1–9 order keys. Click one, hold the keys (⌘, ⌥, ⌃, ⇧), then press ↩ to save them; Esc cancels. The order keys on 1–9 move with them.")
+                Text("The modifier keys of the 1–9 order keys: each set listed works, ⌘ and Hyper both buying, say. Click one, hold the keys (⌘, ⌥, ⌃, ⇧), then ↩ to change it, or ⌫ to take it off; Esc cancels. Add… adds a set; Hyper adds ⌃⌥⇧⌘ (Raycast's Caps Lock) at once.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -375,7 +388,8 @@ private struct OrderKeysSettings: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(sortedKeys) { key in
-                    OrderKeyRow(key: key, overriddenBy: key.shortcut.flatMap(workspace.hotkeyOverriding)?.label,
+                    OrderKeyRow(key: key, triggers: workspace.triggers(of: key),
+                                overriddenBy: workspace.triggers(of: key).lazy.compactMap(workspace.hotkeyOverriding).first?.label,
                                 onEdit: { editing = Editing(key: key) }) {
                         workspace.orderKeys.removeAll { $0.id == key.id }
                     }
@@ -387,6 +401,8 @@ private struct OrderKeysSettings: View {
                     Button("Restore Defaults") {
                         workspace.buyModifiers = .buy
                         workspace.sellModifiers = .sell
+                        workspace.buyModifierSets = [.buy]
+                        workspace.sellModifierSets = [.sell]
                         workspace.orderKeys = OrderKeys.defaults()
                     }
                         .help("⌘1–9 buy and ⌥⌘1–9 sell short 1–9 steps: $1,000–$9,000, or 20–80% of the buying power for 1–4 (⌘⇧M)")
@@ -449,6 +465,8 @@ private struct OrderKeysSettings: View {
 /// now, and the other way) and how it's priced; the pencil and trash where it's edited here.
 private struct OrderKeyRow: View {
     let key: Hotkey
+    /// The shortcuts that press it, when not just its own (a number key's, see `Workspace.triggers`).
+    var triggers: [KeyShortcut]?
     /// An order key's: the hotkey button that has its shortcut now, overriding it.
     var overriddenBy: String?
     /// A hotkey button's: the order key whose shortcut it has, overriding it.
@@ -459,9 +477,10 @@ private struct OrderKeyRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            KeyCap(text: key.shortcut?.display ?? "None")
-                .opacity(key.shortcut == nil ? 0.5 : 1)
-                .frame(width: 58, alignment: .leading)
+            let keys = triggers ?? key.shortcut.map { [$0] } ?? []
+            KeyCap(text: keys.isEmpty ? "None" : keys.map(\.display).joined(separator: "  ·  "))
+                .opacity(keys.isEmpty ? 0.5 : 1)
+                .frame(minWidth: 58, alignment: .leading)
             Text(side)
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(.white)

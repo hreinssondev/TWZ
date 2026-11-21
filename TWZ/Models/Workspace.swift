@@ -154,37 +154,53 @@ final class Workspace {
     /// Settings › Order Keys: keyboard shortcuts that send an order without a hotkey button (see `OrderKeys`). Saved.
     var orderKeys: [Hotkey] { didSet { save() } }
 
-    /// The 1–9 order keys' modifiers, buying or `selling`, become `new`: every order key on a number with the old
-    /// ones moves to the new ones. Nil once done; else why not (nothing changes): no ⌘, ⌥ or ⌃, the other side's,
-    /// or a number with them taken (timeframes, what-if trades, another order key, macOS's screenshots). A hotkey
-    /// button on one of them overrides that order key (see `hotkeyOverriding`).
-    func setNumberModifiers(_ new: ModifierSet, selling: Bool) -> String? {
-        let old = selling ? sellModifiers : buyModifiers
-        let other = selling ? buyModifiers : sellModifiers
+    /// Adds `new` to the modifier sets that press the 1–9 buy (or `selling`) order keys, or puts it in place of
+    /// `replacing`. Nil once done; else why not (nothing changes): no ⌘, ⌥ or ⌃, the other side's, one of these already,
+    /// ⌘⇧ (macOS's screenshots), or a number with it taken (timeframes, what-if trades, another order key, the extra
+    /// Reset or Charts window shortcut). A hotkey button on one of them overrides that order key (see `hotkeyOverriding`).
+    func setNumberModifiers(_ new: ModifierSet, selling: Bool, replacing: ModifierSet? = nil) -> String? {
+        let sets = selling ? sellModifierSets : buyModifierSets
+        let others = selling ? buyModifierSets : sellModifierSets
         guard new.command || new.option || new.control else { return "Hold ⌘, ⌥ or ⌃ (⇧ too if you like), then ↩" }
-        guard new != other else { return "\(new.display) is the \(selling ? "buy" : "sell") keys' already" }
-        guard new != old else { return nil }
+        if others.contains(new) { return "\(new.display) is the \(selling ? "buy" : "sell") keys' already" }
+        if new == replacing { return nil }
+        if sets.contains(new) { return "\(new.display) is one of them already" }
         if new == ModifierSet(command: true, shift: true) { return "⌘⇧3, 4 and 5 are macOS's screenshots" }
-        func onNumber(_ s: KeyShortcut?, _ modifiers: ModifierSet) -> Bool {
-            guard let s else { return false }
-            return ModifierSet(of: s) == modifiers && OrderKeys.number(keyCode: s.keyCode) != nil
-        }
         for digit in 1...9 {
             let s = new.shortcut(digit: digit)
             if let reason = s.reservedFor { return "\(s.display): \(reason)" }
-            if let key = orderKeys.first(where: { !onNumber($0.shortcut, old) && $0.shortcut?.numberRow == s }) {
+            if let key = orderKeys.first(where: { !isNumberKey($0) && $0.shortcut?.numberRow == s }) {
                 return "\(s.display) is already the order key \"\(key.label)\""
             }
             if resetShortcut == s { return "\(s.display) is the extra Reset shortcut" }
             if chartsWindowShortcut == s { return "\(s.display) shows and hides the Charts window" }
         }
-        for i in orderKeys.indices where onNumber(orderKeys[i].shortcut, old) {
-            if let s = orderKeys[i].shortcut, let digit = OrderKeys.number(keyCode: s.keyCode) {
-                orderKeys[i].shortcut = new.shortcut(digit: digit)
-            }
-        }
-        if selling { sellModifiers = new } else { buyModifiers = new }
+        var updated = sets
+        if let replacing, let i = updated.firstIndex(of: replacing) { updated[i] = new } else { updated.append(new) }
+        if selling { sellModifierSets = updated } else { buyModifierSets = updated }
         return nil
+    }
+
+    /// Takes `set` off the modifier sets that press the 1–9 buy (or `selling`) order keys.
+    func removeNumberModifiers(_ set: ModifierSet, selling: Bool) {
+        if selling { sellModifierSets.removeAll { $0 == set } } else { buyModifierSets.removeAll { $0 == set } }
+    }
+
+    /// One of the 1–9 buy or sell order keys: kept on a number with that side's own modifiers (`buyModifiers`,
+    /// `sellModifiers`), pressed with any of its side's sets (`buyModifierSets`, `sellModifierSets`).
+    func isNumberKey(_ key: Hotkey) -> Bool {
+        guard let s = key.shortcut, OrderKeys.number(keyCode: s.keyCode) != nil else { return false }
+        let m = ModifierSet(of: s)
+        return m == buyModifiers || m == sellModifiers
+    }
+
+    /// The shortcuts that press `key`: a number key's with each of its side's modifier sets (none with none left),
+    /// any other's its own.
+    func triggers(of key: Hotkey) -> [KeyShortcut] {
+        guard let s = key.shortcut else { return [] }
+        guard isNumberKey(key), let digit = OrderKeys.number(keyCode: s.keyCode) else { return [s] }
+        let sets = ModifierSet(of: s) == buyModifiers ? buyModifierSets : sellModifierSets
+        return sets.map { $0.shortcut(digit: digit) }
     }
 
     /// The hotkey button `shortcut` presses (a keypad digit as the number row's), if any. One given an order key's
@@ -195,10 +211,18 @@ final class Workspace {
         return hotkeys.first { $0.shortcut?.numberRow == pressed }
     }
 
-    /// The order key `shortcut` presses, if any (a keypad digit as the number row's).
+    /// The order key `shortcut` presses, if any (a keypad digit as the number row's): a number with any of the
+    /// buy or sell keys' modifier sets presses that side's order key on it (see `isNumberKey`).
     func orderKey(for shortcut: KeyShortcut) -> Hotkey? {
         let pressed = shortcut.numberRow
-        return orderKeys.first { $0.shortcut?.numberRow == pressed }
+        if let digit = OrderKeys.number(keyCode: pressed.keyCode) {
+            let m = ModifierSet(of: pressed)
+            for (own, sets) in [(buyModifiers, buyModifierSets), (sellModifiers, sellModifierSets)] where sets.contains(m) {
+                let s = own.shortcut(digit: digit)
+                if let key = orderKeys.first(where: { $0.shortcut?.numberRow == s }) { return key }
+            }
+        }
+        return orderKeys.first { !isNumberKey($0) && $0.shortcut?.numberRow == pressed }
     }
     /// KEYS ON: the order shortcuts (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫) go to IB; off, SIM, they trade what-if
     /// positions (see `TradingShortcuts`). ⌘ and the Globe (fn) key switch it; Positions and the charts show both
@@ -231,6 +255,10 @@ final class Workspace {
     /// The modifier keys of the 1–9 order keys: buying (⌘ by default) and selling (⌥⌘), see `setNumberModifiers`. Saved.
     var buyModifiers: ModifierSet = .buy { didSet { save() } }
     var sellModifiers: ModifierSet = .sell { didSet { save() } }
+    /// The modifier sets that press the 1–9 buy / sell order keys, any of them (⌘ and Hyper both buying, say); none:
+    /// the side's number keys don't work. Saved.
+    var buyModifierSets: [ModifierSet] = [.buy] { didSet { save() } }
+    var sellModifierSets: [ModifierSet] = [.sell] { didSet { save() } }
     /// One more shortcut for the top bar's Reset, as ⌘R / ⇧R / ⌥R / ⌃R / ⌘⇧R (Settings › Order Keys). Saved.
     var resetShortcut: KeyShortcut? { didSet { save() } }
     /// Main-window charts given a stock by hand (a list, a symbol field): they keep it and their cell
@@ -482,6 +510,8 @@ final class Workspace {
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
         buyModifiers = defaults.data(forKey: "buyModifiers").flatMap { try? JSONDecoder().decode(ModifierSet.self, from: $0) } ?? .buy
         sellModifiers = defaults.data(forKey: "sellModifiers").flatMap { try? JSONDecoder().decode(ModifierSet.self, from: $0) } ?? .sell
+        buyModifierSets = defaults.data(forKey: "buyModifierSets").flatMap { try? JSONDecoder().decode([ModifierSet].self, from: $0) } ?? [buyModifiers]
+        sellModifierSets = defaults.data(forKey: "sellModifierSets").flatMap { try? JSONDecoder().decode([ModifierSet].self, from: $0) } ?? [sellModifiers]
 
         let pins = defaults.data(forKey: MainGrid.pinsKey)
             .flatMap { try? JSONDecoder().decode([MainGridPin].self, from: $0) } ?? []
@@ -532,5 +562,7 @@ final class Workspace {
         defaults.set(resetShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "resetShortcut")
         defaults.set(try? JSONEncoder().encode(buyModifiers), forKey: "buyModifiers")
         defaults.set(try? JSONEncoder().encode(sellModifiers), forKey: "sellModifiers")
+        defaults.set(try? JSONEncoder().encode(buyModifierSets), forKey: "buyModifierSets")
+        defaults.set(try? JSONEncoder().encode(sellModifierSets), forKey: "sellModifierSets")
     }
 }
