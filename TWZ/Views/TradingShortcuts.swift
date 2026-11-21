@@ -32,7 +32,7 @@
 //  With the order shortcuts on, an order key (Settings › Order Keys, see `OrderKeys`) sends its order, once per
 //  press (a held key doesn't send another): by default ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the
 //  $ / % switch (see `SizeMode`) at the mid; a ⌘ number with neither an order key nor a hotkey beeps.
-//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⇧1–6 outside a text field, or ⌥⇧1–6) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
+//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌃1–6, ⇧1–6 outside a text field, or ⌥⇧1–6) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
 //  place and price scale (see `Workspace.matchViews`).
@@ -170,9 +170,9 @@ struct TradingShortcuts: ViewModifier {
                         broker.say("\(KeyShortcut(event).display) has no order key or hotkey (Settings › Order Keys)")
                         return nil
                     }
-                    // ⌥1–6, ⇧1–6 (outside a text field) or ⌥⇧1–6: the account bar's timeframe; ChartGrid follows it.
-                    // Set again too, so a chart whose own switch was changed goes back to it.
-                    if modifiers == .option || modifiers == .shift || modifiers == [.option, .shift],
+                    // ⌥1–6, ⌃1–6, ⇧1–6 (outside a text field) or ⌥⇧1–6: the account bar's timeframe; ChartGrid follows
+                    // it. Set again too, so a chart whose own switch was changed goes back to it.
+                    if modifiers == .option || modifiers == .control || modifiers == .shift || modifiers == [.option, .shift],
                        inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
                         if modifiers == .shift, event.window?.firstResponder is NSTextView { return event }
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
@@ -316,7 +316,7 @@ extension KeyShortcut {
         if shift, !option, !command, !control, k == "a" {
             return "⇧A gives every chart the selected chart's view"
         }
-        if option || shift, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
+        if option || shift || control, !command, !(control && (option || shift)), let timeframe = Timeframe(keyCode: keyCode) {
             return "\(display) sets every chart to \(timeframe.rawValue)"
         }
         if control, option, shift, !command, SimSize.keyCodes.contains(keyCode) {
