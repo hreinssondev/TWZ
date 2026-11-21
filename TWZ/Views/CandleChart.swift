@@ -4,10 +4,10 @@
 //
 //  Lightweight candlestick + volume chart drawn with a single SwiftUI Canvas.
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
-//  around the cursor; a diagonal swipe does both; with ⇧, ⌘ or ⌥ held (any of them, together too), a
-//  swipe moves the grid's Zoom slider instead (see `onZoomAll`), and with ⌃ it squeezes or stretches
+//  around the cursor; a diagonal swipe does both; with ⇧, ⌘, ⌥ or ⌃ held (any of them, together too), a
+//  swipe moves the grid's Zoom slider instead (see `onZoomAll`), and with ⌃⌥ it squeezes or stretches
 //  the price axis.
-//  Mouse: wheel zooms, shift-wheel pans, ⌘- or ⌥-wheel the grid's zoom, ⌃-wheel the price axis.
+//  Mouse: wheel zooms, shift-wheel pans, ⌘-, ⌥- or ⌃-wheel the grid's zoom, ⌃⌥-wheel the price axis.
 //  Drag pans freely, in time and price. Right-click resets the view, as does double-clicking
 //  anywhere but an order line (unless `onDoubleClick` takes it: with a ⌃-click what-if on the chart,
 //  that comes off instead); double-clicking an order line cancels that order, and a single click
@@ -109,7 +109,7 @@ struct CandleChart: View {
     var onDoubleClick: (() -> Bool)?
     /// Fills drawn as arrows even with Trades off (a round trip shown from the Round trips tab).
     var shownFillIds: Set<String> = []
-    /// ⇧-, ⌘- or ⌥-swipe on the trackpad: the grid's zoom times this (above 1: zoomed out), as its Zoom slider.
+    /// ⇧-, ⌘-, ⌥- or ⌃-swipe on the trackpad: the grid's zoom times this (above 1: zoomed out), as its Zoom slider.
     var onZoomAll: ((Double) -> Void)?
     /// Real trades' arrows with the top bar's Trades on; off while the Positions column shows what-if
     /// trades (see `PositionsView`). A round trip shown from the Round trips tab shows either way.
@@ -904,7 +904,7 @@ struct CandleChart: View {
 
 /// SwiftUI on macOS has no scroll-wheel or precise trackpad scroll gesture, so this background
 /// view watches the app's scroll and magnify events and forwards the ones over its own frame.
-/// ⌃ + scroll scales the price axis instead of zooming in time; ⌘, ⌥ or ⇧ (or several) + a swipe moves the
+/// ⌃⌥ + scroll scales the price axis instead of zooming in time; ⌘, ⌥, ⌃ or ⇧ (or several) + a swipe moves the
 /// grid's zoom.
 /// It also reports every left click, takes ⌥-clicks (before SwiftUI's tap and drag gestures see them)
 /// and ⌥ key changes.
@@ -912,9 +912,9 @@ private struct ScrollCatcher: NSViewRepresentable {
     /// (dx, dy, location): dx in points (positive = content moves right), dy in points
     /// (positive = zoom out), location in view coordinates with a top-left origin.
     var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
-    /// ⌃ + scroll, in points (positive = squeeze the prices, like zooming out).
+    /// ⌃⌥ + scroll, in points (positive = squeeze the prices, like zooming out).
     var onPriceScale: (CGFloat) -> Void
-    /// ⌘, ⌥ or ⇧ + a trackpad swipe (⌘ or ⌥ + a mouse wheel), either way, in points (positive = zoom out); nil: it
+    /// ⌘, ⌥, ⌃ or ⇧ + a trackpad swipe (⌘, ⌥ or ⌃ + a mouse wheel), either way, in points (positive = zoom out); nil: it
     /// pans and zooms as usual.
     var onShiftScroll: ((CGFloat) -> Void)?
     var onMagnify: (CGFloat, CGPoint) -> Void
@@ -951,17 +951,18 @@ private struct ScrollCatcher: NSViewRepresentable {
         var onShiftScroll: ((CGFloat) -> Void)?
         var onMagnify: ((CGFloat, CGPoint) -> Void)?
         var onClick: (() -> Void)?
-        /// What the scroll going on does: ⌃ the price axis; ⌘, ⌥ or ⇧ (a trackpad's), alone or together, the
-        /// grid's zoom; else
+        /// What the scroll going on does: ⌃⌥ (with or without others) the price axis; ⌘, ⌥, ⌃ or ⇧ (a trackpad's),
+        /// alone or together, the grid's zoom; else
         /// pan and zoom this chart. A trackpad gesture keeps it through its momentum (see `handleScroll`).
         enum Gesture { case chart, gridZoom, priceScale }
         private var gesture = Gesture.chart
 
         static func gesture(for flags: NSEvent.ModifierFlags, precise: Bool) -> Gesture {
-            if flags.contains(.control) { return .priceScale }
-            let command = flags.contains(.command), option = flags.contains(.option), shift = flags.contains(.shift)
+            let command = flags.contains(.command), option = flags.contains(.option)
+            let control = flags.contains(.control), shift = flags.contains(.shift)
+            if control && option { return .priceScale }
             // A mouse's shift-wheel alone pans (it arrives sideways).
-            if command || option || (shift && precise) { return .gridZoom }
+            if command || option || control || (shift && precise) { return .gridZoom }
             return .chart
         }
         var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
@@ -1038,7 +1039,7 @@ private struct ScrollCatcher: NSViewRepresentable {
             let d = abs(dy) >= abs(dx) ? dy : dx
             switch gesture {
             case .priceScale:
-                // A ⌃-swipe on the trackpad scales the opposite way to the ⌃-wheel.
+                // A ⌃⌥-swipe on the trackpad scales the opposite way to the ⌃⌥-wheel.
                 if d != 0 { onPriceScale?(event.hasPreciseScrollingDeltas ? -d : d) }
             case .gridZoom where onShiftScroll != nil:
                 if d != 0 { onShiftScroll?(d) }

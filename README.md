@@ -13,7 +13,7 @@ management in one window built for quick entries and exits.
 - **Chart grid** from 2×2 up to 8×4 that follows the top gainers in rank order, or a list you load
   into it. Any chart can be given a stock by hand: it keeps it, the stock it showed leaves the grid so
   no other chart moves, and the list flows on through the other charts, until the top bar's Reset
-  hands it back (Reset, or ⌘R / ⇧R / ⌥R / ⌘⇧R, keeps the list loaded). ⌥⇧ and a color's letter outlines the selected
+  hands it back (Reset, or ⌘R / ⇧R / ⌥R / ⌃R / ⌘⇧R, keeps the list loaded). ⌥⇧ and a color's letter outlines the selected
   chart's stock in that color on every chart, one stock per color, kept while it's off the charts (⌥⇧⌫
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
@@ -22,9 +22,9 @@ management in one window built for quick entries and exits.
   keeping each chart's view: the same time on screen, only the candles change (or, with that off in
   Settings › Appearance, each timeframe going back to its own zoom and place).
 - **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the
-  grid), across list switches and relaunches, until Reset or a right-click on the chart. ⇧-, ⌘- or ⌥-swipe
+  grid), across list switches and relaunches, until Reset or a right-click on the chart. ⇧-, ⌘-, ⌥- or ⌃-swipe
   (any of them, together too) zooms every chart from the swiped one's zoom, the top bar's Zoom slider
-  following (⌃-swipe squeezes or
+  following (⌃⌥-swipe squeezes or
   stretches one chart's price axis); ⌥0 or ⇧A gives every chart the selected one's zoom,
   place and price scale. ⇧-clicking 1–5 in the top bar saves every chart's zoom and place on every
   timeframe as a view set, and clicking one puts them back;
