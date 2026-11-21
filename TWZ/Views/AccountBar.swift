@@ -25,7 +25,7 @@ struct AccountBar: View {
         HStack(spacing: 0) {
             HStack(spacing: 18) {
                 // LIVE (red) or PAPER (blue).
-                AccountBadge(isLive: broker.isLivePort, keysOn: workspace.orderShortcutsOn)
+                AccountBadge(isLive: broker.isLivePort)
 
                 OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
 
@@ -180,24 +180,22 @@ private struct ScaleButtons: View {
     }
 }
 
-/// LIVE (red) or PAPER (blue), the gateway port; dimmed grey in SIM (KEYS off), when no order reaches it.
+/// LIVE (red) or PAPER (blue), the gateway port, always lit (KEYS ON or SIM).
 private struct AccountBadge: View {
     let isLive: Bool
-    let keysOn: Bool
 
     var body: some View {
         Text(isLive ? "LIVE" : "PAPER")
             .font(.system(size: 10, weight: .heavy))
-            .foregroundStyle(keysOn ? Color.white : Color.secondary.opacity(0.7))
+            .foregroundStyle(.white)
             .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Capsule().fill(!keysOn ? Color.primary.opacity(0.08)
-                                       : isLive ? Color.red.opacity(0.85) : Color.blue.opacity(0.8)))
+            .background(Capsule().fill(isLive ? Color.red.opacity(0.85) : Color.blue.opacity(0.8)))
             .help("\(isLive ? "Live" : "Paper") account")
     }
 }
 
 /// Where the order shortcuts go and what their numbers are (see `SizeMode`): KEYS $ or KEYS % in orange with KEYS ON
-/// (real orders), SIM $ or SIM % dimmed with it off (what-if trades), as the LIVE / PAPER badge beside it.
+/// (real orders), SIM $ or SIM % dimmed with it off (what-if trades).
 private struct OrderShortcutsBadge: View {
     let isOn: Bool
     @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent

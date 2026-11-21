@@ -46,7 +46,7 @@ management in one window built for quick entries and exits.
   own, ⌘⇧↩, ⌥⌘⇧↩, ⌘⌫) goes to IB and Positions shows the real positions; in SIM, as at every launch, the same
   shortcuts trade what-if positions instead, never sent to IB, filled at once at the order's price (a limit at
   its reference ± offset, MIDPRICE at the mid, market at the ask or bid), and Positions shows the what-if
-  trades (⌘⌫ closes the what-if trade). The top bar reads KEYS $ / KEYS % in orange, or SIM $ / SIM % dimmed (LIVE / PAPER too).
+  trades (⌘⌫ closes the what-if trade). The top bar reads KEYS $ / KEYS % in orange, or SIM $ / SIM % dimmed.
 - **Order keys** (Settings › Order Keys): keyboard shortcuts that send an order without a button, listed by
   shortcut, added, edited or deleted there, beside the hotkey buttons' shortcuts and the fixed ones. By default
   ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the $ / % switch (⌘3: $3,000 or 60%), all limit at the mid,
