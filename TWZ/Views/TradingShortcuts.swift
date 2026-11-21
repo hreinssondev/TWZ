@@ -23,7 +23,8 @@
 //  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 no longer buys one: ⌥⇧ and
 //  numbers are timeframes). Matched by key, number row or keypad, whatever the keyboard layout types there.
 //  ⌘R, ⇧R (outside a text field) or ⌘⇧R does what the top bar's Reset does.
-//  ⌘⇧ with two letters held together switches the trade mode (see `TradeMode`): S + H SHORT, L + O LONG,
+//  ⌘⇧ with two letters, held together or pressed one after the other (within `chordWait`), switches the trade
+//  mode (see `TradeMode`): S + H SHORT, L + O LONG,
 //  both trading for real, out of SIM mode; S + I SIM mode (see `SimMode`), where every order shortcut trades
 //  what-if positions instead. S, H and L alone (lists' letters too) wait a moment for the other letter first.
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
@@ -79,8 +80,11 @@ struct TradingShortcuts: ViewModifier {
             }
         }
     }
-    /// How long S, H or L alone wait for the other letter before showing their list.
-    private static let chordWait = 0.15
+    /// How long S, H or L alone wait for the other letter before showing their list, and how soon after the
+    /// first letter the second makes the chord when pressed one after the other.
+    private static let chordWait = 0.4
+    /// The last of the two-letter shortcuts' letters pressed with ⌘⇧, and when (see `chordWait`).
+    private static var lastChordKey: (code: UInt16, time: Date)?
     private static var pendingList: DispatchWorkItem?
     /// Keys down now (by key code), from the key-down and key-up events seen.
     private static var heldKeys: Set<UInt16> = []
@@ -172,20 +176,23 @@ struct TradingShortcuts: ViewModifier {
                         workspace.resetToGainers()
                         return nil
                     }
-                    // ⌘⇧ with two letters held together: S + H the SHORT trade mode, L + O the LONG one (see
-                    // `TradeMode`), S + I SIM mode (see `SimMode`). S, H and L alone are lists' letters too: those
-                    // wait a moment for the other letter before showing the list.
+                    // ⌘⇧ with two letters, held together or one after the other: S + H the SHORT trade mode, L + O
+                    // the LONG one (see `TradeMode`), S + I SIM mode (see `SimMode`). S, H and L alone are lists'
+                    // letters too: those wait a moment for the other letter before showing the list.
                     if inMainWindow, modifiers == [.command, .shift], let chords = Self.chords[event.keyCode] {
                         if event.isARepeat { return nil }
-                        let chord = chords.first { Self.heldKeys.contains($0.partner)
+                        let previous = Self.lastChordKey.flatMap { Date().timeIntervalSince($0.time) <= Self.chordWait ? $0.code : nil }
+                        let chord = chords.first { $0.partner == previous || Self.heldKeys.contains($0.partner)
                             || CGEventSource.keyState(.combinedSessionState, key: $0.partner) }
                         Self.heldKeys.insert(event.keyCode)
                         if let chord {
+                            Self.lastChordKey = nil
                             Self.pendingList?.cancel()
                             Self.pendingList = nil
                             Self.switchMode(to: chord.target, broker: broker)
                             return nil
                         }
+                        Self.lastChordKey = (event.keyCode, Date())
                         if let kind = ScannerKind.forShortcut(event.charactersIgnoringModifiers?.lowercased() ?? "") {
                             Self.pendingList?.cancel()
                             let show = DispatchWorkItem { workspace.listShortcut = Workspace.ListShortcut(kind: kind) }
@@ -339,10 +346,10 @@ extension KeyShortcut {
             return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
         }
         if command, shift, !option, !control, k == "o" {
-            return "⌘⇧ with L and O held together switches to LONG"
+            return "⌘⇧ with L and O (together or one after the other) switches to LONG"
         }
         if command, shift, !option, !control, k == "i" {
-            return "⌘⇧ with S and I held together switches to SIM mode"
+            return "⌘⇧ with S and I (together or one after the other) switches to SIM mode"
         }
         if shift, !command, !option, !control, k == "r" {
             return "⇧R resets the chart grid, as the top bar's Reset"

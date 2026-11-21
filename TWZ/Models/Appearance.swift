@@ -101,7 +101,7 @@ enum TimeframeSwitch {
 }
 
 /// Which way Mode hotkeys go: LONG buys, SHORT sells short (see `Hotkey.Action.mode`). ⌘⇧ with L and O
-/// held together switches to LONG, with S and H to SHORT; the top bar's LIVE / PAPER badge shows it in
+/// (held together or one after the other) switches to LONG, with S and H to SHORT; the top bar's LIVE / PAPER badge shows it in
 /// green or red. Saved, so it's as it
 /// was at the next launch.
 enum TradeMode: String {
@@ -113,7 +113,7 @@ enum TradeMode: String {
     }
 }
 
-/// SIM mode: ⌘⇧ with S and I held together. Every order shortcut (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫) then
+/// SIM mode: ⌘⇧ with S and I, held together or one after the other. Every order shortcut (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫) then
 /// trades what-if positions (see `Broker.runSim`), never IB, until ⌘⇧ L+O or S+H picks LONG or SHORT and
 /// real trading again; Mode orders keep going the way the trade mode last was. Going in shows the Positions
 /// column's what-if trades, coming out its real positions (see `PositionsView`); the top bar's badge reads

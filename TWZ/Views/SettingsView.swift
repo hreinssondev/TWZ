@@ -342,7 +342,7 @@ private struct OrderKeysSettings: View {
         ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if); with no chart selected, ⌘A cancels the last order placed, as ⌘Z"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
         ("⌘⇧⌫", "Remove the chart's ⌃-click what-if (so does double-clicking anywhere on the chart)"),
-        ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red), trading for real (out of SIM mode, Positions back on the real ones); Mode orders buy while LONG, sell short while SHORT"),
+        ("⌘⇧ L+O  /  S+H", "Both letters, held together or one after the other: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red), trading for real (out of SIM mode, Positions back on the real ones); Mode orders buy while LONG, sell short while SHORT"),
         ("⌘⇧ S+I", "SIM mode: every order shortcut here (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫) trades what-if positions instead, never IB, filled at once at the order's price; the badge reads SIM and Positions shows the what-if trades, until ⌘⇧ L+O or S+H"),
         ("⌃⌥⇧1 2 3 4", "What-if trade: sell (short) $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
             + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),

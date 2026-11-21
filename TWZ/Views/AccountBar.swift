@@ -198,8 +198,8 @@ private struct AccountBadge: View {
                                        : sim ? TradingChart.whatIfColor.opacity(0.85)
                                        : mode == .long ? Color.green.opacity(0.8) : Color.red.opacity(0.85)))
             .help(sim
-                  ? "SIM mode on the \(isLive ? "live" : "paper") account: order shortcuts trade what-if positions, nothing goes to IB; Mode orders \(mode == .long ? "buy (LONG)" : "sell short (SHORT)"). ⌘⇧ with L and O held together: real trading, LONG; with S and H: SHORT"
-                  : "\(isLive ? "Live" : "Paper") account · \(mode == .long ? "LONG" : "SHORT"): Mode hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O held together: LONG; with S and H: SHORT; with S and I: SIM mode")
+                  ? "SIM mode on the \(isLive ? "live" : "paper") account: order shortcuts trade what-if positions, nothing goes to IB; Mode orders \(mode == .long ? "buy (LONG)" : "sell short (SHORT)"). ⌘⇧ with L and O (together or one after the other): real trading, LONG; with S and H: SHORT"
+                  : "\(isLive ? "Live" : "Paper") account · \(mode == .long ? "LONG" : "SHORT"): Mode hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O (together or one after the other): LONG; with S and H: SHORT; with S and I: SIM mode")
     }
 }
 

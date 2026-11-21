@@ -12,7 +12,7 @@
 //  the last price reaches it: a stop at the bid / ask, no better than its price; a take profit at its
 //  price. ⌘⌫ closes it at market, ⌘A takes its stop loss and take profit off. Nothing is simulated in
 //  a symbol with a real position open. Kept across launches.
-//  SIM mode (⌘⇧ with S and I held, see `SimMode`): every order shortcut trades what-if positions in the
+//  SIM mode (⌘⇧ with S and I, see `SimMode`): every order shortcut trades what-if positions in the
 //  same way: an order key's or hotkey's side, size (shares, dollars or a percent of the buying power) and
 //  price, filled at once at that price, a limit at its reference ± offset, MIDPRICE at the mid ± offset,
 //  market at the ask or bid (nothing rests); closing, cancelling and flattening act on the what-if trades.
