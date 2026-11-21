@@ -305,7 +305,7 @@ nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
 }
 
 /// The number keys' orders, with KEYS ON (number row or keypad): ⌘1–4 buy and ⌘⌥1–4 sell short (see
-/// `sizedHotkey`); ⌘⌥ and 5–9: a Mode order (see `TradeMode`) of 50–90%
+/// `sizedHotkey`); ⌘⌥ and 5 / 6 / 7 / 8 / 9: a Mode order (see `TradeMode`) of 25% / 30% / 50% / 75% / 85%
 /// of the buying power IB's margin allows in the stock, limit at the mid, no offset, outside regular
 /// hours too, DAY. Sent only with KEYS ON.
 nonisolated enum OrderKeys {
@@ -314,8 +314,18 @@ nonisolated enum OrderKeys {
          83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9][keyCode]
     }
 
-    static func hotkey(number: Int) -> Hotkey {
-        OrderPad(buyingPower: true, kind: .mid, number: number).hotkey
+    /// ⌘⌥ and 5–9: the Mode order's percent of the buying power.
+    static let modePercents = [5: 25, 6: 30, 7: 50, 8: 75, 9: 85]
+
+    /// ⌘⌥ and 5–9's Mode order (see `modePercents`); nil for the other numbers.
+    static func hotkey(number: Int) -> Hotkey? {
+        guard let percent = modePercents[number] else { return nil }
+        let amount = Double(percent)
+        var hotkey = Hotkey(label: Hotkey.autoLabel(action: .mode, sizing: .buyingPower, amount: amount), action: .mode,
+                            sizing: .buyingPower, amount: amount, orderType: .limit, priceReference: .mid, offset: 0)
+        hotkey.outsideRth = true
+        hotkey.tif = .day
+        return hotkey
     }
 
     /// ⌘1 / 2 / 3 / 4 with KEYS ON (`.buy`), or ⌘⌥ and them (`.sell`, short): $1,000 / $2,000 / $3,000 / 85% of

@@ -29,7 +29,8 @@
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  With the order shortcuts on, ⌘1 / 2 / 3 / 4 buys $1,000 / $2,000 / $3,000 / 85% of the buying power at the
 //  mid, no offset, outside regular hours too, and ⌘⌥ and them sells short as much the same way (see
-//  `OrderKeys.sizedHotkey`); ⌘⌥ and 5–9 sends a Mode order of 50–90% of the buying power at the mid; ⌘5–9 are
+//  `OrderKeys.sizedHotkey`); ⌘⌥ and 5 / 6 / 7 / 8 / 9 sends a Mode order of 25% / 30% / 50% / 75% / 85% of the
+//  buying power at the mid (see `OrderKeys.modePercents`); ⌘5–9 are
 //  for hotkeys. Once per press: a held key doesn't send another.
 //  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⇧1–6 outside a text field, ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
@@ -197,13 +198,13 @@ struct TradingShortcuts: ViewModifier {
                         return nil
                     }
                     // ⌘⌥ and 1 / 2 / 3 / 4: a short of $1,000 / $2,000 / $3,000 / 85% of the buying power at the mid
-                    // (see `OrderKeys.sizedHotkey`); 5–9: a Mode order of 50–90% of it. Only with the order
-                    // shortcuts on, once per press.
+                    // (see `OrderKeys.sizedHotkey`); 5 / 6 / 7 / 8 / 9: a Mode order of 25% / 30% / 50% / 75% / 85% of
+                    // it. Only with the order shortcuts on, once per press.
                     if inMainWindow, modifiers == [.command, .option], let number = OrderKeys.number(keyCode: event.keyCode) {
                         guard workspace.orderShortcutsOn else { return refuse() }
-                        if !event.isARepeat {
-                            broker.run(OrderKeys.sizedHotkey(.sell, number: number) ?? OrderKeys.hotkey(number: number),
-                                       symbol: workspace.targetSymbol)
+                        if !event.isARepeat,
+                           let hotkey = OrderKeys.sizedHotkey(.sell, number: number) ?? OrderKeys.hotkey(number: number) {
+                            broker.run(hotkey, symbol: workspace.targetSymbol)
                         }
                         return nil
                     }
@@ -359,7 +360,7 @@ extension KeyShortcut {
                 let size = number == 4 ? "85% of the buying power" : "$" + (number * 1000).formatted()
                 return "\(display) shorts \(size) at the mid"
             }
-            return "\(display) sends a MID order of \(number * 10)% of the buying power"
+            return "\(display) sends a MID order of \(OrderKeys.modePercents[number] ?? 0)% of the buying power"
         }
         if option || shift, !command, !control, let timeframe = Timeframe(keyCode: keyCode) {
             return "\(display) sets every chart to \(timeframe.rawValue)"
