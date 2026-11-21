@@ -103,3 +103,64 @@ struct ShortcutRecorder: View {
         stop()
     }
 }
+
+/// Records the modifier keys the 1–9 order keys are pressed with (see `Workspace.setNumberModifiers`): click,
+/// hold the modifiers (⌘, ⌥, ⌃, ⇧), shown as they're held, then ↩ saves them; Esc cancels. A set that can't be
+/// used is refused with the reason.
+struct ModifierRecorder: View {
+    let title: String
+    let current: ModifierSet
+    /// Saves the set: nil once saved, else why not.
+    let save: (ModifierSet) -> String?
+    @State private var monitor: Any?
+    @State private var held = ModifierSet()
+    @State private var problem: String?
+
+    var body: some View {
+        LabeledContent(title) {
+            VStack(alignment: .trailing, spacing: 2) {
+                Button(monitor == nil ? current.display + " 1–9" : held.isEmpty ? "Hold the keys, then ↩" : held.display + " … ↩") {
+                    monitor == nil ? start() : stop()
+                }
+                .monospacedDigit()
+                .help(monitor != nil ? "Hold the modifier keys, then press ↩ · Esc cancels" : "Click, hold the modifier keys, then press ↩")
+                if let problem {
+                    Text(problem).font(.caption).foregroundStyle(.red)
+                }
+            }
+        }
+        .onDisappear(perform: stop)
+    }
+
+    private func start() {
+        problem = nil
+        held = ModifierSet()
+        ShortcutRecorder.isRecording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { event in
+            let set = ModifierSet(event.modifierFlags)
+            if event.type == .flagsChanged {
+                held = set
+                return event
+            }
+            if event.keyCode == 53 { stop() }                                   // Esc
+            else if event.keyCode == 36 || event.keyCode == 76 {               // Return or keypad Enter
+                if let reason = save(set) { problem = reason } else { stop() }
+            }
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        held = ModifierSet()
+        ShortcutRecorder.isRecording = false
+    }
+}
+
+extension ModifierSet {
+    init(_ flags: NSEvent.ModifierFlags) {
+        self.init(command: flags.contains(.command), option: flags.contains(.option),
+                  control: flags.contains(.control), shift: flags.contains(.shift))
+    }
+}

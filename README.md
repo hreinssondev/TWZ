@@ -49,7 +49,8 @@ management in one window built for quick entries and exits.
   trades (⌘⌫ closes the what-if trade). The top bar reads KEYS $ / KEYS % in orange, or SIM $ / SIM % dimmed.
 - **Order keys** (Settings › Order Keys): keyboard shortcuts that send an order without a button, listed by
   shortcut, added, edited or deleted there, beside the hotkey buttons' shortcuts and the fixed ones. By default
-  ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the $ / % switch (⌘3: $3,000 or 60%), all limit at the mid,
+  ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the $ / % switch (⌘3: $3,000 or 60%; the buy and sell
+  modifier keys can be changed there: click, hold them, press ↩), all limit at the mid,
   no offset, outside regular hours too. Once per press, for real with KEYS ON, as what-if trades in SIM.
 - **What-if trades**: ⌃⌥⇧1–4 shorts $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB; on the chart, an arrow, green for a long

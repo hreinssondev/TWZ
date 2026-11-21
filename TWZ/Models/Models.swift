@@ -321,13 +321,15 @@ nonisolated enum OrderKeys {
     /// ⌘1–9 buy and ⌥⌘1–9 sell (short) 1–9 steps (see `SizeMode`): $1,000–$9,000, or 20%, 40%, 60%, 80% of the
     /// buying power IB's margin allows in the stock for 1–4 (5–9 send nothing then). All limit at the mid
     /// (not MIDPRICE), no offset, outside regular hours too, DAY.
-    static let defaults: [Hotkey] = (1...9).map { key(.buy, .steps, Double($0), digit: $0) }
-        + (1...9).map { key(.sell, .steps, Double($0), digit: $0, option: true) }
+    static func defaults(buy: ModifierSet = .buy, sell: ModifierSet = .sell) -> [Hotkey] {
+        (1...9).map { key(.buy, .steps, Double($0), digit: $0, modifiers: buy) }
+            + (1...9).map { key(.sell, .steps, Double($0), digit: $0, modifiers: sell) }
+    }
 
     /// A list saved before `version`: the ⌘ and ⌥⌘ number keys become the defaults' (the fixed $ and % amounts
     /// and the Mode orders before the $ / % switch); keys on other shortcuts stay.
     static func migrated(_ saved: [Hotkey]) -> [Hotkey] {
-        defaults + saved.filter { key in
+        defaults() + saved.filter { key in
             guard let s = key.shortcut, s.command, !s.control, !s.shift, number(keyCode: s.keyCode) != nil else { return true }
             return false
         }
@@ -335,17 +337,53 @@ nonisolated enum OrderKeys {
 
     /// What + in Settings › Order Keys starts from: a buy of one step ($1,000 or 20%) at the mid, no offset,
     /// outside regular hours too, DAY, its shortcut still to record.
-    static func newKey() -> Hotkey { key(.buy, .steps, 1, digit: nil) }
+    static func newKey() -> Hotkey { key(.buy, .steps, 1, digit: nil, modifiers: .buy) }
 
-    /// An order at the mid, no offset, outside regular hours too, DAY, on ⌘ (and ⌥) and `digit` (number row).
+    /// An order at the mid, no offset, outside regular hours too, DAY, on `modifiers` and `digit` (number row).
     private static func key(_ action: Hotkey.Action, _ sizing: Hotkey.Sizing, _ amount: Double, digit: Int?,
-                            option: Bool = false) -> Hotkey {
+                            modifiers: ModifierSet) -> Hotkey {
         var hotkey = Hotkey(label: Hotkey.autoLabel(action: action, sizing: sizing, amount: amount), action: action,
                             sizing: sizing, amount: amount, orderType: .limit, priceReference: .mid, offset: 0)
         hotkey.outsideRth = true
         hotkey.tif = .day
-        hotkey.shortcut = digit.map { KeyShortcut(keyCode: KeyShortcut.rowDigits[$0], key: "\($0)", command: true, option: option) }
+        hotkey.shortcut = digit.map { modifiers.shortcut(digit: $0) }
         return hotkey
+    }
+}
+
+/// The modifier keys the 1–9 order keys are pressed with: ⌘ to buy and ⌥⌘ to sell by default, each changed
+/// in Settings › Order Keys (see `Workspace.setNumberModifiers`). Saved.
+nonisolated struct ModifierSet: Codable, Equatable {
+    var command = false
+    var option = false
+    var control = false
+    var shift = false
+
+    static let buy = ModifierSet(command: true)
+    static let sell = ModifierSet(command: true, option: true)
+
+    init(command: Bool = false, option: Bool = false, control: Bool = false, shift: Bool = false) {
+        self.command = command
+        self.option = option
+        self.control = control
+        self.shift = shift
+    }
+
+    init(of shortcut: KeyShortcut) {
+        self.init(command: shortcut.command, option: shortcut.option, control: shortcut.control, shift: shortcut.shift)
+    }
+
+    var isEmpty: Bool { !command && !option && !control && !shift }
+
+    /// "⌥⌘", in the order macOS menus use.
+    var display: String {
+        (control ? "⌃" : "") + (option ? "⌥" : "") + (shift ? "⇧" : "") + (command ? "⌘" : "")
+    }
+
+    /// These and `digit` (1–9) on the number row.
+    func shortcut(digit: Int) -> KeyShortcut {
+        KeyShortcut(keyCode: KeyShortcut.rowDigits[digit], key: "\(digit)", command: command, option: option,
+                    control: control, shift: shift)
     }
 }
 

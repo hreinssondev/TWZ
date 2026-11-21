@@ -154,6 +154,39 @@ final class Workspace {
     /// Settings › Order Keys: keyboard shortcuts that send an order without a hotkey button (see `OrderKeys`). Saved.
     var orderKeys: [Hotkey] { didSet { save() } }
 
+    /// The 1–9 order keys' modifiers, buying or `selling`, become `new`: every order key on a number with the old
+    /// ones moves to the new ones. Nil once done; else why not (nothing changes): no ⌘, ⌥ or ⌃, the other side's,
+    /// or a number with them taken (timeframes, what-if trades, a hotkey, another order key, macOS's screenshots).
+    func setNumberModifiers(_ new: ModifierSet, selling: Bool) -> String? {
+        let old = selling ? sellModifiers : buyModifiers
+        let other = selling ? buyModifiers : sellModifiers
+        guard new.command || new.option || new.control else { return "Hold ⌘, ⌥ or ⌃ (⇧ too if you like), then ↩" }
+        guard new != other else { return "\(new.display) is the \(selling ? "buy" : "sell") keys' already" }
+        guard new != old else { return nil }
+        if new == ModifierSet(command: true, shift: true) { return "⌘⇧3, 4 and 5 are macOS's screenshots" }
+        func onNumber(_ s: KeyShortcut?, _ modifiers: ModifierSet) -> Bool {
+            guard let s else { return false }
+            return ModifierSet(of: s) == modifiers && OrderKeys.number(keyCode: s.keyCode) != nil
+        }
+        for digit in 1...9 {
+            let s = new.shortcut(digit: digit)
+            if let reason = s.reservedFor { return "\(s.display): \(reason)" }
+            if let hotkey = hotkeys.first(where: { $0.shortcut?.numberRow == s }) { return "\(s.display) is the hotkey \"\(hotkey.label)\"" }
+            if let key = orderKeys.first(where: { !onNumber($0.shortcut, old) && $0.shortcut?.numberRow == s }) {
+                return "\(s.display) is already the order key \"\(key.label)\""
+            }
+            if resetShortcut == s { return "\(s.display) is the extra Reset shortcut" }
+            if chartsWindowShortcut == s { return "\(s.display) shows and hides the Charts window" }
+        }
+        for i in orderKeys.indices where onNumber(orderKeys[i].shortcut, old) {
+            if let s = orderKeys[i].shortcut, let digit = OrderKeys.number(keyCode: s.keyCode) {
+                orderKeys[i].shortcut = new.shortcut(digit: digit)
+            }
+        }
+        if selling { sellModifiers = new } else { buyModifiers = new }
+        return nil
+    }
+
     /// The order key `shortcut` presses, if any (a keypad digit as the number row's).
     func orderKey(for shortcut: KeyShortcut) -> Hotkey? {
         let pressed = shortcut.numberRow
@@ -187,6 +220,9 @@ final class Workspace {
     var fastChartIDs: Set<Int> { didSet { save() } }
     /// System-wide shortcut that shows and hides the Charts window (see `ChartsWindowShortcut`).
     var chartsWindowShortcut: KeyShortcut? { didSet { save() } }
+    /// The modifier keys of the 1–9 order keys: buying (⌘ by default) and selling (⌥⌘), see `setNumberModifiers`. Saved.
+    var buyModifiers: ModifierSet = .buy { didSet { save() } }
+    var sellModifiers: ModifierSet = .sell { didSet { save() } }
     /// One more shortcut for the top bar's Reset, as ⌘R / ⇧R / ⌥R / ⌃R / ⌘⇧R (Settings › Order Keys). Saved.
     var resetShortcut: KeyShortcut? { didSet { save() } }
     /// Main-window charts given a stock by hand (a list, a symbol field): they keep it and their cell
@@ -379,7 +415,7 @@ final class Workspace {
             orderKeys = migrated
             if let data = try? JSONEncoder().encode(migrated) { defaults.set(data, forKey: OrderKeys.storageKey) }
         } else {
-            orderKeys = savedKeys ?? OrderKeys.defaults
+            orderKeys = savedKeys ?? OrderKeys.defaults()
         }
         defaults.set(OrderKeys.version, forKey: OrderKeys.versionKey)
 
@@ -437,6 +473,8 @@ final class Workspace {
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
         resetShortcut = defaults.data(forKey: "resetShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
+        buyModifiers = defaults.data(forKey: "buyModifiers").flatMap { try? JSONDecoder().decode(ModifierSet.self, from: $0) } ?? .buy
+        sellModifiers = defaults.data(forKey: "sellModifiers").flatMap { try? JSONDecoder().decode(ModifierSet.self, from: $0) } ?? .sell
 
         let pins = defaults.data(forKey: MainGrid.pinsKey)
             .flatMap { try? JSONDecoder().decode([MainGridPin].self, from: $0) } ?? []
@@ -485,5 +523,7 @@ final class Workspace {
         defaults.set(fastChartIDs.sorted(), forKey: "fastChartIDs")
         defaults.set(chartsWindowShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "chartsWindowShortcut")
         defaults.set(resetShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "resetShortcut")
+        defaults.set(try? JSONEncoder().encode(buyModifiers), forKey: "buyModifiers")
+        defaults.set(try? JSONEncoder().encode(sellModifiers), forKey: "sellModifiers")
     }
 }

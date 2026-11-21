@@ -31,7 +31,8 @@
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  With the order shortcuts on, an order key (Settings › Order Keys, see `OrderKeys`) sends its order, once per
-//  press (a held key doesn't send another): by default ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the
+//  press (a held key doesn't send another): by default ⌘1–9 buys and ⌥⌘1–9 sells short (modifiers set in Settings,
+//  see `Workspace.setNumberModifiers`) that many steps of the
 //  $ / % switch (see `SizeMode`) at the mid; a ⌘ number with neither an order key nor a hotkey beeps.
 //  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌃1–6, ⇧1–6 outside a text field, or ⌥⇧1–6) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.

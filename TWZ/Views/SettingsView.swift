@@ -360,6 +360,16 @@ private struct OrderKeysSettings: View {
     var body: some View {
         Form {
             Section {
+                ModifierRecorder(title: "Buy", current: workspace.buyModifiers) { workspace.setNumberModifiers($0, selling: false) }
+                ModifierRecorder(title: "Sell", current: workspace.sellModifiers) { workspace.setNumberModifiers($0, selling: true) }
+            } header: {
+                Text("Number keys")
+            } footer: {
+                Text("The modifier keys of the 1–9 order keys. Click one, hold the keys (⌘, ⌥, ⌃, ⇧), then press ↩ to save them; Esc cancels. The order keys on 1–9 move with them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section {
                 if workspace.orderKeys.isEmpty {
                     Text("No order keys: + adds one, Restore Defaults brings back ⌘1–9 and ⌥⌘1–9.")
                         .foregroundStyle(.secondary)
@@ -373,7 +383,11 @@ private struct OrderKeysSettings: View {
                 HStack {
                     Text("Order keys")
                     Spacer()
-                    Button("Restore Defaults") { workspace.orderKeys = OrderKeys.defaults }
+                    Button("Restore Defaults") {
+                        workspace.buyModifiers = .buy
+                        workspace.sellModifiers = .sell
+                        workspace.orderKeys = OrderKeys.defaults()
+                    }
                         .help("⌘1–9 buy and ⌥⌘1–9 sell short 1–9 steps: $1,000–$9,000, or 20–80% of the buying power for 1–4 (⌘⇧M)")
                     Button {
                         editing = Editing(key: OrderKeys.newKey())
