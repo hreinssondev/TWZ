@@ -1331,6 +1331,23 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             : "Cancelling \(working.count) order\(working.count == 1 ? "" : "s") in \(symbol)"
     }
 
+    /// ⌘A with no chart selected: every working order in every symbol except stop losses and take
+    /// profits (and orders entered in TWS, which the API can't cancel).
+    func cancelEntryOrders() {
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        let working = orders.values.filter { o in
+            o.isActive && o.status != "PendingCancel" && o.id > 0
+                && protectiveOrders[o.id] == nil && !cancelsSent.contains(o.id)
+        }
+        for o in working { cancelOrder(o.id, why: "⌘A cancel all but stop loss / take profit") }
+        lastMessage = working.isEmpty
+            ? "No working orders to cancel (stop losses and take profits stay)"
+            : "Cancelling \(working.count) order\(working.count == 1 ? "" : "s") in \(Set(working.map(\.symbol)).count) symbol\(Set(working.map(\.symbol)).count == 1 ? "" : "s"); stop losses and take profits stay"
+    }
+
     /// A message from the UI for the status line (a what-if trade's, say).
     func say(_ message: String) {
         lastMessage = message

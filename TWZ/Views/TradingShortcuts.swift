@@ -13,7 +13,8 @@
 //  a hotkey's own keyboard shortcut sends that hotkey; ⌘⇧↩ sends the selected hotkey; ⌘↩ makes the
 //  selected chart fast or not, so it keeps tick-by-tick trades once deselected (see
 //  `Workspace.fastChartIDs`); ⌘A, like ⌥<,
-//  cancels every order in the symbol, stop loss and take profit included; ⌘⌫ does too, then closes
+//  cancels every order in the symbol, stop loss and take profit included (with no chart selected, every
+//  symbol's orders except stop losses and take profits); ⌘⌫ does too, then closes
 //  the whole position at market; both also remove the symbol's ⌃-click what-if, and ⌘⇧⌫ removes just that; ⌘Z, like ⌥Z, cancels the last order placed; ⌥⇧ and a color's letter
 //  (R, G, B, Y, O, P, M, W, K khaki, I pink, N brown, F turquoise, L lime) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
@@ -33,7 +34,7 @@
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
 //  place and price scale (see `Workspace.matchViews`).
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
-//  everything but cancelling the last order (and Cancel All / Flatten All hotkeys) does nothing.
+//  everything but cancelling the last order, ⌘A (see above) and Cancel All / Flatten All hotkeys does nothing.
 //
 
 import AppKit
@@ -223,7 +224,10 @@ struct TradingShortcuts: ViewModifier {
                         switch event.keyCode == 51 ? "⌫" : event.charactersIgnoringModifiers?.lowercased() {
                         case "a":
                             if typing { return event }
-                            if symbol.isEmpty {
+                            if !workspace.isChartSelected {
+                                // No chart selected: every symbol's orders but stop losses and take profits.
+                                broker.cancelEntryOrders()
+                            } else if symbol.isEmpty {
                                 NSSound.beep()
                             } else {
                                 workspace.whatIfs[symbol] = nil
