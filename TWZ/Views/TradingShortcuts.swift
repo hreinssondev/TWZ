@@ -67,6 +67,11 @@ struct TradingShortcuts: ViewModifier {
                             : (event.keyCode == 54 || event.keyCode == 55) && flags.contains(.command)
                         if wentDown, flags == [.command, .function], event.window?.attachedSheet == nil {
                             workspace.orderShortcutsOn.toggle()
+                            // Positions and the charts' trades follow, SIM or LIVE, but stay as they are while a real
+                            // position or order is open.
+                            if !broker.hasLiveExposure {
+                                UserDefaults.standard.set(!workspace.orderShortcutsOn, forKey: PositionsView.showsSimKey)
+                            }
                             broker.say(workspace.orderShortcutsOn ? "KEYS ON: order shortcuts go to IB, for real (⌘🌐: SIM)"
                                                                   : "SIM: order shortcuts trade what-if positions, nothing goes to IB (⌘🌐: KEYS ON)")
                         }

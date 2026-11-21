@@ -208,7 +208,7 @@ private struct OrderShortcutsBadge: View {
             .background(Capsule().fill(isOn ? Color.orange : Color.primary.opacity(0.08)))
             .help((isOn ? "KEYS ON: order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩, ⌘⌫) go to IB, for real; Positions shows the real positions."
                         : "SIM: order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩, ⌘⌫) trade what-if positions, never sent to IB; Positions shows the what-if trades.")
-                  + " ⌘ and the Globe (fn) key switch; SIM at every launch."
+                  + " ⌘ and the Globe (fn) key switch (Positions stays as it is while a real position or order is open); SIM at every launch."
                   + (sizeMode == .dollars ? " Numbers in dollars: 1 is $1,000, 9 is $9,000." : " Numbers in % of the buying power: 1 is 20%, 4 is 80%, 5–9 none.")
                   + " ⌘⇧M switches $ and %. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) works on real orders either way.")
     }

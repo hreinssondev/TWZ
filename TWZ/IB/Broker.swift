@@ -743,6 +743,11 @@ final class Broker {
         }
     }
 
+    /// A real position or a working real order open, in any symbol.
+    var hasLiveExposure: Bool {
+        positions.values.contains { $0.quantity != 0 } || orders.values.contains(where: \.isActive)
+    }
+
     /// The scanner lists without the restricted stocks while Hide restricted stocks is on, but for
     /// those with a position or a working order, which stay in view.
     private func filterScans() {
