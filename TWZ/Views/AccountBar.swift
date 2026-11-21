@@ -197,17 +197,17 @@ private struct AccountBadge: View {
 }
 
 /// Where the order shortcuts go and what their numbers are (see `SizeMode`): KEYS $ or KEYS % in orange with KEYS ON
-/// (real orders), SIM $ or SIM % in the what-if pink with it off (what-if trades).
+/// (real orders), SIM $ or SIM % dimmed with it off (what-if trades), as the LIVE / PAPER badge beside it.
 private struct OrderShortcutsBadge: View {
     let isOn: Bool
     @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent
 
     var body: some View {
         Text("\(isOn ? "KEYS" : "SIM") \(sizeMode.sign)")
-            .font(.system(size: 10, weight: .heavy))
-            .foregroundStyle(.white)
+            .font(.system(size: 10, weight: isOn ? .heavy : .regular))
+            .foregroundStyle(isOn ? Color.white : Color.secondary.opacity(0.7))
             .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Capsule().fill(isOn ? Color.orange : TradingChart.whatIfColor.opacity(0.85)))
+            .background(Capsule().fill(isOn ? Color.orange : Color.primary.opacity(0.08)))
             .help((isOn ? "KEYS ON: order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩, ⌘⌫) go to IB, for real; Positions shows the real positions."
                         : "SIM: order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩, ⌘⌫) trade what-if positions, never sent to IB; Positions shows the what-if trades.")
                   + " ⌘ and the Globe (fn) key switch; SIM at every launch."
