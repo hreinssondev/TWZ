@@ -7,7 +7,7 @@
 //  hotkey button is selected.
 //  On the right, a two-row grid of configurable hotkey buttons (closing, cancelling, or orders of
 //  their own) acting on the selected chart's symbol. Clicking one selects it (never sends it):
-//  ⌘⇧↩ sends it, and its own shortcut (⌘5–9 too, with KEYS ON) sends it any time. New buttons go in on the left. Click the "Hotkeys" title to customize them
+//  ⌘⇧↩ sends it, and its own shortcut (a ⌘ number too, with KEYS ON, where no order key is) sends it any time. New buttons go in on the left. Click the "Hotkeys" title to customize them
 //  all, or right-click a button to edit just that one.
 //
 
@@ -114,7 +114,7 @@ struct HotkeyPanel: View {
     }
 }
 
-private extension Hotkey {
+extension Hotkey {
     var tint: Color { (color ?? action.defaultColor).color }
 
     /// A Mode hotkey as the trade mode makes it: "Long …", green, while LONG; "Short …", red, while SHORT.
@@ -420,18 +420,24 @@ private struct HotkeyReorder: DropDelegate {
     }
 }
 
-/// Editing form for a single hotkey, shared by the customizer popover and the right-click editor.
+/// Editing form for a single hotkey, shared by the customizer popover and the right-click editor; for an
+/// order key (Settings › Order Keys, see `OrderKeys`) without the label and color, which it has no button for.
 private struct HotkeyFields: View {
     @Binding var hotkey: Hotkey
+    var isOrderKey = false
 
     var body: some View {
         Form {
-            TextField("Label", text: $hotkey.label, prompt: Text("Automatic"))
+            if !isOrderKey {
+                TextField("Label", text: $hotkey.label, prompt: Text("Automatic"))
+            }
             Picker("Action", selection: $hotkey.action) {
                 ForEach(Hotkey.Action.allCases) { Text($0.rawValue).tag($0) }
             }
-            LabeledContent("Color") { colorSwatches }
-            ShortcutRecorder(shortcut: $hotkey.shortcut, owner: .hotkey(hotkey.id))
+            if !isOrderKey {
+                LabeledContent("Color") { colorSwatches }
+            }
+            ShortcutRecorder(shortcut: $hotkey.shortcut, owner: isOrderKey ? .orderKey(hotkey.id) : .hotkey(hotkey.id))
             if hotkey.action.needsSize {
                 Picker("Size in", selection: $hotkey.sizing) {
                     ForEach(Hotkey.Sizing.allCases) { Text($0.rawValue).tag($0) }
@@ -547,15 +553,19 @@ private struct HotkeyFields: View {
 struct HotkeyEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State var hotkey: Hotkey
+    /// An order key's (see `HotkeyFields`): it needs a shortcut to save.
+    var isOrderKey = false
     let onSave: (Hotkey) -> Void
 
     var body: some View {
-        HotkeyFields(hotkey: $hotkey)
+        HotkeyFields(hotkey: $hotkey, isOrderKey: isOrderKey)
             .frame(width: 420)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { onSave(hotkey); dismiss() }
+                        .disabled(isOrderKey && hotkey.shortcut == nil)
+                        .help(isOrderKey && hotkey.shortcut == nil ? "Record its keyboard shortcut first" : "")
                 }
             }
     }

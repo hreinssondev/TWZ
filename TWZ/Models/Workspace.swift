@@ -151,6 +151,14 @@ final class Workspace {
     var isChartSelected = true
 
     var hotkeys: [Hotkey] { didSet { save() } }
+    /// Settings › Order Keys: keyboard shortcuts that send an order without a hotkey button (see `OrderKeys`). Saved.
+    var orderKeys: [Hotkey] { didSet { save() } }
+
+    /// The order key `shortcut` presses, if any (a keypad digit as the number row's).
+    func orderKey(for shortcut: KeyShortcut) -> Hotkey? {
+        let pressed = shortcut.numberRow
+        return orderKeys.first { $0.shortcut?.numberRow == pressed }
+    }
     /// The keyboard shortcuts that send orders (a hotkey's own, ⌘⇧↩, ⌘⌫) work: ⌘ and the Globe (fn) key
     /// turn them on or off (see `TradingShortcuts`). Not saved, so they're off at every launch.
     var orderShortcutsOn = false
@@ -357,6 +365,8 @@ final class Workspace {
         } else {
             hotkeys = Hotkey.defaults
         }
+        orderKeys = defaults.data(forKey: OrderKeys.storageKey).flatMap { try? JSONDecoder().decode([Hotkey].self, from: $0) }
+            ?? OrderKeys.defaults
 
         selectedHotkeyID = defaults.string(forKey: "selectedHotkey").flatMap(UUID.init(uuidString:))
         orderPad = defaults.data(forKey: OrderPad.storageKey).flatMap { try? JSONDecoder().decode(OrderPad.self, from: $0) } ?? OrderPad()
@@ -443,6 +453,7 @@ final class Workspace {
 
     private func save() {
         if let data = try? JSONEncoder().encode(hotkeys) { defaults.set(data, forKey: "hotkeys") }
+        if let data = try? JSONEncoder().encode(orderKeys) { defaults.set(data, forKey: OrderKeys.storageKey) }
         if let data = try? JSONEncoder().encode(scanFilters) { defaults.set(data, forKey: "scanFilters") }
         if let data = try? JSONEncoder().encode(whatIfs) { defaults.set(data, forKey: "whatIfs") }
         defaults.set(fastChartIDs.sorted(), forKey: "fastChartIDs")

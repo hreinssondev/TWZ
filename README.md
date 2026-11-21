@@ -40,11 +40,15 @@ management in one window built for quick entries and exits.
   held together switches to LONG, with S and H to SHORT; the top bar's LIVE / PAPER badge is green
   while LONG, red while SHORT). Beside it, configurable hotkey buttons (closing, cancelling, or orders of
   their own), each with an optional keyboard shortcut; clicking one selects it in place of the pad's
-  order. ⌘⇧↩ sends the selected order; ⌘⌥ and 1 / 2 / 3 / 4 shorts $1,000 / $2,000 / $3,000 / 85% of the
-  buying power at the mid (no offset, outside regular hours too), and 5 / 6 / 7 / 8 / 9 sends a Mode order of 25% / 30% / 50% / 75% / 85% of it; ⌘⌫ cancels the symbol's orders and closes the position at market. The shortcuts that send
-  orders work only after ⌘ and the Globe (fn) key turn them on (again: off; off at every launch, KEYS
-  ON in the top bar); while on, ⌘1 / 2 / 3 / 4 buys $1,000 / $2,000 / $3,000 / 85% of the buying power at
-  the mid (no offset, outside regular hours too) and ⌘5–9 are free for hotkeys, instead of switching timeframes.
+  order. ⌘⇧↩ sends the selected order; ⌘⌫ cancels the symbol's orders and closes the position at market.
+  The shortcuts that send orders work only after ⌘ and the Globe (fn) key turn them on (again: off; off at
+  every launch, KEYS ON in the top bar).
+- **Order keys** (Settings › Order Keys): keyboard shortcuts that send an order without a button, listed by
+  shortcut, added, edited or deleted there, beside the hotkey buttons' shortcuts and the fixed ones. By default
+  ⌘1 / 2 / 3 / 4 buys $1,000 / $2,000 / $3,000 / 85% of the buying power, ⌥⌘1 / 2 / 3 / 4 sells short $1,000 /
+  $2,000 / $3,000 / 80%, and ⌥⌘5 / 6 / 7 / 8 / 9 sends a Mode order of 25% / 30% / 50% / 75% / 85%, all limit at
+  the mid, no offset, outside regular hours too. With KEYS ON only, once per press; with KEYS off ⌘1–6 switch
+  timeframes.
 - **What-if trades**: ⌃⌥⇧1–4 shorts $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB; on the chart, an arrow, green for a long
   and red for a short, ringed in pink, points at each of its fills. It shows like a position, its symbol in pink,

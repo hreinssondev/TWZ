@@ -2,9 +2,9 @@
 //  ShortcutRecorder.swift
 //  TWZ
 //
-//  Records a hotkey's or the Charts window's keyboard shortcut: click, then press the keys. Esc
-//  cancels, Delete clears. Shortcuts the app or macOS already uses, or another hotkey or the Charts
-//  window has, are refused with the reason.
+//  Records a hotkey's, an order key's or the Charts window's keyboard shortcut: click, then press the keys.
+//  Esc cancels, Delete clears. Shortcuts the app or macOS already uses, or another hotkey, order key or the
+//  Charts window has, are refused with the reason.
 //
 
 import AppKit
@@ -24,6 +24,7 @@ struct ShortcutRecorder: View {
     /// What the shortcut is for, so its own current shortcut isn't counted as taken.
     enum Owner: Equatable {
         case hotkey(UUID)
+        case orderKey(UUID)
         case chartsWindow
     }
 
@@ -82,6 +83,10 @@ struct ShortcutRecorder: View {
         }
         if let other = workspace.hotkeys.first(where: { owner != .hotkey($0.id) && $0.shortcut == new }) {
             problem = "\(new.display) is already \"\(other.label)\". Try another."
+            return
+        }
+        if let other = workspace.orderKeys.first(where: { owner != .orderKey($0.id) && $0.shortcut?.numberRow == new.numberRow }) {
+            problem = "\(new.display) is already the order key \"\(other.label)\". Try another."
             return
         }
         if owner != .chartsWindow, workspace.chartsWindowShortcut == new {

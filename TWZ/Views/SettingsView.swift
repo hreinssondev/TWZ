@@ -3,7 +3,8 @@
 //  TWZ
 //
 //  Settings sheet: Connection (IB Gateway host/port/client, applied on reconnect),
-//  Trading (what clicking a hotkey button does, and the keyboard shortcuts),
+//  Trading (what clicking a hotkey button does, and the keyboard shortcuts), Order Keys (every shortcut that
+//  trades: the order keys, added and edited there, hotkey buttons' shortcuts, the fixed ones),
 //  Appearance (candle and chart line colors, applied immediately) and Layouts (the main window's
 //  layout saved under a name, loaded back; see `Layouts`).
 //
@@ -17,6 +18,7 @@ struct SettingsView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case connection = "Connection"
         case trading = "Trading"
+        case orderKeys = "Order Keys"
         case appearance = "Appearance"
         case layouts = "Layouts"
         var id: String { rawValue }
@@ -25,6 +27,7 @@ struct SettingsView: View {
             switch self {
             case .connection: "network"
             case .trading: "keyboard"
+            case .orderKeys: "command"
             case .appearance: "paintpalette"
             case .layouts: "rectangle.3.group"
             }
@@ -58,11 +61,12 @@ struct SettingsView: View {
             switch tab {
             case .connection: ConnectionSettings()
             case .trading: TradingSettings()
+            case .orderKeys: OrderKeysSettings()
             case .appearance: AppearanceSettings()
             case .layouts: LayoutSettings()
             }
         }
-        .frame(width: 460, height: 440)
+        .frame(width: 560, height: 520)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
         }
@@ -220,28 +224,15 @@ private struct TradingSettings: View {
     @AppStorage(Confetti.enabledKey) private var confetti = Confetti.defaultEnabled
 
     private let shortcuts: [(String, String)] = [
-        ("⌘🌐 (⌘ fn)", "Turn the shortcuts that send orders (hotkeys' own, ⌘⇧↩, ⌘⌫) on or off; off at every launch, KEYS ON in the top bar while on, when ⌘1–4 buy and ⌘5–9 are the hotkeys' instead of timeframes"),
-        ("⌘⇧↩", "Send the selected hotkey button's order, or with none selected the order pad's"),
+        ("Order keys", "The shortcuts that send orders (⌘ / ⌥⌘ and numbers, hotkeys' own, ⌘⇧↩, ⌘⌫, …): Settings › Order Keys"),
         ("⌘↩", "Keep the selected chart's tick-by-tick trades on or off once it's deselected (⚡ while on, "
             + "a red circle once IB's limit leaves it out); the selected chart always gets trades and bid/ask"),
-        ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if); with no chart selected, ⌘A cancels the last order placed, as ⌘Z"),
-        ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market; removes its ⌃-click what-if too"),
-        ("⌘⇧⌫", "Remove the chart's ⌃-click what-if (so does double-clicking anywhere on the chart)"),
-        ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
-        ("⌃⌥⇧1 2 3 4", "What-if trade: sell (short) $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
-            + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),
         ("⌘⇧S L H A F", "Show that list and load it into the chart grid: Most Active $, Top Losers, AH Gainers, "
             + "Top Gainers, Forex (S, H and L wait a moment for a second letter)"),
-        ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red); Mode hotkeys buy while LONG, sell short while SHORT"),
         ("⌥, ⇧ or ⌥⇧ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D (also ⌘ 1–6 with KEYS off)"),
-        ("⌘ 1 2 3 4 with KEYS ON", "Buy $1,000 / $2,000 / $3,000 / 85% of the buying power IB allows in the selected chart's stock: limit at the mid (not MIDPRICE), no offset, outside regular hours too"),
-        ("⌘ 5–9 with KEYS ON", "Free for hotkeys: give a hotkey button one as its shortcut to send its order"),
-        ("⌘⌥ 1 2 3 4 with KEYS ON", "Sell short $1,000 / $2,000 / $3,000 / 85% of the buying power IB allows in the selected chart's stock: limit at the mid (not MIDPRICE), no offset, outside regular hours too"),
-        ("⌘⌥ 5 6 7 8 9 with KEYS ON", "A Mode order (buy while LONG, short while SHORT) of 25% / 30% / 50% / 75% / 85% of the buying power IB allows in the stock: limit at the mid, no offset, outside regular hours too"),
         ("⌘R, ⇧R or ⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("⌥0  /  ⇧A", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes); ⇧A not while typing"),
         ("1 2 3 4 5 (top bar)", "View sets (by default): ⇧-click a number saves every chart's zoom and place on every timeframe; a click puts them back. With Appearance's \"Top bar numbers are scales\" on, scales: a click: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists change until it's clicked again or Reset (a timeframe switch keeps each chart's view). The Zoom slider or ⇧- / ⌘- / ⌥-swipe trumps its zoom until a scale is picked; a chart zoomed or panned by hand keeps its view (per stock and timeframe) through list switches, until a number is clicked (or a right-click on that chart). Each list keeps its own views and lit scale. ⇧-click: save the selected chart's view as it"),
-        ("Own shortcut", "Send that hotkey (set in the hotkey editor)"),
     ]
 
     var body: some View {
@@ -325,6 +316,215 @@ private struct TradingSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Order Keys
+
+/// Every keyboard shortcut that trades, in one place: the order keys (see `OrderKeys`), listed by shortcut,
+/// each added, edited (double-click, or the pencil) or deleted here; the hotkey buttons given a shortcut (edited
+/// in the hotkey panel); and the fixed ones (⌘⇧↩, ⌘⌫, cancelling, the trade mode, what-if trades).
+private struct OrderKeysSettings: View {
+    @Environment(Workspace.self) private var workspace
+    @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
+    @State private var editing: Editing?
+
+    private struct Editing: Identifiable {
+        var key: Hotkey
+        var id: UUID { key.id }
+    }
+
+    private static let fixed: [(String, String)] = [
+        ("⌘🌐 (⌘ fn)", "KEYS ON / off: the shortcuts that send orders work only while on; off at every launch. While on, ⌘1–6 are order keys and hotkeys rather than timeframes"),
+        ("⌘⇧↩", "Send the selected hotkey button's order, or with none selected the order pad's"),
+        ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market; removes its ⌃-click what-if too"),
+        ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if); with no chart selected, ⌘A cancels the last order placed, as ⌘Z"),
+        ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
+        ("⌘⇧⌫", "Remove the chart's ⌃-click what-if (so does double-clicking anywhere on the chart)"),
+        ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red); Mode orders buy while LONG, sell short while SHORT"),
+        ("⌃⌥⇧1 2 3 4", "What-if trade: sell (short) $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
+            + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),
+    ]
+
+    /// By modifiers (⌘ before ⌥⌘), then key; keys still without a shortcut last.
+    private var sortedKeys: [Hotkey] {
+        workspace.orderKeys.sorted { a, b in
+            guard let x = a.shortcut else { return false }
+            guard let y = b.shortcut else { return true }
+            let mx = x.display.dropLast(x.key.count), my = y.display.dropLast(y.key.count)
+            if mx != my { return mx.count != my.count ? mx.count < my.count : mx < my }
+            return x.key.localizedStandardCompare(y.key) == .orderedAscending
+        }
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                if workspace.orderKeys.isEmpty {
+                    Text("No order keys: + adds one, Restore Defaults brings back ⌘1–4 and ⌥⌘1–9.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(sortedKeys) { key in
+                    OrderKeyRow(key: key, mode: mode, onEdit: { editing = Editing(key: key) }) {
+                        workspace.orderKeys.removeAll { $0.id == key.id }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Order keys")
+                    Spacer()
+                    Button("Restore Defaults") { workspace.orderKeys = OrderKeys.defaults }
+                        .help("⌘1–4 buy $1,000 / $2,000 / $3,000 / 85%; ⌥⌘1–4 sell short $1,000 / $2,000 / $3,000 / 80%; ⌥⌘5–9 Mode orders of 25–85%")
+                    Button {
+                        editing = Editing(key: OrderKeys.newKey())
+                    } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                    .help("A new order key: record its shortcut, then pick the order")
+                }
+                .controlSize(.small)
+            } footer: {
+                Text("For the selected chart's symbol, only with KEYS ON (⌘🌐; \(workspace.orderShortcutsOn ? "on now" : "off now")), once per press: holding the key doesn't send another. A keypad number works as the number row's. With KEYS off, ⌘1–6 switch timeframes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Hotkey buttons with a shortcut") {
+                let keyed = workspace.hotkeys.filter { $0.shortcut != nil }
+                if keyed.isEmpty {
+                    Text("None yet.").foregroundStyle(.secondary)
+                }
+                ForEach(keyed) { OrderKeyRow(key: $0, mode: mode) }
+                Text("Edited in the hotkey panel: right-click a button, or click the Hotkeys title.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Other order shortcuts") {
+                ForEach(Self.fixed, id: \.0) { keys, action in
+                    LabeledContent {
+                        Text(action).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                    } label: {
+                        KeyCap(text: keys)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .sheet(item: $editing) { target in
+            HotkeyEditor(hotkey: target.key, isOrderKey: true) { updated in
+                if let i = workspace.orderKeys.firstIndex(where: { $0.id == updated.id }) {
+                    workspace.orderKeys[i] = updated
+                } else {
+                    workspace.orderKeys.append(updated)
+                }
+            }
+        }
+    }
+}
+
+/// One order key or hotkey: its shortcut, what it does (BUY green, SELL red, a Mode order in the trade mode's
+/// color), its size and how it's priced; the pencil and trash where it's edited here.
+private struct OrderKeyRow: View {
+    let key: Hotkey
+    let mode: TradeMode
+    var onEdit: (() -> Void)?
+    var onDelete: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            KeyCap(text: key.shortcut?.display ?? "None")
+                .opacity(key.shortcut == nil ? 0.5 : 1)
+                .frame(width: 58, alignment: .leading)
+            Text(side)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(key.shown(in: mode).tint.opacity(0.8)))
+                .frame(width: 92, alignment: .leading)
+                .help(key.action == .mode ? "A Mode order: buys while LONG, sells short while SHORT (now \(mode == .long ? "LONG" : "SHORT"))" : "")
+            VStack(alignment: .leading, spacing: 1) {
+                Text(size).font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                if !details.isEmpty {
+                    Text(details).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 4)
+            if let onEdit {
+                Button(action: onEdit) { Image(systemName: "pencil") }
+                    .buttonStyle(.borderless)
+                    .help("Edit")
+            }
+            if let onDelete {
+                Button(action: onDelete) { Image(systemName: "trash") }
+                    .buttonStyle(.borderless)
+                    .help("Delete")
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { onEdit?() }
+    }
+
+    private var side: String {
+        switch key.action {
+        case .mode: "MODE · " + (mode == .long ? "LONG" : "SHORT")
+        case .buy: "BUY"
+        case .sell: "SELL"
+        default: key.action.rawValue.uppercased()
+        }
+    }
+
+    private var size: String {
+        guard key.action.needsSize else {
+            return switch key.action {
+            case .closeHalf: "Half the position"
+            case .closeAll: "The whole position"
+            case .cancelSymbol: "Every order in the symbol"
+            case .cancelAll: "Every order"
+            default: "Every position"
+            }
+        }
+        let amount = key.amount.formatted(.number.precision(.fractionLength(0...2)))
+        return switch key.sizing {
+        case .dollars: "$" + amount
+        case .buyingPower: amount + "% of the buying power"
+        case .shares: amount + (key.amount == 1 ? " share" : " shares")
+        }
+    }
+
+    private var details: String {
+        guard key.action.placesOrder else { return "" }
+        var parts: [String] = []
+        switch key.orderType {
+        case .market: parts.append("Market")
+        case .midprice: parts.append("MIDPRICE")
+        case .limit:
+            parts.append(key.priceReference == .cross ? "Limit across the spread" : "Limit at the " + key.priceReference.rawValue.lowercased())
+        }
+        if key.orderType != .market {
+            let sign = key.offset < 0 ? "−" : "+"
+            parts.append("offset \(sign)\(abs(key.offset).formatted(.number.precision(.fractionLength(2...4))))")
+        }
+        parts.append(key.tif.rawValue)
+        if key.orderType == .limit, key.outsideRth { parts.append("outside regular hours") }
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// A shortcut drawn as a key cap.
+private struct KeyCap: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.07)))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.18)))
     }
 }
 

@@ -304,43 +304,43 @@ nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// The number keys' orders, with KEYS ON (number row or keypad): ⌘1–4 buy and ⌘⌥1–4 sell short (see
-/// `sizedHotkey`); ⌘⌥ and 5 / 6 / 7 / 8 / 9: a Mode order (see `TradeMode`) of 25% / 30% / 50% / 75% / 85%
-/// of the buying power IB's margin allows in the stock, limit at the mid, no offset, outside regular
-/// hours too, DAY. Sent only with KEYS ON.
+/// The order keys: keyboard shortcuts that send an order (or close, cancel, flatten) in the selected chart's
+/// symbol without a hotkey button, set up in Settings › Order Keys (see `Workspace.orderKeys`). Sent only with
+/// KEYS ON, once per press; a keypad number works as the number row's.
 nonisolated enum OrderKeys {
+    static let storageKey = "orderKeys"
+
     static func number(keyCode: UInt16) -> Int? {
         [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9,
          83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9][keyCode]
     }
 
-    /// ⌘⌥ and 5–9: the Mode order's percent of the buying power.
-    static let modePercents = [5: 25, 6: 30, 7: 50, 8: 75, 9: 85]
+    /// ⌘1 / 2 / 3 / 4 buy $1,000 / $2,000 / $3,000 / 85% of the buying power IB's margin allows in the stock;
+    /// ⌥⌘ and them sell (short) $1,000 / $2,000 / $3,000 / 80%; ⌥⌘5 / 6 / 7 / 8 / 9 send a Mode order (see
+    /// `TradeMode`) of 25% / 30% / 50% / 75% / 85%. All limit at the mid (not MIDPRICE), no offset, outside
+    /// regular hours too, DAY.
+    static let defaults: [Hotkey] = [
+        key(.buy, .dollars, 1_000, digit: 1), key(.buy, .dollars, 2_000, digit: 2),
+        key(.buy, .dollars, 3_000, digit: 3), key(.buy, .buyingPower, 85, digit: 4),
+        key(.sell, .dollars, 1_000, digit: 1, option: true), key(.sell, .dollars, 2_000, digit: 2, option: true),
+        key(.sell, .dollars, 3_000, digit: 3, option: true), key(.sell, .buyingPower, 80, digit: 4, option: true),
+        key(.mode, .buyingPower, 25, digit: 5, option: true), key(.mode, .buyingPower, 30, digit: 6, option: true),
+        key(.mode, .buyingPower, 50, digit: 7, option: true), key(.mode, .buyingPower, 75, digit: 8, option: true),
+        key(.mode, .buyingPower, 85, digit: 9, option: true),
+    ]
 
-    /// ⌘⌥ and 5–9's Mode order (see `modePercents`); nil for the other numbers.
-    static func hotkey(number: Int) -> Hotkey? {
-        guard let percent = modePercents[number] else { return nil }
-        let amount = Double(percent)
-        var hotkey = Hotkey(label: Hotkey.autoLabel(action: .mode, sizing: .buyingPower, amount: amount), action: .mode,
-                            sizing: .buyingPower, amount: amount, orderType: .limit, priceReference: .mid, offset: 0)
-        hotkey.outsideRth = true
-        hotkey.tif = .day
-        return hotkey
-    }
+    /// What + in Settings › Order Keys starts from: a buy of $1,000 at the mid, no offset, outside regular
+    /// hours too, DAY, its shortcut still to record.
+    static func newKey() -> Hotkey { key(.buy, .dollars, 1_000, digit: nil) }
 
-    /// ⌘1 / 2 / 3 / 4 with KEYS ON (`.buy`), or ⌘⌥ and them (`.sell`, short): $1,000 / $2,000 / $3,000 / 85% of
-    /// the buying power IB's margin allows in the stock (a new long, or a new short), limit at the mid (not
-    /// MIDPRICE), no offset, outside regular hours too, DAY (with KEYS off ⌘1–4 switch timeframes); nil for
-    /// the other numbers.
-    static let sizedNumbers = 1...4
-    static func sizedHotkey(_ action: Hotkey.Action, number: Int) -> Hotkey? {
-        guard sizedNumbers.contains(number) else { return nil }
-        let sizing: Hotkey.Sizing = number == 4 ? .buyingPower : .dollars
-        let amount = number == 4 ? 85 : Double(number * 1000)
+    /// An order at the mid, no offset, outside regular hours too, DAY, on ⌘ (and ⌥) and `digit` (number row).
+    private static func key(_ action: Hotkey.Action, _ sizing: Hotkey.Sizing, _ amount: Double, digit: Int?,
+                            option: Bool = false) -> Hotkey {
         var hotkey = Hotkey(label: Hotkey.autoLabel(action: action, sizing: sizing, amount: amount), action: action,
                             sizing: sizing, amount: amount, orderType: .limit, priceReference: .mid, offset: 0)
         hotkey.outsideRth = true
         hotkey.tif = .day
+        hotkey.shortcut = digit.map { KeyShortcut(keyCode: KeyShortcut.rowDigits[$0], key: "\($0)", command: true, option: option) }
         return hotkey
     }
 }
@@ -413,6 +413,18 @@ nonisolated struct KeyShortcut: Codable, Hashable {
 
     /// No ⌘, ⌥ or ⌃, and not an F-key: a key that types something.
     var isPlain: Bool { !command && !option && !control && !isFunctionKey }
+
+    /// The 0–9 keys' codes on the number row, and on the keypad.
+    static let rowDigits: [UInt16] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25]
+    static let keypadDigits: [UInt16] = [82, 83, 84, 85, 86, 87, 88, 89, 91, 92]
+
+    /// A keypad digit as the number row's, so an order key works from either (see `OrderKeys`).
+    var numberRow: KeyShortcut {
+        guard let digit = Self.keypadDigits.firstIndex(of: keyCode) else { return self }
+        var shortcut = self
+        shortcut.keyCode = Self.rowDigits[digit]
+        return shortcut
+    }
 
     /// What the key types (lowercase unless ⇧ is part of it).
     var typed: String { shift ? key.uppercased() : key.lowercased() }
