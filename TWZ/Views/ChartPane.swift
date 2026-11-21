@@ -569,7 +569,8 @@ struct TradingChart: View {
             },
             shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? []),
             onZoomAll: onZoomAll,
-            showsRealTrades: !showsSim
+            // In SIM a real position's trades show too.
+            showsRealTrades: !showsSim || hasPosition
         )
         // With the last trade lines off, a round trip that just closed (in the last 30 s, so not one
         // from before the chart showed the symbol) shows its exit line for 7 s.

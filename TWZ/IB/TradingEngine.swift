@@ -180,7 +180,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var restrictionCheckScheduled = false
     private static let restrictedKey = "restrictedStocks"
     /// IB has sent every position / open order since connecting (positionEnd, openOrderEnd).
-    private var positionsLoaded = false
+    private var positionsLoaded = false { didSet { if positionsLoaded != oldValue { changed(.positions) } } }
     private var openOrdersLoaded = false
     /// Symbols whose position opened since the last snapshot: from flat, or flipped to the other
     /// side, after the positions IB sends on connecting (see `position`). The trades entered.
@@ -319,7 +319,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 netLiquidation: netLiquidation, grossPositionValue: grossPositionValue, dailyPnL: dailyPnL,
                 unrealizedPnL: unrealizedPnL, realizedPnL: realizedPnL, usdNok: usdNok, usdNokIsLive: usdNokIsLive)
         }
-        if dirty.contains(.positions) { s.positions = positions }
+        if dirty.contains(.positions) { s.positions = positions; s.positionsLoaded = positionsLoaded }
         if dirty.contains(.orders) { s.orders = orders }
         if dirty.contains(.fills) { s.fills = fills }
         if dirty.contains(.quotes) { s.quotes = quotes }
@@ -2989,6 +2989,8 @@ nonisolated struct EngineSnapshot: Sendable {
 
     var status: Status?
     var positions: [String: Position]?
+    /// IB has sent every position since connecting (positionEnd).
+    var positionsLoaded: Bool?
     var orders: [Int: OrderRow]?
     var fills: [String: Fill]?
     var quotes: [String: Quote]?

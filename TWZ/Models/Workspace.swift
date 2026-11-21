@@ -202,9 +202,11 @@ final class Workspace {
     }
     /// KEYS ON: the order shortcuts (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫) go to IB; off, SIM, they trade what-if
     /// positions (see `TradingShortcuts`). ⌘ and the Globe (fn) key switch it; the Positions column follows, real
-    /// positions or what-if trades, but for while a real position or order is open, when it stays as it is.
-    /// Not saved, so it's SIM at every launch.
+    /// positions or what-if trades (with the real positions above them while one is open). Not saved: SIM at
+    /// launch, or KEYS ON once IB's positions are in with a real one open.
     var orderShortcutsOn = false
+    /// KEYS ON or SIM has been settled since launch, by IB's positions coming in or by ⌘🌐. Not saved.
+    var launchModeChosen = false
     /// The hotkey ⌘A sends; picked by clicking a hotkey button.
     var selectedHotkeyID: UUID? {
         didSet { defaults.set(selectedHotkeyID?.uuidString, forKey: "selectedHotkey") }

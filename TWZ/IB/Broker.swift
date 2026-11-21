@@ -41,6 +41,8 @@ final class Broker {
     private(set) var realizedPnL: Double?
 
     private(set) var positions: [String: Position] = [:]
+    /// IB has sent every position since connecting (see `TradingShortcuts`: LIVE at launch with one open).
+    private(set) var positionsLoaded = false
     private(set) var orders: [Int: OrderRow] = [:]
     private(set) var fills: [String: Fill] = [:]
     /// Every quote, for code outside views. Views read `quote(_:)` instead, so a tick in one symbol
@@ -705,6 +707,7 @@ final class Broker {
             positions = v
             positionsChanged = Date()
         }
+        if let v = s.positionsLoaded { update(\.positionsLoaded, v) }
         if let v = s.entries, !v.isEmpty, isLiveAccount, Confetti.isEnabled { Confetti.fire() }
         if let v = s.orders { update(\.orders, v) }
         if let v = s.fills { update(\.fills, v) }
@@ -743,10 +746,8 @@ final class Broker {
         }
     }
 
-    /// A real position or a working real order open, in any symbol.
-    var hasLiveExposure: Bool {
-        positions.values.contains { $0.quantity != 0 } || orders.values.contains(where: \.isActive)
-    }
+    /// A real position open, in any symbol.
+    var hasLivePositions: Bool { positions.values.contains { $0.quantity != 0 } }
 
     /// The scanner lists without the restricted stocks while Hide restricted stocks is on, but for
     /// those with a position or a working order, which stay in view.

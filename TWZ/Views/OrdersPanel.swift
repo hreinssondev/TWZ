@@ -492,10 +492,13 @@ struct OrdersPanel: View {
             RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions)
                 .filter { $0.isOpen && $0.carried == 0 }.map { ($0.symbol, $0.start) },
             uniquingKeysWith: max)
-        // Real positions or what-if trades, as the header switches (see `PositionsView`).
+        // Real positions or what-if trades, as the header switches (see `PositionsView`); with what-if trades
+        // shown, the open real positions above them too.
+        let real = broker.positions.values.map { (item: PositionItem.real($0), opened: opened[$0.symbol]) }
+        let sim = broker.simPositions.values.map { (item: PositionItem.sim($0), opened: Optional($0.opened)) }
         let items = showsSim
-            ? broker.simPositions.values.map { (item: PositionItem.sim($0), opened: Optional($0.opened)) }
-            : broker.positions.values.map { (item: PositionItem.real($0), opened: opened[$0.symbol]) }
+            ? real.filter { if case .real(let p) = $0.item { p.quantity != 0 } else { false } } + sim
+            : real
         return items.sorted { a, b in
             if a.item.isSim != b.item.isSim { return b.item.isSim }
             return switch (a.opened, b.opened) {
@@ -510,11 +513,17 @@ struct OrdersPanel: View {
     @ViewBuilder private var positionRows: some View {
         let items = positionItems
         let openTripOrders = tripOrders.open
+        let real = items.filter { !$0.isSim }, sim = items.filter(\.isSim)
+        // Real positions over what-if trades: a row's height of space between them.
+        let gap: Position? = sim.isEmpty ? nil : real.lazy.compactMap { if case .real(let p) = $0 { p } else { nil } }.first
         if items.isEmpty { empty(showsSim ? "No what-if trades" : "No positions") }
-        ForEach(items) { item in
+        ForEach(real + sim) { item in
             switch item {
             case .real(let p): positionRow(p, tripOrders: openTripOrders[p.symbol])
             case .sim(let sim): simRow(sim)
+            }
+            if let gap, item.id == real.last?.id {
+                positionRow(gap, tripOrders: nil).hidden().allowsHitTesting(false)
             }
         }
     }
