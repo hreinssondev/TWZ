@@ -159,9 +159,12 @@ final class Workspace {
         let pressed = shortcut.numberRow
         return orderKeys.first { $0.shortcut?.numberRow == pressed }
     }
-    /// The keyboard shortcuts that send orders (a hotkey's own, ⌘⇧↩, ⌘⌫) work: ⌘ and the Globe (fn) key
-    /// turn them on or off (see `TradingShortcuts`). Not saved, so they're off at every launch.
-    var orderShortcutsOn = false
+    /// KEYS ON: the order shortcuts (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫) go to IB; off, SIM, they trade what-if
+    /// positions (see `TradingShortcuts`). ⌘ and the Globe (fn) key switch it; the Positions column follows, real
+    /// positions or what-if trades. Not saved, so it's SIM at every launch.
+    var orderShortcutsOn = false {
+        didSet { defaults.set(!orderShortcutsOn, forKey: PositionsView.showsSimKey) }
+    }
     /// The hotkey ⌘A sends; picked by clicking a hotkey button.
     var selectedHotkeyID: UUID? {
         didSet { defaults.set(selectedHotkeyID?.uuidString, forKey: "selectedHotkey") }
@@ -380,6 +383,8 @@ final class Workspace {
 
         selectedHotkeyID = defaults.string(forKey: "selectedHotkey").flatMap(UUID.init(uuidString:))
         orderPad = defaults.data(forKey: OrderPad.storageKey).flatMap { try? JSONDecoder().decode(OrderPad.self, from: $0) } ?? OrderPad()
+        // SIM (KEYS off) at every launch: the Positions column on the what-if trades.
+        defaults.set(true, forKey: PositionsView.showsSimKey)
         // The $ / % switch was the order pad's own before ⌘⇧M: it starts as the pad was.
         if defaults.string(forKey: SizeMode.storageKey) == nil {
             struct LegacyPad: Decodable { var buyingPower: Bool? }

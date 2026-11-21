@@ -463,10 +463,8 @@ final class Broker {
     }
 
     /// ⌘⌫: cancels every order in `symbol`, stop loss and take profit included, then closes the whole
-    /// position at market; with no position but a what-if trade, closes that.
+    /// position at market (with KEYS ON; SIM closes the what-if trade, see `closeSimAtMarket`).
     func closePosition(_ symbol: String) {
-        let s = symbol.uppercased()
-        if positions[s].map({ $0.quantity == 0 }) ?? true, simPositions[s] != nil { return closeSimAtMarket(s) }
         order { $0.closePosition(symbol) }
     }
 
@@ -491,7 +489,7 @@ final class Broker {
         order { $0.cancelAllOrders() }
     }
 
-    /// A hotkey's or order key's order (with ⌃ as well, a what-if trade instead: see `runSim`).
+    /// A hotkey's or order key's order, with KEYS ON (SIM, KEYS off, trades it as a what-if trade: see `runSim`).
     func run(_ hotkey: Hotkey, symbol: String) {
         guard let hotkey = resolved(hotkey) else { return }
         order { $0.run(hotkey, symbol: symbol) }

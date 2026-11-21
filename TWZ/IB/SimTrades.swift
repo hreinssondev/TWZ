@@ -12,8 +12,8 @@
 //  the last price reaches it: a stop at the bid / ask, no better than its price; a take profit at its
 //  price. ⌘⌫ closes it at market, ⌘A takes its stop loss and take profit off. Nothing is simulated in
 //  a symbol with a real position open. Kept across launches.
-//  ⌃ held with any order shortcut (an order key's or hotkey's own, ⌘⇧↩, ⌘⌫) trades what-if positions the
-//  same way: the order's side, size (shares, dollars or a percent of the buying power) and price, filled at
+//  SIM (KEYS off, as at every launch): every order shortcut (an order key's or hotkey's own, ⌘⇧↩, ⌥⌘⇧↩, ⌘⌫)
+//  trades what-if positions the same way as KEYS ON sends to IB: the order's side, size (shares, dollars or a percent of the buying power) and price, filled at
 //  once at that price, a limit at its reference ± offset, MIDPRICE at the mid ± offset, market at the ask or
 //  bid (nothing rests); closing, cancelling and flattening act on the what-if trades.
 //
@@ -67,7 +67,7 @@ nonisolated struct SimPosition: Codable, Equatable, Identifiable {
     }
 }
 
-/// What ⌥⇧1–4 (⌃⌥⇧1–4), or ⌃ and an order shortcut, trades.
+/// What ⌥⇧1–4 (⌃⌥⇧1–4), or an order shortcut in SIM, trades.
 nonisolated enum SimSize: Equatable {
     case shares(Double)
     case dollars(Double)
@@ -108,7 +108,7 @@ extension Broker {
     }
 
     /// ⌥⇧1–4 (`BUY`) / ⌃⌥⇧1–4 (`SELL`): a what-if trade in `symbol`, at market (see the file's notes); in
-    /// for ⌃ and an order shortcut at `hotkey`'s price (see `runSim`).
+    /// for an order shortcut in SIM at `hotkey`'s price (see `runSim`).
     func placeSim(_ action: String, _ size: SimSize, symbol rawSymbol: String, pricedAs hotkey: Hotkey? = nil) {
         let symbol = rawSymbol.uppercased(), isBuy = action == "BUY"
         guard state == .connected else { return say("Not connected to IB Gateway") }
@@ -145,7 +145,7 @@ extension Broker {
         }
     }
 
-    /// ⌃ and an order shortcut (see `TradingShortcuts`): `hotkey`'s order as a what-if trade, never sent to IB: a
+    /// An order shortcut in SIM, KEYS off (see `TradingShortcuts`): `hotkey`'s order as a what-if trade, never sent to IB: a
     /// buy or sell of its size (steps in $ or %, see `SizeMode`) at its price (see `simOrderPrice`); Close 50% / 100% the
     /// what-if trade at its price; Cancel Symbol / Cancel All take the what-if trades' stop losses and take
     /// profits off; Flatten All closes every one at market.

@@ -3,9 +3,11 @@
 //  TWZ
 //
 //  App-wide order shortcuts, handled before any text field sees the key.
-//  The ones that send orders (a hotkey's own shortcut, ⌘⇧↩, ⌘⌫) work only once ⌘ and the Globe (fn) key
-//  turn them on, until pressed again; they're off at every launch (see `Workspace.orderShortcutsOn`). While off they
-//  beep and say so. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) and what-if trades always work.
+//  The ones that send orders (order keys, a hotkey's own shortcut, ⌘⇧↩, ⌥⌘⇧↩, ⌘⌫) go to IB only with KEYS ON, ⌘ and
+//  the Globe (fn) key turning it on and off (see `Workspace.orderShortcutsOn`); with KEYS off, SIM, as at every
+//  launch, the same shortcuts trade what-if positions instead (simulated, never sent to IB, see `Broker.runSim`;
+//  ⌘⌫ closes the what-if trade), and the Positions column shows the what-if trades (real positions with KEYS ON).
+//  Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) works on real orders either way.
 //  ⌥Z cancels the last order placed; ⌥< cancels every order in the selected chart's symbol,
 //  stop loss and take profit included. Matched by character, so ⌥< is the < key on Nordic
 //  keyboards (⌥⇧, on US ones).
@@ -19,9 +21,6 @@
 //  (R, G, B, Y, O, P, M, W, K khaki, I pink, N brown, F turquoise, L lime) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
-//  ⌃ held with any order shortcut (an order key's or hotkey's own, ⌘⇧↩, ⌘⌫) does the same as a what-if trade
-//  (simulated, never sent to IB, see `Broker.runSim`), KEYS ON or not, and shows Positions' what-if trades; the
-//  same shortcut without ⌃ sends for real and shows the real positions.
 //  ⌃⌥⇧1 / 2 / 3 / 4 sells (shorts) a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 /
 //  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 no longer buys one: ⌥⇧ and
 //  numbers are timeframes). Matched by key, number row or keypad, whatever the keyboard layout types there.
@@ -33,7 +32,7 @@
 //  With the order shortcuts on, an order key (Settings › Order Keys, see `OrderKeys`) sends its order, once per
 //  press (a held key doesn't send another): by default ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the
 //  $ / % switch (see `SizeMode`) at the mid; a ⌘ number with neither an order key nor a hotkey beeps.
-//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⇧1–6 outside a text field, ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
+//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⇧1–6 outside a text field, or ⌥⇧1–6) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
 //  place and price scale (see `Workspace.matchViews`).
@@ -65,91 +64,42 @@ struct TradingShortcuts: ViewModifier {
                             : (event.keyCode == 54 || event.keyCode == 55) && flags.contains(.command)
                         if wentDown, flags == [.command, .function], event.window?.attachedSheet == nil {
                             workspace.orderShortcutsOn.toggle()
-                            broker.say(workspace.orderShortcutsOn ? "Order shortcuts on (⌘🌐 turns them off)"
-                                                                  : "Order shortcuts off (⌘🌐 turns them on)")
+                            broker.say(workspace.orderShortcutsOn ? "KEYS ON: order shortcuts go to IB, for real (⌘🌐: SIM)"
+                                                                  : "SIM: order shortcuts trade what-if positions, nothing goes to IB (⌘🌐: KEYS ON)")
                         }
                         return event
                     }
                     let modifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
                     let inMainWindow = event.window.map { $0 === NSApp.mainWindow && $0.attachedSheet == nil } ?? false
-                    /// A shortcut that sends orders, pressed while they're off.
-                    func refuse() -> NSEvent? {
-                        NSSound.beep()
-                        broker.say("Order shortcuts are off: ⌘🌐 turns them on")
-                        return nil
-                    }
-                    /// An order for real: Positions shows the real positions again.
-                    func send(_ hotkey: Hotkey) {
-                        UserDefaults.standard.set(false, forKey: PositionsView.showsSimKey)
-                        broker.run(hotkey, symbol: workspace.targetSymbol)
-                    }
-                    /// ⌃ and an order shortcut: the same order as a what-if trade (see `Broker.runSim`), shown under
-                    /// Positions' what-if trades.
-                    func simulate(_ hotkey: Hotkey) {
-                        UserDefaults.standard.set(true, forKey: PositionsView.showsSimKey)
-                        broker.runSim(hotkey, symbol: workspace.targetSymbol)
-                    }
-                    // ⌃ and an order key's or hotkey's shortcut (one with no ⌃ of its own): that order as a what-if
-                    // trade, KEYS ON or not, once per press.
-                    if inMainWindow, modifiers.contains(.control) {
-                        let exact = KeyShortcut(event)
-                        var plain = exact
-                        plain.control = false
-                        if workspace.orderKey(for: exact) == nil, !workspace.hotkeys.contains(where: { $0.shortcut == exact }),
-                           let hotkey = workspace.orderKey(for: plain) ?? workspace.hotkeys.first(where: { $0.shortcut == plain }) {
-                            if !event.isARepeat { simulate(hotkey) }
-                            return nil
+                    /// An order: with KEYS ON for real, with them off (SIM) as a what-if trade (see `Broker.runSim`);
+                    /// Positions shows the real positions or the what-if trades to match.
+                    func place(_ hotkey: Hotkey) {
+                        let real = workspace.orderShortcutsOn
+                        UserDefaults.standard.set(!real, forKey: PositionsView.showsSimKey)
+                        if real {
+                            broker.run(hotkey, symbol: workspace.targetSymbol)
+                        } else {
+                            broker.runSim(hotkey, symbol: workspace.targetSymbol)
                         }
                     }
-                    // ⌘1–6 switch timeframes while the order shortcuts are off, an order key or hotkey on one of them or not.
-                    let timeframeKey = modifiers == .command && Timeframe(keyCode: event.keyCode) != nil
-                    // An order key (Settings › Order Keys): with KEYS ON its order, once per press (a held key doesn't
-                    // send another).
-                    if inMainWindow, let orderKey = workspace.orderKey(for: KeyShortcut(event)), workspace.orderShortcutsOn || !timeframeKey {
+                    // An order key (Settings › Order Keys): its order, once per press (a held key doesn't send another).
+                    if inMainWindow, let orderKey = workspace.orderKey(for: KeyShortcut(event)) {
                         if event.window?.firstResponder is NSTextView, KeyShortcut(event).isPlain { return event }
-                        guard workspace.orderShortcutsOn else { return refuse() }
-                        if !event.isARepeat { send(orderKey) }
+                        if !event.isARepeat { place(orderKey) }
                         return nil
                     }
-                    if inMainWindow, workspace.orderShortcutsOn || !timeframeKey,
-                       let hotkey = workspace.hotkeys.first(where: { $0.shortcut == KeyShortcut(event) }) {
-                        let shortcut = KeyShortcut(event)
-                        let typing = event.window?.firstResponder is NSTextView
-                        if typing, !shortcut.command, !shortcut.option, !shortcut.control, !shortcut.isFunctionKey {
-                            return event
-                        }
-                        guard workspace.orderShortcutsOn else { return refuse() }
-                        send(hotkey)
+                    if inMainWindow, let hotkey = workspace.hotkeys.first(where: { $0.shortcut == KeyShortcut(event) }) {
+                        if event.window?.firstResponder is NSTextView, KeyShortcut(event).isPlain { return event }
+                        if !event.isARepeat { place(hotkey) }
                         return nil
                     }
                     let isReturn = event.keyCode == 36 || event.keyCode == 76      // Return or keypad Enter
-                    // ⌃⌘⇧↩ / ⌃⌥⌘⇧↩: as ⌘⇧↩ / ⌥⌘⇧↩ (below), as a what-if trade.
-                    if modifiers == [.control, .command, .shift] || modifiers == [.control, .option, .command, .shift],
-                       isReturn, inMainWindow, let window = event.window {
-                        if window.firstResponder is NSTextView { return event }
-                        if !event.isARepeat { simulate(workspace.activeHotkey(selling: modifiers.contains(.option))) }
-                        return nil
-                    }
-                    // ⌃⌘⌫: closes the selected chart's what-if trade at market (⌘⌫ without ⌃ the real position).
-                    if modifiers == [.control, .command], event.keyCode == 51, inMainWindow, let window = event.window {
-                        if window.firstResponder is NSTextView { return event }
-                        let symbol = workspace.targetSymbol.uppercased()
-                        if symbol.isEmpty || broker.simPositions[symbol] == nil {
-                            NSSound.beep()
-                            broker.say(symbol.isEmpty ? "Select a chart first" : "No what-if trade in \(symbol) to close")
-                        } else {
-                            UserDefaults.standard.set(true, forKey: PositionsView.showsSimKey)
-                            broker.closeSimAtMarket(symbol)
-                        }
-                        return nil
-                    }
                     // ⌘⇧↩: the selected hotkey button's order, or with none the order pad's, bought; ⌥⌘⇧↩ sells the pad's
                     // (see `OrderPad`). A symbol still being typed isn't the chart's yet.
                     if modifiers == [.command, .shift] || modifiers == [.option, .command, .shift],
                        isReturn, inMainWindow, let window = event.window {
                         if window.firstResponder is NSTextView { return event }
-                        guard workspace.orderShortcutsOn else { return refuse() }
-                        if !event.isARepeat { send(workspace.activeHotkey(selling: modifiers.contains(.option))) }
+                        if !event.isARepeat { place(workspace.activeHotkey(selling: modifiers.contains(.option))) }
                         return nil
                     }
                     // ⌃⌥⇧1–4 sells a what-if trade in the selected chart's symbol (⌥⇧ and numbers are timeframes).
@@ -214,17 +164,15 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    // With the order shortcuts on, ⌘ numbers are the order keys' and hotkeys' (above): one with neither
-                    // does nothing.
-                    if inMainWindow, modifiers == .command, workspace.orderShortcutsOn, OrderKeys.number(keyCode: event.keyCode) != nil {
+                    // ⌘ numbers are the order keys' and hotkeys' (above): one with neither does nothing.
+                    if inMainWindow, modifiers == .command, OrderKeys.number(keyCode: event.keyCode) != nil {
                         NSSound.beep()
                         broker.say("\(KeyShortcut(event).display) has no order key or hotkey (Settings › Order Keys)")
                         return nil
                     }
-                    // ⌥1–6, ⇧1–6 (outside a text field) or ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off: the
-                    // account bar's timeframe; ChartGrid follows it. Set again too, so a chart whose own switch
-                    // was changed goes back to it.
-                    if modifiers == .option || modifiers == .shift || modifiers == [.option, .shift] || modifiers == .command,
+                    // ⌥1–6, ⇧1–6 (outside a text field) or ⌥⇧1–6: the account bar's timeframe; ChartGrid follows it.
+                    // Set again too, so a chart whose own switch was changed goes back to it.
+                    if modifiers == .option || modifiers == .shift || modifiers == [.option, .shift],
                        inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
                         if modifiers == .shift, event.window?.firstResponder is NSTextView { return event }
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
@@ -257,16 +205,21 @@ struct TradingShortcuts: ViewModifier {
                             }
                         case "⌫":
                             if typing { return event }
-                            // A what-if trade alone closes either way (see `Broker.closePosition`).
+                            // KEYS ON: the real position; SIM (KEYS off): the what-if trade.
                             let s = symbol.uppercased()
-                            let simOnly = (broker.positions[s].map { $0.quantity == 0 } ?? true) && broker.simPositions[s] != nil
                             if symbol.isEmpty {
                                 NSSound.beep()
-                            } else if !workspace.orderShortcutsOn, !simOnly {
-                                return refuse()
+                            } else if workspace.orderShortcutsOn {
+                                workspace.whatIfs[symbol] = nil
+                                UserDefaults.standard.set(false, forKey: PositionsView.showsSimKey)
+                                broker.closePosition(symbol)
+                            } else if broker.simPositions[s] == nil {
+                                NSSound.beep()
+                                broker.say("SIM: no what-if trade in \(s) to close (KEYS ON, ⌘🌐, closes the real position)")
                             } else {
                                 workspace.whatIfs[symbol] = nil
-                                broker.closePosition(symbol)
+                                UserDefaults.standard.set(true, forKey: PositionsView.showsSimKey)
+                                broker.closeSimAtMarket(s)
                             }
                         case "z":
                             if typing { return event }

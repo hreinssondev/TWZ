@@ -46,7 +46,7 @@ struct AccountBar: View {
 
                 HStack(spacing: 8) {
                     TimeframePicker(selection: $gridTimeframe)
-                        .help("Every chart's timeframe (⌥1–6, ⇧1–6, ⌥⇧1–6, or ⌘1–6 with KEYS off: 1m, 5m, 15m, 30m, 1h, D); a chart's own switch changes just that chart, until it gets a new gainer or Reset")
+                        .help("Every chart's timeframe (⌥1–6, ⇧1–6 or ⌥⇧1–6: 1m, 5m, 15m, 30m, 1h, D); a chart's own switch changes just that chart, until it gets a new gainer or Reset")
 
                     Button {
                         workspace.resetToGainers()
@@ -180,7 +180,7 @@ private struct ScaleButtons: View {
     }
 }
 
-/// LIVE (red) or PAPER (blue), the gateway port; dimmed grey, as the KEYS badge, while the order shortcuts are off.
+/// LIVE (red) or PAPER (blue), the gateway port; dimmed grey in SIM (KEYS off), when no order reaches it.
 private struct AccountBadge: View {
     let isLive: Bool
     let keysOn: Bool
@@ -196,21 +196,23 @@ private struct AccountBadge: View {
     }
 }
 
-/// Whether the keyboard shortcuts that send orders work, and what their numbers are (see `SizeMode`): KEYS $ or
-/// KEYS %, in orange while they work, dimmed while off.
+/// Where the order shortcuts go and what their numbers are (see `SizeMode`): KEYS $ or KEYS % in orange with KEYS ON
+/// (real orders), SIM $ or SIM % in the what-if pink with it off (what-if trades).
 private struct OrderShortcutsBadge: View {
     let isOn: Bool
     @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent
 
     var body: some View {
-        Text("KEYS \(sizeMode.sign)")
-            .font(.system(size: 10, weight: isOn ? .heavy : .regular))
-            .foregroundStyle(isOn ? Color.white : Color.secondary.opacity(0.7))
+        Text("\(isOn ? "KEYS" : "SIM") \(sizeMode.sign)")
+            .font(.system(size: 10, weight: .heavy))
+            .foregroundStyle(.white)
             .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Capsule().fill(isOn ? Color.orange : Color.primary.opacity(0.08)))
-            .help("Order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩ and ⌘⌫) \(isOn ? "send orders" : "are off: ⌘ and the Globe (fn) key turn them on")."
+            .background(Capsule().fill(isOn ? Color.orange : TradingChart.whatIfColor.opacity(0.85)))
+            .help((isOn ? "KEYS ON: order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩, ⌘⌫) go to IB, for real; Positions shows the real positions."
+                        : "SIM: order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩, ⌘⌫) trade what-if positions, never sent to IB; Positions shows the what-if trades.")
+                  + " ⌘ and the Globe (fn) key switch; SIM at every launch."
                   + (sizeMode == .dollars ? " Numbers in dollars: 1 is $1,000, 9 is $9,000." : " Numbers in % of the buying power: 1 is 20%, 4 is 80%, 5–9 none.")
-                  + " ⌘⇧M switches $ and %. They're off at every launch. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<), and ⌃ with any of them (a what-if trade), always work.")
+                  + " ⌘⇧M switches $ and %. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) works on real orders either way.")
     }
 }
 

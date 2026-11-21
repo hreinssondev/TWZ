@@ -18,7 +18,7 @@ management in one window built for quick entries and exits.
   takes it off).
 - **Candlestick charts** drawn with one SwiftUI Canvas: trackpad and mouse pan / zoom (older bars load
   as you scroll back), 1m to daily, pre-market, after hours and overnight shading, VWAP and SMA 9 / 21,
-  volume, tick-by-tick trades on the selected chart. ⌥1–6, ⇧1–6 or ⌥⇧1–6 (or ⌘1–6 while the order shortcuts are off) switches every chart (1m, 5m, 15m, 30m, 1h, D),
+  volume, tick-by-tick trades on the selected chart. ⌥1–6, ⇧1–6 or ⌥⇧1–6 switches every chart (1m, 5m, 15m, 30m, 1h, D),
   keeping each chart's view: the same time on screen, only the candles change (or, with that off in
   Settings › Appearance, each timeframe going back to its own zoom and place).
 - **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the
@@ -41,17 +41,16 @@ management in one window built for quick entries and exits.
   ask, last, across the spread, market or IBKR MIDPRICE) and 1–9. Beside it, configurable hotkey buttons
   (buying, selling, closing, cancelling), each with an optional keyboard shortcut; clicking one selects it in
   place of the pad's order. ⌘⇧↩ sends the selected hotkey, or buys the pad's order; ⌥⌘⇧↩ sells the pad's order
-  short; ⌘⌫ cancels the symbol's orders and closes the position at market. The shortcuts that send orders work
-  only after ⌘ and the Globe (fn) key turn them on (again: off; off at every launch; the KEYS badge orange).
+  short; ⌘⌫ cancels the symbol's orders and closes the position at market.
+- **KEYS ON and SIM** (⌘ and the Globe (fn) key switch): with KEYS ON every order shortcut (order keys, hotkeys'
+  own, ⌘⇧↩, ⌥⌘⇧↩, ⌘⌫) goes to IB and Positions shows the real positions; in SIM, as at every launch, the same
+  shortcuts trade what-if positions instead, never sent to IB, filled at once at the order's price (a limit at
+  its reference ± offset, MIDPRICE at the mid, market at the ask or bid), and Positions shows the what-if
+  trades (⌘⌫ closes the what-if trade). The top bar reads KEYS $ / KEYS % in orange, or SIM $ / SIM % in pink.
 - **Order keys** (Settings › Order Keys): keyboard shortcuts that send an order without a button, listed by
   shortcut, added, edited or deleted there, beside the hotkey buttons' shortcuts and the fixed ones. By default
   ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the $ / % switch (⌘3: $3,000 or 60%), all limit at the mid,
-  no offset, outside regular hours too. With KEYS ON only, once per press; with KEYS off ⌘1–6 switch
-  timeframes.
-- **Simulated orders**: ⌃ held with any order shortcut (an order key's or hotkey's own, ⌘⇧↩, ⌘⌫ to close)
-  sends the same order as a what-if trade instead of to IB, KEYS ON or not: the same side, size and price,
-  filled at once at the order's price (a limit at its reference ± offset, MIDPRICE at the mid, market at the
-  ask or bid). Positions then shows the what-if trades; an order without ⌃ shows the real positions again.
+  no offset, outside regular hours too. Once per press, for real with KEYS ON, as what-if trades in SIM.
 - **What-if trades**: ⌃⌥⇧1–4 shorts $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB; on the chart, an arrow, green for a long
   and red for a short, ringed in pink, points at each of its fills. It shows like a position, its symbol in pink,
