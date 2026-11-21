@@ -323,10 +323,10 @@ private struct TradingSettings: View {
 
 /// Every keyboard shortcut that trades, in one place: the order keys (see `OrderKeys`), listed by shortcut,
 /// each added, edited (double-click, or the pencil) or deleted here; the hotkey buttons given a shortcut (edited
-/// in the hotkey panel); and the fixed ones (⌘⇧↩, ⌘⌫, cancelling, the trade mode, what-if trades).
+/// in the hotkey panel); and the fixed ones (⌘⇧↩, ⌘⌫, cancelling, the $ / % switch, what-if trades).
 private struct OrderKeysSettings: View {
     @Environment(Workspace.self) private var workspace
-    @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
+    @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent
     @State private var editing: Editing?
 
     private struct Editing: Identifiable {
@@ -336,12 +336,12 @@ private struct OrderKeysSettings: View {
 
     private static let fixed: [(String, String)] = [
         ("⌘🌐 (⌘ fn)", "KEYS ON / off: the shortcuts that send orders work only while on; off at every launch. While on, ⌘1–6 are order keys and hotkeys rather than timeframes"),
-        ("⌘⇧↩", "Send the selected hotkey button's order, or with none selected the order pad's"),
+        ("⌘⇧↩  /  ⌥⌘⇧↩", "Send the selected hotkey button's order; with none selected, buy (⌘⇧↩) or sell short (⌥⌘⇧↩) the order pad's"),
+        ("⌘⇧M", "Switch the order numbers between dollars ($1,000 a step: 1–9 are $1,000–$9,000) and a percent of the buying power (20% a step: 1–5 are 20–100%, 6–9 none): KEYS $ or KEYS % in the top bar, and the order pad's $ and %"),
         ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market; removes its ⌃-click what-if too. ⌃⌘⌫ closes its what-if trade instead"),
         ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if); with no chart selected, ⌘A cancels the last order placed, as ⌘Z"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
         ("⌘⇧⌫", "Remove the chart's ⌃-click what-if (so does double-clicking anywhere on the chart)"),
-        ("⌘⇧ L+O  /  S+H", "Both letters, held together or one after the other: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red); Mode orders buy while LONG, sell short while SHORT"),
         ("⌃ + any of these", "⌃ held with an order key's or hotkey's shortcut, ⌘⇧↩ (⌃⌘⇧↩) or ⌘⌫ (⌃⌘⌫, closing): the same order as a what-if trade, never sent to IB, KEYS ON or not; filled at once at the order's price (a limit at its reference ± offset, MIDPRICE at the mid, market at the ask or bid); Positions then shows the what-if trades, and an order without ⌃ the real positions again"),
         ("⌃⌥⇧1 2 3 4", "What-if trade: sell (short) $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
             + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),
@@ -362,11 +362,11 @@ private struct OrderKeysSettings: View {
         Form {
             Section {
                 if workspace.orderKeys.isEmpty {
-                    Text("No order keys: + adds one, Restore Defaults brings back ⌘1–4 and ⌥⌘1–9.")
+                    Text("No order keys: + adds one, Restore Defaults brings back ⌘1–9 and ⌥⌘1–9.")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(sortedKeys) { key in
-                    OrderKeyRow(key: key, mode: mode, onEdit: { editing = Editing(key: key) }) {
+                    OrderKeyRow(key: key, onEdit: { editing = Editing(key: key) }) {
                         workspace.orderKeys.removeAll { $0.id == key.id }
                     }
                 }
@@ -375,7 +375,7 @@ private struct OrderKeysSettings: View {
                     Text("Order keys")
                     Spacer()
                     Button("Restore Defaults") { workspace.orderKeys = OrderKeys.defaults }
-                        .help("⌘1–4 buy $1,000 / $2,000 / $3,000 / 85%; ⌥⌘1–4 sell short $1,000 / $2,000 / $3,000 / 80%; ⌥⌘5–9 Mode orders of 25–85%")
+                        .help("⌘1–9 buy and ⌥⌘1–9 sell short 1–9 steps: $1,000–$9,000, or 20–100% of the buying power for 1–5 (⌘⇧M)")
                     Button {
                         editing = Editing(key: OrderKeys.newKey())
                     } label: {
@@ -385,7 +385,7 @@ private struct OrderKeysSettings: View {
                 }
                 .controlSize(.small)
             } footer: {
-                Text("For the selected chart's symbol, only with KEYS ON (⌘🌐; \(workspace.orderShortcutsOn ? "on now" : "off now")), once per press: holding the key doesn't send another. A keypad number works as the number row's. With KEYS off, ⌘1–6 switch timeframes. With ⌃ held as well (⌃⌘1, ⌃⌥⌘4, …) the same order is a what-if trade, never sent to IB, KEYS ON or not.")
+                Text("For the selected chart's symbol, only with KEYS ON (⌘🌐; \(workspace.orderShortcutsOn ? "on now" : "off now")), once per press: holding the key doesn't send another. A keypad number works as the number row's. With KEYS off, ⌘1–6 switch timeframes. Sized in steps, they go by ⌘⇧M (now \(sizeMode == .dollars ? "$, $1,000 a step" : "%, 20% of the buying power a step, 6–9 none")). With ⌃ held as well (⌃⌘1, ⌃⌥⌘4, …) the same order is a what-if trade, never sent to IB, KEYS ON or not.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -394,7 +394,7 @@ private struct OrderKeysSettings: View {
                 if keyed.isEmpty {
                     Text("None yet.").foregroundStyle(.secondary)
                 }
-                ForEach(keyed) { OrderKeyRow(key: $0, mode: mode) }
+                ForEach(keyed) { OrderKeyRow(key: $0) }
                 Text("Edited in the hotkey panel: right-click a button, or click the Hotkeys title.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -422,11 +422,11 @@ private struct OrderKeysSettings: View {
     }
 }
 
-/// One order key or hotkey: its shortcut, what it does (BUY green, SELL red, a Mode order in the trade mode's
-/// color), its size and how it's priced; the pencil and trash where it's edited here.
+/// One order key or hotkey: its shortcut, what it does (BUY green, SELL red), its size (steps as ⌘⇧M has them
+/// now, and the other way) and how it's priced; the pencil and trash where it's edited here.
 private struct OrderKeyRow: View {
     let key: Hotkey
-    let mode: TradeMode
+    @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent
     var onEdit: (() -> Void)?
     var onDelete: (() -> Void)?
 
@@ -441,9 +441,8 @@ private struct OrderKeyRow: View {
                 .lineLimit(1)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Capsule().fill(key.shown(in: mode).tint.opacity(0.8)))
+                .background(Capsule().fill(key.tint.opacity(0.8)))
                 .frame(width: 92, alignment: .leading)
-                .help(key.action == .mode ? "A Mode order: buys while LONG, sells short while SHORT (now \(mode == .long ? "LONG" : "SHORT"))" : "")
             VStack(alignment: .leading, spacing: 1) {
                 Text(size).font(.system(size: 12, weight: .semibold)).monospacedDigit()
                 if !details.isEmpty {
@@ -468,7 +467,6 @@ private struct OrderKeyRow: View {
 
     private var side: String {
         switch key.action {
-        case .mode: "MODE · " + (mode == .long ? "LONG" : "SHORT")
         case .buy: "BUY"
         case .sell: "SELL"
         default: key.action.rawValue.uppercased()
@@ -490,6 +488,9 @@ private struct OrderKeyRow: View {
         case .dollars: "$" + amount
         case .buyingPower: amount + "% of the buying power"
         case .shares: amount + (key.amount == 1 ? " share" : " shares")
+        case .steps:
+            sizeMode.text(steps: key.amount) + (sizeMode == .percent ? " of the buying power" : "")
+                + "  (\((sizeMode == .dollars ? SizeMode.percent : .dollars).text(steps: key.amount)) in \(sizeMode == .dollars ? "%" : "$"))"
         }
     }
 

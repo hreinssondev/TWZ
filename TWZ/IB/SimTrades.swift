@@ -145,23 +145,21 @@ extension Broker {
         }
     }
 
-    /// ⌃ and an order shortcut (see `TradingShortcuts`): `hotkey`'s order as a what-if trade, never sent to IB: a Mode order the
-    /// trade mode's way, a buy or sell of its size at its price (see `simOrderPrice`); Close 50% / 100% the
+    /// ⌃ and an order shortcut (see `TradingShortcuts`): `hotkey`'s order as a what-if trade, never sent to IB: a
+    /// buy or sell of its size (steps in $ or %, see `SizeMode`) at its price (see `simOrderPrice`); Close 50% / 100% the
     /// what-if trade at its price; Cancel Symbol / Cancel All take the what-if trades' stop losses and take
     /// profits off; Flatten All closes every one at market.
     func runSim(_ hotkey: Hotkey, symbol rawSymbol: String) {
-        let hotkey = Self.resolved(hotkey)
+        guard let hotkey = resolved(hotkey) else { return }
         let symbol = rawSymbol.uppercased()
         if symbol.isEmpty, hotkey.action != .cancelAll, hotkey.action != .flattenAll {
             return say("Select a chart with a symbol first")
         }
         switch hotkey.action {
-        case .mode:
-            break   // resolved to a buy or sell above
         case .buy, .sell:
             let size: SimSize = switch hotkey.sizing {
             case .shares: .shares(hotkey.amount)
-            case .dollars: .dollars(hotkey.amount)
+            case .dollars, .steps: .dollars(hotkey.amount)   // steps resolved above
             case .buyingPower: .buyingPower(hotkey.amount / 100)
             }
             placeSim(hotkey.action == .buy ? "BUY" : "SELL", size, symbol: symbol, pricedAs: hotkey)

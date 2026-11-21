@@ -34,20 +34,19 @@ management in one window built for quick entries and exits.
   back to them, also after a relaunch or zoomed far out, shows at once.
 - **Trading from the chart**: ⌃-click places a stop loss or take profit, and order lines show their
   fill as it happens. Double-click an order line to cancel it.
-- **Order pad and hotkeys**: the order pad's buttons pick an order: dollars ($1,000 a step) or buying
-  power (10% a step), the price or order type (mid, bid, ask, last, across the spread, market or IBKR
-  MIDPRICE) and 1–9. It's a Mode order: it buys while LONG and sells short while SHORT (⌘⇧ with L and O
-  held together or one after the other switches to LONG, with S and H to SHORT; the top bar's LIVE / PAPER badge is green
-  while LONG, red while SHORT). Beside it, configurable hotkey buttons (closing, cancelling, or orders of
-  their own), each with an optional keyboard shortcut; clicking one selects it in place of the pad's
-  order. ⌘⇧↩ sends the selected order; ⌘⌫ cancels the symbol's orders and closes the position at market.
-  The shortcuts that send orders work only after ⌘ and the Globe (fn) key turn them on (again: off; off at
-  every launch, KEYS ON in the top bar).
+- **$ / % switch** (⌘⇧M, or the order pad's $ and %): the order numbers are dollars, $1,000 a step (1–9 are
+  $1,000–$9,000), or a percent of the buying power IB's margin allows in the stock, 20% a step (1–5 are 20%, 40%,
+  60%, 80%, 100%; 6–9 send nothing). The top bar's KEYS badge shows it: KEYS $ or KEYS %.
+- **Order pad and hotkeys**: the order pad's buttons pick an order: $ or %, the price or order type (mid, bid,
+  ask, last, across the spread, market or IBKR MIDPRICE) and 1–9. Beside it, configurable hotkey buttons
+  (buying, selling, closing, cancelling), each with an optional keyboard shortcut; clicking one selects it in
+  place of the pad's order. ⌘⇧↩ sends the selected hotkey, or buys the pad's order; ⌥⌘⇧↩ sells the pad's order
+  short; ⌘⌫ cancels the symbol's orders and closes the position at market. The shortcuts that send orders work
+  only after ⌘ and the Globe (fn) key turn them on (again: off; off at every launch; the KEYS badge orange).
 - **Order keys** (Settings › Order Keys): keyboard shortcuts that send an order without a button, listed by
   shortcut, added, edited or deleted there, beside the hotkey buttons' shortcuts and the fixed ones. By default
-  ⌘1 / 2 / 3 / 4 buys $1,000 / $2,000 / $3,000 / 85% of the buying power, ⌥⌘1 / 2 / 3 / 4 sells short $1,000 /
-  $2,000 / $3,000 / 80%, and ⌥⌘5 / 6 / 7 / 8 / 9 sends a Mode order of 25% / 30% / 50% / 75% / 85%, all limit at
-  the mid, no offset, outside regular hours too. With KEYS ON only, once per press; with KEYS off ⌘1–6 switch
+  ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the $ / % switch (⌘3: $3,000 or 60%), all limit at the mid,
+  no offset, outside regular hours too. With KEYS ON only, once per press; with KEYS off ⌘1–6 switch
   timeframes.
 - **Simulated orders**: ⌃ held with any order shortcut (an order key's or hotkey's own, ⌘⇧↩, ⌘⌫ to close)
   sends the same order as a what-if trade instead of to IB, KEYS ON or not: the same side, size and price,

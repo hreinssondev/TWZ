@@ -172,7 +172,9 @@ final class Workspace {
         didSet { defaults.set(try? JSONEncoder().encode(orderPad), forKey: OrderPad.storageKey) }
     }
     /// What ⌘⇧↩ sends: the selected hotkey button, or with none selected, the order pad's order.
-    var activeHotkey: Hotkey { selectedHotkey ?? orderPad.hotkey }
+    /// What ⌘⇧↩ sends: the selected hotkey button, or with none the order pad's order, bought; ⌥⌘⇧↩ (`selling`)
+    /// sells the pad's order (a selected hotkey button sends its own either way).
+    func activeHotkey(selling: Bool = false) -> Hotkey { selectedHotkey ?? orderPad.hotkey(selling ? .sell : .buy) }
     /// Scanner filters per list panel and scanner, keyed "panelId|scanner".
     var scanFilters: [String: ScannerFilter] { didSet { save() } }
     /// What-if buys by symbol.
@@ -365,11 +367,26 @@ final class Workspace {
         } else {
             hotkeys = Hotkey.defaults
         }
-        orderKeys = defaults.data(forKey: OrderKeys.storageKey).flatMap { try? JSONDecoder().decode([Hotkey].self, from: $0) }
-            ?? OrderKeys.defaults
+        // Order keys saved before the $ / % switch: the number keys become the steps ones (see `OrderKeys.migrated`).
+        let savedKeys = defaults.data(forKey: OrderKeys.storageKey).flatMap { try? JSONDecoder().decode([Hotkey].self, from: $0) }
+        if let savedKeys, defaults.integer(forKey: OrderKeys.versionKey) < OrderKeys.version {
+            let migrated = OrderKeys.migrated(savedKeys)
+            orderKeys = migrated
+            if let data = try? JSONEncoder().encode(migrated) { defaults.set(data, forKey: OrderKeys.storageKey) }
+        } else {
+            orderKeys = savedKeys ?? OrderKeys.defaults
+        }
+        defaults.set(OrderKeys.version, forKey: OrderKeys.versionKey)
 
         selectedHotkeyID = defaults.string(forKey: "selectedHotkey").flatMap(UUID.init(uuidString:))
         orderPad = defaults.data(forKey: OrderPad.storageKey).flatMap { try? JSONDecoder().decode(OrderPad.self, from: $0) } ?? OrderPad()
+        // The $ / % switch was the order pad's own before ⌘⇧M: it starts as the pad was.
+        if defaults.string(forKey: SizeMode.storageKey) == nil {
+            struct LegacyPad: Decodable { var buyingPower: Bool? }
+            let percent = defaults.data(forKey: OrderPad.storageKey)
+                .flatMap { try? JSONDecoder().decode(LegacyPad.self, from: $0) }?.buyingPower ?? true
+            defaults.set((percent ? SizeMode.percent : .dollars).rawValue, forKey: SizeMode.storageKey)
+        }
 
         if let data = defaults.data(forKey: "scanFilters"),
            let filters = try? JSONDecoder().decode([String: ScannerFilter].self, from: data) {

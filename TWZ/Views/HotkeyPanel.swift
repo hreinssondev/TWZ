@@ -2,9 +2,9 @@
 //  HotkeyPanel.swift
 //  TWZ
 //
-//  The order pad on the left (see `OrderPad`): $ or %, the price or order type, and 1–9, each a
-//  button that picks that setting, lit while picked. Its order is the one ⌘⇧↩ sends while no
-//  hotkey button is selected.
+//  The order pad on the left (see `OrderPad`): $ or % (the same switch as ⌘⇧M, see `SizeMode`), the price or
+//  order type, and 1–9, each a button that picks that setting, lit while picked. While no hotkey button is
+//  selected, ⌘⇧↩ buys its order and ⌥⌘⇧↩ sells it.
 //  On the right, a two-row grid of configurable hotkey buttons (closing, cancelling, or orders of
 //  their own) acting on the selected chart's symbol. Clicking one selects it (never sends it):
 //  ⌘⇧↩ sends it, and its own shortcut (a ⌘ number too, with KEYS ON, where no order key is) sends it any time. New buttons go in on the left. Click the "Hotkeys" title to customize them
@@ -117,16 +117,8 @@ struct HotkeyPanel: View {
 extension Hotkey {
     var tint: Color { (color ?? action.defaultColor).color }
 
-    /// A Mode hotkey as the trade mode makes it: "Long …", green, while LONG; "Short …", red, while SHORT.
-    func shown(in mode: TradeMode) -> Hotkey {
-        guard action == .mode else { return self }
-        var hotkey = self
-        if hotkey.label.hasPrefix(Action.mode.rawValue) {
-            hotkey.label = (mode == .long ? "Long" : "Short") + hotkey.label.dropFirst(Action.mode.rawValue.count)
-        }
-        if hotkey.color == nil { hotkey.color = mode == .long ? .green : .red }
-        return hotkey
-    }
+    /// As it'd be sent now: sized in steps, in dollars or a percent as `SizeMode` is (as it is with no size there).
+    var shown: Hotkey { resolved ?? self }
 
     /// One-line label for buttons too short for a subtitle: the price it sends at and the size,
     /// e.g. "Mid 1000$", "Ask 100", "MKT 500" or "Ask 80% BP"; other actions keep their label.
@@ -162,7 +154,8 @@ extension Hotkey {
 
 private struct HotkeyButton: View {
     let hotkey: Hotkey
-    @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
+    /// Read so a button sized in steps follows ⌘⇧M.
+    @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent
     var height: CGFloat = HotkeyPanel.buttonHeight
     var selected = false
     /// Fire as the mouse goes down instead of on release (the panel's buttons; the customizer keeps
@@ -199,7 +192,7 @@ private struct HotkeyButton: View {
     }
 
     private var face: some View {
-        let hotkey = hotkey.shown(in: mode)
+        let hotkey = hotkey.shown
         return VStack(spacing: 1) {
             if height >= Self.subtitleMinHeight {
                 Text(hotkey.label).font(.system(size: 12, weight: .bold))
@@ -231,13 +224,13 @@ private struct HotkeyButton: View {
     }
 }
 
-/// The order pad (see `OrderPad`): two rows of nine buttons: $ and % (what the numbers are), the price or
-/// order type, and 1–9. Each click picks that button's setting, lit in the trade mode's color (green
-/// LONG, red SHORT), and makes the pad's order the one ⌘⇧↩ sends (no hotkey button selected);
-/// while a hotkey button is selected the lit buttons dim. Fires on mouse-down, like the hotkey buttons.
+/// The order pad (see `OrderPad`): two rows of nine buttons: $ and % (what the numbers are, see `SizeMode`: the
+/// same switch as ⌘⇧M), the price or order type, and 1–9. Each click picks that button's setting, lit, and makes
+/// the pad's order the one ⌘⇧↩ buys and ⌥⌘⇧↩ sells (no hotkey button selected); while a hotkey button is
+/// selected the lit buttons dim. Fires on mouse-down, like the hotkey buttons.
 private struct OrderPadView: View {
     @Environment(Workspace.self) private var workspace
-    @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
+    @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent
     let height: CGFloat
     let spacing: CGFloat
 
@@ -245,12 +238,12 @@ private struct OrderPadView: View {
         let pad = workspace.orderPad
         VStack(spacing: spacing) {
             HStack(spacing: spacing) {
-                button("$", "Dollars", lit: !pad.buyingPower, help: "The numbers are dollars: 1 is $1,000, 9 is $9,000") {
-                    workspace.orderPad.buyingPower = false
+                button("$", "Dollars", lit: sizeMode == .dollars, help: "The numbers are dollars: 1 is $1,000, 9 is $9,000 (⌘⇧M switches)") {
+                    sizeMode = .dollars
                 }
-                button("%", "Buying power", lit: pad.buyingPower,
-                       help: "The numbers are a share of the buying power IB's margin allows in the stock: 1 is 10%, 9 is 90%") {
-                    workspace.orderPad.buyingPower = true
+                button("%", "Buying power", lit: sizeMode == .percent,
+                       help: "The numbers are a share of the buying power IB's margin allows in the stock: 1 is 20%, 5 is 100%, 6–9 none (⌘⇧M switches)") {
+                    sizeMode = .percent
                 }
                 ForEach(OrderPad.Kind.allCases) { kind in
                     button(kind.rawValue, kind.detail, lit: pad.kind == kind, help: kind.detail + ", no offset") {
@@ -261,7 +254,8 @@ private struct OrderPadView: View {
             HStack(spacing: spacing) {
                 ForEach(OrderPad.numbers, id: \.self) { number in
                     button("\(number)", pad.amountText(number), lit: pad.number == number,
-                           help: "\(pad.amountText(number))\(pad.buyingPower ? " of the buying power" : "")") {
+                           help: sizeMode.amount(steps: Double(number)) == nil ? "No size in %: 1–5 are 20–100% (⌘⇧M for $)"
+                                : "\(pad.amountText(number))\(sizeMode == .percent ? " of the buying power" : "")") {
                         workspace.orderPad.number = number
                     }
                 }
@@ -272,13 +266,13 @@ private struct OrderPadView: View {
     private func button(_ title: String, _ subtitle: String, lit: Bool, help: String,
                         pick: @escaping () -> Void) -> some View {
         PadButton(title: title, subtitle: height >= 30 ? subtitle : nil, height: height,
-                  fill: lit ? (mode == .long ? Color.green : Color.red).opacity(workspace.selectedHotkeyID == nil ? 0.75 : 0.3)
+                  fill: lit ? Color.accentColor.opacity(workspace.selectedHotkeyID == nil ? 0.75 : 0.3)
                             : Color.primary.opacity(0.12)) {
             pick()
             // Picking on the pad makes its order the one ⌘⇧↩ sends.
             workspace.selectedHotkeyID = nil
         }
-        .help(help + " · ⌘⇧↩ sends the pad's order")
+        .help(help + " · ⌘⇧↩ buys the pad's order, ⌥⌘⇧↩ sells it")
     }
 }
 
@@ -380,12 +374,12 @@ private struct HotkeyCustomizer: View {
 }
 
 extension Workspace {
-    /// Adds a "Mode 100" button on the left: at the start of the top row, or when the top row is already
+    /// Adds a "Buy 100" button on the left: at the start of the top row, or when the top row is already
     /// the longer one, at the start of the bottom row, so the rows line up again. Returns its id.
     @discardableResult
     func addHotkey() -> UUID? {
         guard hotkeys.count < Hotkey.maxCount else { return nil }
-        let hotkey = Hotkey(label: Hotkey.autoLabel(action: .mode, sizing: .shares, amount: 100), action: .mode)
+        let hotkey = Hotkey(label: Hotkey.autoLabel(action: .buy, sizing: .shares, amount: 100), action: .buy)
         hotkeys.insert(hotkey, at: hotkeys.count.isMultiple(of: 2) ? 0 : Hotkey.columns(for: hotkeys.count))
         return hotkey.id
     }
@@ -444,6 +438,12 @@ private struct HotkeyFields: View {
                 }
                 .pickerStyle(.segmented)
                 TextField(amountTitle, value: $hotkey.amount, format: .number)
+                if hotkey.sizing == .steps {
+                    Text("As the $ / % switch is (⌘⇧M, or the order pad's $ and %): $1,000 a step in $ (3 is $3,000), or 20% of the buying power IB's margin allows in the stock a step in % (3 is 60%; past 5, 100%, nothing is sent). Now \(SizeMode.current.text(steps: hotkey.amount)).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if hotkey.sizing == .buyingPower {
                     Text("Asks IB, before sending, for the most shares its margin allows in the stock at the order's price (a new long for buys, a new short for sells) and sends this percent of it, 1–100. IB answers in a second or two. Refused while holding a position on the other side.")
                         .font(.caption)
@@ -459,6 +459,7 @@ private struct HotkeyFields: View {
         // A share or dollar amount isn't a percent: switching to % of buying power starts at 80%.
         .onChange(of: hotkey.sizing) { _, sizing in
             if sizing == .buyingPower, hotkey.amount > 100 { hotkey.amount = 80 }
+            if sizing == .steps, hotkey.amount > 9 { hotkey.amount = 1 }
         }
         .onChange(of: labelInputs) { old, new in
             // Keep an automatic label in sync ("Buy 100" → "Buy 1000$"); leave custom labels alone.
@@ -473,6 +474,7 @@ private struct HotkeyFields: View {
         case .shares: "Shares"
         case .dollars: "Dollar amount"
         case .buyingPower: "Percent of buying power"
+        case .steps: "Steps (1 = $1,000 or 20%)"
         }
     }
 

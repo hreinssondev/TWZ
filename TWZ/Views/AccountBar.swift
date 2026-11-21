@@ -24,7 +24,7 @@ struct AccountBar: View {
         // in a narrow window before anything in it is squeezed.
         HStack(spacing: 0) {
             HStack(spacing: 18) {
-                // LIVE or PAPER, in the trade mode's color: green while LONG, red while SHORT.
+                // LIVE (red) or PAPER (blue).
                 AccountBadge(isLive: broker.isLivePort, keysOn: workspace.orderShortcutsOn)
 
                 OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
@@ -180,12 +180,10 @@ private struct ScaleButtons: View {
     }
 }
 
-/// LIVE or PAPER (the gateway port), in the color of the trade mode Mode hotkeys go by (see
-/// `TradeMode`): green while LONG, red while SHORT; dimmed grey, as KEYS OFF, while the order shortcuts are off.
+/// LIVE (red) or PAPER (blue), the gateway port; dimmed grey, as the KEYS badge, while the order shortcuts are off.
 private struct AccountBadge: View {
     let isLive: Bool
     let keysOn: Bool
-    @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
 
     var body: some View {
         Text(isLive ? "LIVE" : "PAPER")
@@ -193,23 +191,26 @@ private struct AccountBadge: View {
             .foregroundStyle(keysOn ? Color.white : Color.secondary.opacity(0.7))
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(!keysOn ? Color.primary.opacity(0.08)
-                                       : mode == .long ? Color.green.opacity(0.8) : Color.red.opacity(0.85)))
-            .help("\(isLive ? "Live" : "Paper") account · \(mode == .long ? "LONG" : "SHORT"): Mode hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O (together or one after the other): LONG; with S and H: SHORT. ⌃ with any order shortcut: the same order as a what-if trade")
+                                       : isLive ? Color.red.opacity(0.85) : Color.blue.opacity(0.8)))
+            .help("\(isLive ? "Live" : "Paper") account")
     }
 }
 
-/// Whether the keyboard shortcuts that send orders work: KEYS ON in orange while they do, dimmed while off.
+/// Whether the keyboard shortcuts that send orders work, and what their numbers are (see `SizeMode`): KEYS $ or
+/// KEYS %, in orange while they work, dimmed while off.
 private struct OrderShortcutsBadge: View {
     let isOn: Bool
+    @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent
 
     var body: some View {
-        Text(isOn ? "KEYS ON" : "KEYS OFF")
+        Text("KEYS \(sizeMode.sign)")
             .font(.system(size: 10, weight: isOn ? .heavy : .regular))
             .foregroundStyle(isOn ? Color.white : Color.secondary.opacity(0.7))
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(isOn ? Color.orange : Color.primary.opacity(0.08)))
-            .help("Order shortcuts (hotkeys' own keys, ⌘⇧↩ and ⌘⌫) \(isOn ? "send orders" : "are off")."
-                  + " ⌘ and the Globe (fn) key turn them on or off; they're off at every launch. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) and what-if trades always work.")
+            .help("Order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩ and ⌘⌫) \(isOn ? "send orders" : "are off: ⌘ and the Globe (fn) key turn them on")."
+                  + (sizeMode == .dollars ? " Numbers in dollars: 1 is $1,000, 9 is $9,000." : " Numbers in % of the buying power: 1 is 20%, 5 is 100%, 6–9 none.")
+                  + " ⌘⇧M switches $ and %. They're off at every launch. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<), and ⌃ with any of them (a what-if trade), always work.")
     }
 }
 

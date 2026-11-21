@@ -26,15 +26,13 @@
 //  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 no longer buys one: ⌥⇧ and
 //  numbers are timeframes). Matched by key, number row or keypad, whatever the keyboard layout types there.
 //  ⌘R, ⇧R (outside a text field) or ⌘⇧R does what the top bar's Reset does.
-//  ⌘⇧ with two letters, held together or pressed one after the other (within `chordWait`), switches the trade
-//  mode (see `TradeMode`): S + H SHORT, L + O LONG. S, H and L alone (lists' letters too) wait a moment for the
-//  other letter first.
+//  ⌘⇧M switches the order numbers between dollars and a percent of the buying power (see `SizeMode`): KEYS $ or
+//  KEYS % in the top bar.
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  With the order shortcuts on, an order key (Settings › Order Keys, see `OrderKeys`) sends its order, once per
-//  press (a held key doesn't send another): by default ⌘1 / 2 / 3 / 4 buys $1,000 / $2,000 / $3,000 / 85% of
-//  the buying power at the mid, ⌥⌘ and them sells short $1,000 / $2,000 / $3,000 / 80%, ⌥⌘5–9 a Mode order of
-//  25% / 30% / 50% / 75% / 85%; a ⌘ number with neither an order key nor a hotkey beeps.
+//  press (a held key doesn't send another): by default ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the
+//  $ / % switch (see `SizeMode`) at the mid; a ⌘ number with neither an order key nor a hotkey beeps.
 //  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⇧1–6 outside a text field, ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
@@ -51,32 +49,13 @@ struct TradingShortcuts: ViewModifier {
     @Environment(Workspace.self) private var workspace
     @State private var monitor: Any?
 
-    /// The two-letter ⌘⇧ shortcuts, by either letter's key: the other letter's, and the trade mode they
-    /// switch to. S + H SHORT, L + O LONG (by position, as on a US keyboard).
-    private static let chords: [UInt16: [(partner: CGKeyCode, mode: TradeMode)]] = [
-        1: [(4, .short)], 4: [(1, .short)],       // S, H
-        37: [(31, .long)], 31: [(37, .long)],     // L, O
-    ]
-    /// How long S, H or L alone wait for the other letter before showing their list, and how soon after the
-    /// first letter the second makes the chord when pressed one after the other.
-    private static let chordWait = 0.4
-    /// The last of the two-letter shortcuts' letters pressed with ⌘⇧, and when (see `chordWait`).
-    private static var lastChordKey: (code: UInt16, time: Date)?
-    private static var pendingList: DispatchWorkItem?
-    /// Keys down now (by key code), from the key-down and key-up events seen.
-    private static var heldKeys: Set<UInt16> = []
 
     func body(content: Content) -> some View {
         content
             .onAppear {
                 guard monitor == nil else { return }
                 monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .flagsChanged]) { [broker, workspace] event in
-                    // The letters held down, for the two-letter ⌘⇧ shortcuts.
-                    if event.type == .keyUp {
-                        Self.heldKeys.remove(event.keyCode)
-                        return event
-                    }
-                    if event.type == .flagsChanged, !event.modifierFlags.contains(.command) { Self.heldKeys.removeAll() }
+                    if event.type == .keyUp { return event }
                     if ShortcutRecorder.isRecording { return event }
                     // ⌘ and the Globe (fn) key, pressed in either order, turn the shortcuts that send orders on
                     // or off. The keys go on to the rest of the app either way.
@@ -144,10 +123,11 @@ struct TradingShortcuts: ViewModifier {
                         return nil
                     }
                     let isReturn = event.keyCode == 36 || event.keyCode == 76      // Return or keypad Enter
-                    // ⌃⌘⇧↩: the selected hotkey's (or the order pad's) order as a what-if trade.
-                    if modifiers == [.control, .command, .shift], isReturn, inMainWindow, let window = event.window {
+                    // ⌃⌘⇧↩ / ⌃⌥⌘⇧↩: as ⌘⇧↩ / ⌥⌘⇧↩ (below), as a what-if trade.
+                    if modifiers == [.control, .command, .shift] || modifiers == [.control, .option, .command, .shift],
+                       isReturn, inMainWindow, let window = event.window {
                         if window.firstResponder is NSTextView { return event }
-                        if !event.isARepeat { simulate(workspace.activeHotkey) }
+                        if !event.isARepeat { simulate(workspace.activeHotkey(selling: modifiers.contains(.option))) }
                         return nil
                     }
                     // ⌃⌘⌫: closes the selected chart's what-if trade at market (⌘⌫ without ⌃ the real position).
@@ -163,12 +143,13 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    // ⌘⇧↩: a symbol still being typed isn't the chart's yet.
-                    if modifiers == [.command, .shift], isReturn, inMainWindow, let window = event.window {
+                    // ⌘⇧↩: the selected hotkey button's order, or with none the order pad's, bought; ⌥⌘⇧↩ sells the pad's
+                    // (see `OrderPad`). A symbol still being typed isn't the chart's yet.
+                    if modifiers == [.command, .shift] || modifiers == [.option, .command, .shift],
+                       isReturn, inMainWindow, let window = event.window {
                         if window.firstResponder is NSTextView { return event }
                         guard workspace.orderShortcutsOn else { return refuse() }
-                        // The selected hotkey button, or the order pad's order (see `OrderPad`).
-                        send(workspace.activeHotkey)
+                        if !event.isARepeat { send(workspace.activeHotkey(selling: modifiers.contains(.option))) }
                         return nil
                     }
                     // ⌃⌥⇧1–4 sells a what-if trade in the selected chart's symbol (⌥⇧ and numbers are timeframes).
@@ -195,28 +176,13 @@ struct TradingShortcuts: ViewModifier {
                         workspace.resetToGainers()
                         return nil
                     }
-                    // ⌘⇧ with two letters, held together or one after the other: S + H the SHORT trade mode, L + O
-                    // the LONG one (see `TradeMode`). S, H and L alone are lists' letters too: those wait a moment for
-                    // the other letter before showing the list.
-                    if inMainWindow, modifiers == [.command, .shift], let chords = Self.chords[event.keyCode] {
-                        if event.isARepeat { return nil }
-                        let previous = Self.lastChordKey.flatMap { Date().timeIntervalSince($0.time) <= Self.chordWait ? $0.code : nil }
-                        let chord = chords.first { $0.partner == previous || Self.heldKeys.contains($0.partner)
-                            || CGEventSource.keyState(.combinedSessionState, key: $0.partner) }
-                        Self.heldKeys.insert(event.keyCode)
-                        if let chord {
-                            Self.lastChordKey = nil
-                            Self.pendingList?.cancel()
-                            Self.pendingList = nil
-                            UserDefaults.standard.set(chord.mode.rawValue, forKey: TradeMode.storageKey)
-                            return nil
-                        }
-                        Self.lastChordKey = (event.keyCode, Date())
-                        if let kind = ScannerKind.forShortcut(event.charactersIgnoringModifiers?.lowercased() ?? "") {
-                            Self.pendingList?.cancel()
-                            let show = DispatchWorkItem { workspace.listShortcut = Workspace.ListShortcut(kind: kind) }
-                            Self.pendingList = show
-                            DispatchQueue.main.asyncAfter(deadline: .now() + Self.chordWait, execute: show)
+                    // ⌘⇧M: the order numbers in dollars or a percent of the buying power (see `SizeMode`).
+                    if inMainWindow, modifiers == [.command, .shift], event.charactersIgnoringModifiers?.lowercased() == "m" {
+                        if !event.isARepeat {
+                            let next: SizeMode = SizeMode.current == .dollars ? .percent : .dollars
+                            UserDefaults.standard.set(next.rawValue, forKey: SizeMode.storageKey)
+                            broker.say(next == .dollars ? "KEYS $: the numbers are dollars, 1 is $1,000, 9 is $9,000"
+                                                        : "KEYS %: the numbers are a share of the buying power, 1 is 20%, 5 is 100% (6–9 none)")
                         }
                         return nil
                     }
@@ -362,8 +328,11 @@ extension KeyShortcut {
         if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
             return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
         }
-        if command, shift, !option, !control, k == "o" {
-            return "⌘⇧ with L and O (together or one after the other) switches to LONG"
+        if command, shift, !option, !control, k == "m" {
+            return "⌘⇧M switches the order numbers between $ and %"
+        }
+        if command, option, shift, !control, keyCode == 36 || keyCode == 76 {
+            return "⌥⌘⇧↩ sells the order pad's order"
         }
         if shift, !command, !option, !control, k == "r" {
             return "⇧R resets the chart grid, as the top bar's Reset"

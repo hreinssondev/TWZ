@@ -100,17 +100,37 @@ enum TimeframeSwitch {
     static var keepsView: Bool { UserDefaults.standard.object(forKey: keepViewKey) as? Bool ?? defaultKeepView }
 }
 
-/// Which way Mode hotkeys go: LONG buys, SHORT sells short (see `Hotkey.Action.mode`). ⌘⇧ with L and O
-/// (held together or one after the other) switches to LONG, with S and H to SHORT; the top bar's LIVE / PAPER badge shows it in
-/// green or red. Saved, so it's as it
-/// was at the next launch.
-enum TradeMode: String {
-    case long, short
-    static let storageKey = "tradeMode"
+/// What the order numbers are, switched with ⌘⇧M or the order pad's $ and % buttons: dollars, $1,000 a step
+/// (1–9 are $1,000–$9,000), or a percent of the buying power IB's margin allows in the stock, 20% a step up to
+/// 100% (1–5 are 20%, 40%, 60%, 80%, 100%; 6–9 have no size and send nothing). The order pad's numbers, and the
+/// order keys and hotkeys sized in steps (by default ⌘1–9 buys, ⌥⌘1–9 sells), go by it; the top bar's KEYS badge
+/// shows it, KEYS $ or KEYS %. Saved.
+nonisolated enum SizeMode: String {
+    case dollars, percent
+    static let storageKey = "sizeMode"
+    /// The most steps there are of the buying power (5 × 20% = 100%).
+    static let maxPercentSteps = 5.0
 
-    static var current: TradeMode {
-        UserDefaults.standard.string(forKey: storageKey).flatMap(TradeMode.init(rawValue:)) ?? .long
+    static var current: SizeMode {
+        UserDefaults.standard.string(forKey: storageKey).flatMap(SizeMode.init(rawValue:)) ?? .percent
     }
+
+    /// `steps` in this mode: dollars, or a percent of the buying power; nil past 100%.
+    func amount(steps: Double) -> Double? {
+        guard steps > 0 else { return nil }
+        if self == .dollars { return steps * 1_000 }
+        return steps <= Self.maxPercentSteps ? steps * 20 : nil
+    }
+
+    /// "$3,000", "60%", or "—" with no size.
+    func text(steps: Double) -> String {
+        guard let amount = amount(steps: steps) else { return "—" }
+        let n = amount.formatted(.number.precision(.fractionLength(0...2)))
+        return self == .dollars ? "$" + n : n + "%"
+    }
+
+    /// The badge's sign: "$" or "%".
+    var sign: String { self == .dollars ? "$" : "%" }
 }
 
 /// The Positions column shows real positions or what-if trades (simulated, see `SimTrades.swift`),

@@ -1412,9 +1412,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
 
         switch hotkey.action {
-        case .mode:
-            // Resolved to a buy or sell by the trade mode before it gets here (see `Broker.resolved`).
-            lastMessage = "\"\(hotkey.label)\" has no side, so no order was sent"
         case .cancelAll:
             cancelAllOrders()
         case .cancelSymbol:
@@ -1448,6 +1445,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                        summary: summary, source: Self.source(hotkey, isBuy: isBuy, symbol: symbol), why: why)
             }
             switch hotkey.sizing {
+            case .steps:
+                // Resolved to dollars or a percent before it gets here (see `Broker.resolved`).
+                lastMessage = "\"\(hotkey.label)\" has no size yet, so no order was sent"
             case .shares:
                 guard let price = orderPrice(symbol: symbol, action: action, hotkey: hotkey) else { return }
                 send(hotkey.amount.rounded(.down), at: price)
@@ -1596,7 +1596,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     }
 
     /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price instead
-    /// of at its quote. Buy / Sell (a Mode hotkey, resolved to one) size as the hotkey does (dollars and
+    /// of at its quote. Buy / Sell size as the hotkey does (dollars and
     /// % of buying power at the clicked price), Close 50% / 100% from the position; its order type
     /// decides what goes in at the clicked price (see `chartOrder`), its time in force and extended
     /// hours as set.
@@ -1617,13 +1617,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                             outsideRth: hotkey.outsideRth, summary: "\(label) (\(note ?? hotkey.label))")
         }
         switch hotkey.action {
-        case .mode:
-            lastMessage = "\"\(hotkey.label)\" has no side, so no order was sent"
         case .buy, .sell:
             let action = hotkey.action == .buy ? "BUY" : "SELL"
             let price = tickRounded(clickedPrice, for: symbol)
             guard price > 0 else { return }
             switch hotkey.sizing {
+            case .steps: lastMessage = "\"\(hotkey.label)\" has no size yet, so no order was sent"
             case .shares: place(action, hotkey.amount.rounded(.down))
             case .dollars:
                 guard let usd = usdPerPriceUnit(symbol) else {

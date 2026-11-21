@@ -309,29 +309,33 @@ nonisolated enum TimeInForce: String, Codable, CaseIterable, Identifiable {
 /// KEYS ON, once per press; a keypad number works as the number row's.
 nonisolated enum OrderKeys {
     static let storageKey = "orderKeys"
+    /// Bumped when the defaults change in a way saved lists should follow (see `migrated`).
+    static let version = 2
+    static let versionKey = "orderKeysVersion"
 
     static func number(keyCode: UInt16) -> Int? {
         [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9,
          83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9][keyCode]
     }
 
-    /// ⌘1 / 2 / 3 / 4 buy $1,000 / $2,000 / $3,000 / 85% of the buying power IB's margin allows in the stock;
-    /// ⌥⌘ and them sell (short) $1,000 / $2,000 / $3,000 / 80%; ⌥⌘5 / 6 / 7 / 8 / 9 send a Mode order (see
-    /// `TradeMode`) of 25% / 30% / 50% / 75% / 85%. All limit at the mid (not MIDPRICE), no offset, outside
-    /// regular hours too, DAY.
-    static let defaults: [Hotkey] = [
-        key(.buy, .dollars, 1_000, digit: 1), key(.buy, .dollars, 2_000, digit: 2),
-        key(.buy, .dollars, 3_000, digit: 3), key(.buy, .buyingPower, 85, digit: 4),
-        key(.sell, .dollars, 1_000, digit: 1, option: true), key(.sell, .dollars, 2_000, digit: 2, option: true),
-        key(.sell, .dollars, 3_000, digit: 3, option: true), key(.sell, .buyingPower, 80, digit: 4, option: true),
-        key(.mode, .buyingPower, 25, digit: 5, option: true), key(.mode, .buyingPower, 30, digit: 6, option: true),
-        key(.mode, .buyingPower, 50, digit: 7, option: true), key(.mode, .buyingPower, 75, digit: 8, option: true),
-        key(.mode, .buyingPower, 85, digit: 9, option: true),
-    ]
+    /// ⌘1–9 buy and ⌥⌘1–9 sell (short) 1–9 steps (see `SizeMode`): $1,000–$9,000, or 20%, 40%, 60%, 80%, 100%
+    /// of the buying power IB's margin allows in the stock for 1–5 (6–9 send nothing then). All limit at the mid
+    /// (not MIDPRICE), no offset, outside regular hours too, DAY.
+    static let defaults: [Hotkey] = (1...9).map { key(.buy, .steps, Double($0), digit: $0) }
+        + (1...9).map { key(.sell, .steps, Double($0), digit: $0, option: true) }
 
-    /// What + in Settings › Order Keys starts from: a buy of $1,000 at the mid, no offset, outside regular
-    /// hours too, DAY, its shortcut still to record.
-    static func newKey() -> Hotkey { key(.buy, .dollars, 1_000, digit: nil) }
+    /// A list saved before `version`: the ⌘ and ⌥⌘ number keys become the defaults' (the fixed $ and % amounts
+    /// and the Mode orders before the $ / % switch); keys on other shortcuts stay.
+    static func migrated(_ saved: [Hotkey]) -> [Hotkey] {
+        defaults + saved.filter { key in
+            guard let s = key.shortcut, s.command, !s.control, !s.shift, number(keyCode: s.keyCode) != nil else { return true }
+            return false
+        }
+    }
+
+    /// What + in Settings › Order Keys starts from: a buy of one step ($1,000 or 20%) at the mid, no offset,
+    /// outside regular hours too, DAY, its shortcut still to record.
+    static func newKey() -> Hotkey { key(.buy, .steps, 1, digit: nil) }
 
     /// An order at the mid, no offset, outside regular hours too, DAY, on ⌘ (and ⌥) and `digit` (number row).
     private static func key(_ action: Hotkey.Action, _ sizing: Hotkey.Sizing, _ amount: Double, digit: Int?,
@@ -345,10 +349,10 @@ nonisolated enum OrderKeys {
     }
 }
 
-/// The hotkey panel's order, set with its buttons: in dollars ($1,000 a step) or buying power (10% of
-/// what IB's margin allows in the stock, a step), the price or order type, and 1–9. While no hotkey
-/// button is selected, ⌘⇧↩ sends it: a Mode order (see `TradeMode`), no offset, outside
-/// regular hours too, DAY. Saved.
+/// The hotkey panel's order, set with its buttons: in dollars ($1,000 a step) or buying power (20% of
+/// what IB's margin allows in the stock, a step) as `SizeMode` says (its $ and % buttons switch it, as ⌘⇧M
+/// does), the price or order type, and 1–9. While no hotkey button is selected, ⌘⇧↩ buys it and ⌥⌘⇧↩ sells
+/// it (short): no offset, outside regular hours too, DAY. Saved.
 nonisolated struct OrderPad: Codable, Equatable {
     enum Kind: String, Codable, CaseIterable, Identifiable {
         case mid = "MID", bid = "BID", ask = "ASK", last = "LAST", cross = "B/A", market = "MKT", midprice = "MIDPX"
@@ -367,22 +371,18 @@ nonisolated struct OrderPad: Codable, Equatable {
         }
     }
 
-    var buyingPower = false
     var kind = Kind.mid
     var number = 1
 
     static let storageKey = "orderPad"
     static let numbers = Array(1...9)
 
-    func amount(_ number: Int) -> Double { Double(number * (buyingPower ? 10 : 1000)) }
-
     /// "$3,000" or "30%".
-    func amountText(_ number: Int) -> String {
-        buyingPower ? "\(number * 10)%" : "$" + (number * 1000).formatted()
-    }
+    func amountText(_ number: Int) -> String { SizeMode.current.text(steps: Double(number)) }
 
-    var hotkey: Hotkey {
-        let sizing: Hotkey.Sizing = buyingPower ? .buyingPower : .dollars
+    /// The pad's order, a buy or a sell (short).
+    func hotkey(_ action: Hotkey.Action) -> Hotkey {
+        let sizing: Hotkey.Sizing = .steps
         let orderType: OrderType = kind == .market ? .market : kind == .midprice ? .midprice : .limit
         let reference: PriceReference = switch kind {
         case .bid: .bid
@@ -391,8 +391,8 @@ nonisolated struct OrderPad: Codable, Equatable {
         case .cross: .cross
         case .mid, .market, .midprice: .mid
         }
-        var hotkey = Hotkey(label: Hotkey.autoLabel(action: .mode, sizing: sizing, amount: amount(number)), action: .mode,
-                            sizing: sizing, amount: amount(number), orderType: orderType, priceReference: reference, offset: 0)
+        var hotkey = Hotkey(label: Hotkey.autoLabel(action: action, sizing: sizing, amount: Double(number)), action: action,
+                            sizing: sizing, amount: Double(number), orderType: orderType, priceReference: reference, offset: 0)
         hotkey.outsideRth = true
         hotkey.tif = .day
         return hotkey
@@ -447,9 +447,6 @@ nonisolated struct KeyShortcut: Codable, Hashable {
 
 nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     enum Action: String, Codable, CaseIterable, Identifiable {
-        /// Buys while the trade mode is LONG, sells (short) while it's SHORT (see `TradeMode`). Saved as
-        /// "Open" by the version before.
-        case mode = "Mode"
         case buy = "Buy"
         case sell = "Sell"
         case closeHalf = "Close 50%"
@@ -459,13 +456,12 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         case flattenAll = "Flatten All"
         var id: String { rawValue }
 
-        var needsSize: Bool { self == .mode || self == .buy || self == .sell }
+        var needsSize: Bool { self == .buy || self == .sell }
         var placesOrder: Bool { self != .cancelSymbol && self != .cancelAll }
 
         /// Button color when the hotkey has no color of its own.
         var defaultColor: HotkeyColor {
             switch self {
-            case .mode: .blue          // shown green while LONG, red while SHORT (see `HotkeyPanel`)
             case .buy: .green
             case .sell: .red
             case .closeHalf, .closeAll: .orange
@@ -481,14 +477,18 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         /// A percent of the most shares IB's margin allows in the stock: a new long for buys, a new
         /// short for sells (see `TradingEngine.sizeFromBuyingPower`).
         case buyingPower = "% Buying power"
+        /// Steps of $1,000 or 20% of the buying power, as `SizeMode` says (⌘⇧M): 3 is $3,000 or 60%; past 5 (100%)
+        /// a percent has no size.
+        case steps = "$ / % steps"
         var id: String { rawValue }
 
-        /// After the amount in labels: "100", "1000$", "80% BP".
+        /// After the amount in labels: "100", "1000$", "80% BP", "3×".
         var suffix: String {
             switch self {
             case .shares: ""
             case .dollars: "$"
             case .buyingPower: "% BP"
+            case .steps: "×"
             }
         }
     }
@@ -530,13 +530,15 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         label = try c.decode(String.self, forKey: .label)
-        // "Open" is what the mode action was called at first; its automatic labels follow.
+        // "Mode" (bought while LONG, sold while SHORT, before the trade mode was dropped), and "Open" as it was
+        // called at first, are buys now; their automatic labels follow.
         let rawAction = try c.decode(String.self, forKey: .action)
-        guard let action = Action(rawValue: rawAction == "Open" ? Action.mode.rawValue : rawAction) else {
+        let legacy = rawAction == "Mode" || rawAction == "Open"
+        guard let action = Action(rawValue: legacy ? Action.buy.rawValue : rawAction) else {
             throw DecodingError.dataCorruptedError(forKey: .action, in: c, debugDescription: "Unknown hotkey action \(rawAction)")
         }
         self.action = action
-        if rawAction == "Open", label.hasPrefix("Open") { label = Action.mode.rawValue + label.dropFirst(4) }
+        if legacy, label.hasPrefix(rawAction) { label = Action.buy.rawValue + label.dropFirst(rawAction.count) }
         sizing = try c.decodeIfPresent(Sizing.self, forKey: .sizing) ?? .shares
         amount = try c.decodeIfPresent(Double.self, forKey: .amount) ?? 100
         // Older versions stored other IB order types here (Stop, Trailing Stop, …); those become Limit.
@@ -570,7 +572,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     /// What a hotkey for these settings is called automatically, e.g. "Buy 100", "Sell 1000$" or "Buy 80% BP".
     static func autoLabel(action: Action, sizing: Sizing, amount: Double) -> String {
         switch action {
-        case .mode, .buy, .sell:
+        case .buy, .sell:
             let n = amount.formatted(.number.grouping(.never).precision(.fractionLength(0...2)))
             return "\(action.rawValue) \(n)\(sizing.suffix)"
         case .closeHalf, .closeAll: return action.rawValue
@@ -585,11 +587,27 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     static func isAutoLabel(_ label: String, action: Action, sizing: Sizing, amount: Double) -> Bool {
         if label.trimmingCharacters(in: .whitespaces).isEmpty { return true }
         if label == autoLabel(action: action, sizing: sizing, amount: amount) { return true }
-        if (action == .mode || action == .buy || action == .sell), sizing == .dollars, amount >= 1_000,
+        if (action == .buy || action == .sell), sizing == .dollars, amount >= 1_000,
            amount.truncatingRemainder(dividingBy: 1_000) == 0 {
             return label == "\(action.rawValue) $\(Int(amount / 1_000))K"
         }
         return false
+    }
+
+    /// Sized in steps (see `SizeMode`): the same order in dollars or a percent of the buying power, as the
+    /// switch is now (its automatic label too); nil when the steps have no size in it (past 100%). Any other as
+    /// it is.
+    var resolved: Hotkey? {
+        guard sizing == .steps else { return self }
+        let mode = SizeMode.current
+        guard let amount = mode.amount(steps: amount) else { return nil }
+        var hotkey = self
+        hotkey.sizing = mode == .dollars ? .dollars : .buyingPower
+        hotkey.amount = amount
+        if Self.isAutoLabel(label, action: action, sizing: sizing, amount: self.amount) {
+            hotkey.label = Self.autoLabel(action: action, sizing: hotkey.sizing, amount: amount)
+        }
+        return hotkey
     }
 
     private static func make(_ action: Action, sizing: Sizing = .shares, amount: Double = 100,

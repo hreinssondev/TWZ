@@ -493,21 +493,21 @@ final class Broker {
 
     /// A hotkey's or order key's order (with ⌃ as well, a what-if trade instead: see `runSim`).
     func run(_ hotkey: Hotkey, symbol: String) {
-        let hotkey = Self.resolved(hotkey)
+        guard let hotkey = resolved(hotkey) else { return }
         order { $0.run(hotkey, symbol: symbol) }
     }
 
-    /// A Mode hotkey goes the trade mode's way: a buy while LONG, a sell (short) while SHORT.
-    static func resolved(_ hotkey: Hotkey) -> Hotkey {
-        guard hotkey.action == .mode else { return hotkey }
-        var hotkey = hotkey
-        hotkey.action = TradeMode.current == .short ? .sell : .buy
-        return hotkey
+    /// A hotkey sized in steps in dollars or a percent of the buying power, as `SizeMode` is now; nil, saying
+    /// so, when it has no size in it (6–9 in %).
+    func resolved(_ hotkey: Hotkey) -> Hotkey? {
+        if let resolved = hotkey.resolved { return resolved }
+        say("\(hotkey.shortcut.map { $0.display + " " } ?? "")\(hotkey.action.rawValue): no size at \(Fmt.shares(hotkey.amount)) in % (1–5 are 20–100%; ⌘⇧M for $), so nothing was sent")
+        return nil
     }
 
     /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price.
     func run(_ hotkey: Hotkey, symbol: String, at clickedPrice: Double) {
-        let hotkey = Self.resolved(hotkey)
+        guard let hotkey = resolved(hotkey) else { return }
         order { $0.run(hotkey, symbol: symbol, at: clickedPrice) }
     }
 
