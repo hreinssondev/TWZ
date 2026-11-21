@@ -459,8 +459,8 @@ struct TradingChart: View {
     var onTrade: () -> Void = {}
     /// ⇧-swipe: the grid's zoom times this (see `CandleChart.onZoomAll`).
     var onZoomAll: ((Double) -> Void)?
-    /// SIM (KEYS off): a ⌃-click and the hover P/L go by the what-if trade before the real position, as the
-    /// order shortcuts do; both show either way.
+    /// SIM (KEYS off): the hover P/L goes by the what-if trade before the real position, as the order shortcuts
+    /// do; both show either way. A ⌃-click goes by a live position first in either.
     private var simFirst: Bool { !workspace.orderShortcutsOn }
 
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
@@ -498,11 +498,12 @@ struct TradingChart: View {
             onControlClick: { price in
                 guard !chart.symbol.isEmpty else { return }
                 onTrade()
-                if hasSim, simFirst || !hasPosition {
+                // A live position first, in SIM too: its real stop loss or take profit.
+                if hasPosition {
+                    broker.placeProtective(symbol: chart.symbol, at: price)
+                } else if hasSim {
                     // A what-if trade: its simulated stop loss or take profit.
                     broker.placeSimProtective(symbol: chart.symbol, at: price)
-                } else if hasPosition {
-                    broker.placeProtective(symbol: chart.symbol, at: price)
                 } else {
                     // No position: a what-if buy at the clicked price, sized from IB's margin preview.
                     let symbol = chart.symbol
@@ -524,7 +525,7 @@ struct TradingChart: View {
                 return true
             },
             controlClickColor: { price in
-                if hasSim, simFirst || !hasPosition {
+                if !hasPosition, hasSim {
                     return broker.simProtectiveKind(chart.symbol, at: price).map(protectiveColor)
                 }
                 guard hasPosition else { return Self.whatIfColor }
