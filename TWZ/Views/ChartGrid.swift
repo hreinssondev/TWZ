@@ -100,7 +100,14 @@ struct ChartGrid: View {
             workspace.setMainTimeframe(timeframe, broker: broker)
             workspace.resetViews(of: workspace.mainCharts, zoom: zoom, broker: broker, timeframe: timeframe)
         }
-        .onChange(of: zoom) { old, new in workspace.setZoom(new, of: workspace.mainCharts, broker: broker, from: old) }
+        .onChange(of: zoom) { old, new in
+            // A swipe has zoomed the charts already (see `Workspace.zoomGrid`).
+            if workspace.swipedGridZoom == new {
+                workspace.swipedGridZoom = nil
+                return
+            }
+            workspace.setZoom(new, of: workspace.mainCharts, broker: broker, from: old)
+        }
         .onChange(of: workspace.gridScale(workspace.activeScale)) { workspace.syncGridScale(to: broker) }
         .onChange(of: workspace.manualZoom) { workspace.syncGridScale(to: broker) }
         .onChange(of: timeframe) { _, new in workspace.setMainTimeframe(new, broker: broker) }
@@ -306,6 +313,25 @@ extension Workspace {
         let spared = byClick ? 0 : shown.filter(\.adjustedByHand).count
         broker.say("Scale \(slot) on every chart, also as lists change (pick it again to turn it off)"
                    + (spared > 0 ? "; \(spared) chart\(spared == 1 ? "" : "s") adjusted by hand kept as \(spared == 1 ? "it is" : "they are")" : ""))
+    }
+
+    /// ⇧-, ⌘- or ⌥-swipe on main chart `chart`: every main chart zooms by `factor` from the zoom on screen,
+    /// the swiped chart's (or, with it keeping its own zoom, see `GridZoom`, that of a chart following the
+    /// grid), not from the Zoom slider's: that can be another (a timeframe's own zoom, a view set's, a
+    /// stock's kept view), and the charts jumped to it. As far as zooming one chart goes: in to 15 bars, out
+    /// to all the bars the grid's charts have loaded (older ones load as the view reaches them), never
+    /// jumping in from further out. The new zoom, for the Zoom slider.
+    func zoomGrid(by factor: Double, from chart: ChartModel, sliderZoom: Double, broker: Broker) -> Double {
+        let shown = mainCells.compactMap(self.chart(id:))
+        let base = !GridZoom.resetsAdjusted && chart.adjustedByHand
+            ? shown.first { !$0.adjustedByHand && !$0.symbol.isEmpty }?.visibleBars ?? sliderZoom
+            : chart.visibleBars
+        guard base > 0 else { return sliderZoom }
+        let most = shown.map { Double($0.bars.count) }.max() ?? 0
+        let zoom = min(max(ChartModel.maxVisibleBars, most, base), max(15, base * factor))
+        setZoom(zoom, of: mainCharts, broker: broker, by: zoom / base)
+        if zoom != sliderZoom { swipedGridZoom = zoom }
+        return zoom
     }
 
     /// Tells the broker what main charts loading now go by: the grid's list (each keeps its own views),

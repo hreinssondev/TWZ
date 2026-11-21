@@ -285,6 +285,9 @@ final class Workspace {
     var manualZoom: Double? {
         didSet { defaults.set(manualZoom, forKey: ChartScale.manualZoomKey) }
     }
+    /// The grid's zoom a swipe has just put the main charts at (see `zoomGrid`), so the Zoom slider
+    /// following it doesn't zoom them again.
+    @ObservationIgnored var swipedGridZoom: Double?
     /// Colors given to stocks with ⌥⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
     /// stock that leaves the charts has its color again when it comes back. Set with `setColor`.
     private(set) var stockColors: [String: StockColor] {

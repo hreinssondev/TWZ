@@ -23,7 +23,8 @@ management in one window built for quick entries and exits.
   Settings › Appearance, each timeframe going back to its own zoom and place).
 - **Chart views**: each stock keeps where its view was left (per timeframe, and per list in the
   grid), across list switches and relaunches, until Reset or a right-click on the chart. ⇧-, ⌘- or ⌥-swipe
-  (any of them, together too) moves the top bar's Zoom slider, zooming every chart (⌃-swipe squeezes or
+  (any of them, together too) zooms every chart from the swiped one's zoom, the top bar's Zoom slider
+  following (⌃-swipe squeezes or
   stretches one chart's price axis); ⌥0 or ⇧A gives every chart the selected one's zoom,
   place and price scale. ⇧-clicking 1–5 in the top bar saves every chart's zoom and place on every
   timeframe as a view set, and clicking one puts them back;
