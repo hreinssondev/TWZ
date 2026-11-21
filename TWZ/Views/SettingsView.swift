@@ -327,6 +327,7 @@ private struct TradingSettings: View {
 private struct OrderKeysSettings: View {
     @Environment(Workspace.self) private var workspace
     @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
+    @AppStorage(SimMode.storageKey) private var sim = false
     @State private var editing: Editing?
 
     private struct Editing: Identifiable {
@@ -341,7 +342,8 @@ private struct OrderKeysSettings: View {
         ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if); with no chart selected, ⌘A cancels the last order placed, as ⌘Z"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
         ("⌘⇧⌫", "Remove the chart's ⌃-click what-if (so does double-clicking anywhere on the chart)"),
-        ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red); Mode orders buy while LONG, sell short while SHORT"),
+        ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red), trading for real (out of SIM mode, Positions back on the real ones); Mode orders buy while LONG, sell short while SHORT"),
+        ("⌘⇧ S+I", "SIM mode: every order shortcut here (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫) trades what-if positions instead, never IB, filled at once at the order's price; the badge reads SIM and Positions shows the what-if trades, until ⌘⇧ L+O or S+H"),
         ("⌃⌥⇧1 2 3 4", "What-if trade: sell (short) $1,000 / $2,000 / $3,000 / 85% of the buying power, simulated and never sent to IB "
             + "(not in a stock with a real position); ⌃-click its chart for a simulated stop loss or take profit, ⌘⌫ closes it"),
     ]
@@ -384,7 +386,7 @@ private struct OrderKeysSettings: View {
                 }
                 .controlSize(.small)
             } footer: {
-                Text("For the selected chart's symbol, only with KEYS ON (⌘🌐; \(workspace.orderShortcutsOn ? "on now" : "off now")), once per press: holding the key doesn't send another. A keypad number works as the number row's. With KEYS off, ⌘1–6 switch timeframes.")
+                Text("For the selected chart's symbol, only with KEYS ON (⌘🌐; \(workspace.orderShortcutsOn ? "on now" : "off now")), once per press: holding the key doesn't send another. A keypad number works as the number row's. With KEYS off, ⌘1–6 switch timeframes. In SIM mode (⌘⇧ S+I\(sim ? ", on now" : "")) they trade what-if positions instead.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -463,9 +463,14 @@ final class Broker {
     }
 
     /// ⌘⌫: cancels every order in `symbol`, stop loss and take profit included, then closes the whole
-    /// position at market; with no position but a what-if trade, closes that.
+    /// position at market; with no position but a what-if trade, closes that. In SIM mode only the what-if
+    /// trade (see `SimMode`).
     func closePosition(_ symbol: String) {
         let s = symbol.uppercased()
+        if SimMode.isOn {
+            guard simPositions[s] != nil else { return say("SIM mode: no what-if trade in \(s) to close") }
+            return closeSimAtMarket(s)
+        }
         if positions[s].map({ $0.quantity == 0 }) ?? true, simPositions[s] != nil { return closeSimAtMarket(s) }
         order { $0.closePosition(symbol) }
     }
@@ -491,7 +496,9 @@ final class Broker {
         order { $0.cancelAllOrders() }
     }
 
+    /// A hotkey's or order key's order; in SIM mode a what-if trade instead (see `runSim`).
     func run(_ hotkey: Hotkey, symbol: String) {
+        if SimMode.isOn { return runSim(hotkey, symbol: symbol) }
         let hotkey = Self.resolved(hotkey)
         order { $0.run(hotkey, symbol: symbol) }
     }
@@ -506,6 +513,9 @@ final class Broker {
 
     /// Alt-click on a chart with a hotkey selected: that hotkey's order at the clicked price.
     func run(_ hotkey: Hotkey, symbol: String, at clickedPrice: Double) {
+        if SimMode.isOn {
+            return say("SIM mode: an order at a clicked price isn't simulated, so nothing was sent")
+        }
         let hotkey = Self.resolved(hotkey)
         order { $0.run(hotkey, symbol: symbol, at: clickedPrice) }
     }
