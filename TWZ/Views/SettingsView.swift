@@ -337,7 +337,7 @@ private struct OrderKeysSettings: View {
     private static let fixed: [(String, String)] = [
         ("⌘🌐 (⌘ fn)", "KEYS ON / off: the shortcuts that send orders work only while on; off at every launch. While on, ⌘1–6 are order keys and hotkeys rather than timeframes"),
         ("⌘⇧↩  /  ⌥⌘⇧↩", "Send the selected hotkey button's order; with none selected, buy (⌘⇧↩) or sell short (⌥⌘⇧↩) the order pad's"),
-        ("⌘⇧M", "Switch the order numbers between dollars ($1,000 a step: 1–9 are $1,000–$9,000) and a percent of the buying power (20% a step: 1–5 are 20–100%, 6–9 none): KEYS $ or KEYS % in the top bar, and the order pad's $ and %"),
+        ("⌘⇧M", "Switch the order numbers between dollars ($1,000 a step: 1–9 are $1,000–$9,000) and a percent of the buying power (20% a step: 1–4 are 20–80%, 5–9 none): KEYS $ or KEYS % in the top bar, and the order pad's $ and %"),
         ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market; removes its ⌃-click what-if too. ⌃⌘⌫ closes its what-if trade instead"),
         ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if); with no chart selected, ⌘A cancels the last order placed, as ⌘Z"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
@@ -375,7 +375,7 @@ private struct OrderKeysSettings: View {
                     Text("Order keys")
                     Spacer()
                     Button("Restore Defaults") { workspace.orderKeys = OrderKeys.defaults }
-                        .help("⌘1–9 buy and ⌥⌘1–9 sell short 1–9 steps: $1,000–$9,000, or 20–100% of the buying power for 1–5 (⌘⇧M)")
+                        .help("⌘1–9 buy and ⌥⌘1–9 sell short 1–9 steps: $1,000–$9,000, or 20–80% of the buying power for 1–4 (⌘⇧M)")
                     Button {
                         editing = Editing(key: OrderKeys.newKey())
                     } label: {
@@ -385,7 +385,7 @@ private struct OrderKeysSettings: View {
                 }
                 .controlSize(.small)
             } footer: {
-                Text("For the selected chart's symbol, only with KEYS ON (⌘🌐; \(workspace.orderShortcutsOn ? "on now" : "off now")), once per press: holding the key doesn't send another. A keypad number works as the number row's. With KEYS off, ⌘1–6 switch timeframes. Sized in steps, they go by ⌘⇧M (now \(sizeMode == .dollars ? "$, $1,000 a step" : "%, 20% of the buying power a step, 6–9 none")). With ⌃ held as well (⌃⌘1, ⌃⌥⌘4, …) the same order is a what-if trade, never sent to IB, KEYS ON or not.")
+                Text("For the selected chart's symbol, only with KEYS ON (⌘🌐; \(workspace.orderShortcutsOn ? "on now" : "off now")), once per press: holding the key doesn't send another. A keypad number works as the number row's. With KEYS off, ⌘1–6 switch timeframes. Sized in steps, they go by ⌘⇧M (now \(sizeMode == .dollars ? "$, $1,000 a step" : "%, 20% of the buying power a step, 5–9 none")). With ⌃ held as well (⌃⌘1, ⌃⌥⌘4, …) the same order is a what-if trade, never sent to IB, KEYS ON or not.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

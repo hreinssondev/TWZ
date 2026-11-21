@@ -318,8 +318,8 @@ nonisolated enum OrderKeys {
          83: 1, 84: 2, 85: 3, 86: 4, 87: 5, 88: 6, 89: 7, 91: 8, 92: 9][keyCode]
     }
 
-    /// ⌘1–9 buy and ⌥⌘1–9 sell (short) 1–9 steps (see `SizeMode`): $1,000–$9,000, or 20%, 40%, 60%, 80%, 100%
-    /// of the buying power IB's margin allows in the stock for 1–5 (6–9 send nothing then). All limit at the mid
+    /// ⌘1–9 buy and ⌥⌘1–9 sell (short) 1–9 steps (see `SizeMode`): $1,000–$9,000, or 20%, 40%, 60%, 80% of the
+    /// buying power IB's margin allows in the stock for 1–4 (5–9 send nothing then). All limit at the mid
     /// (not MIDPRICE), no offset, outside regular hours too, DAY.
     static let defaults: [Hotkey] = (1...9).map { key(.buy, .steps, Double($0), digit: $0) }
         + (1...9).map { key(.sell, .steps, Double($0), digit: $0, option: true) }
@@ -477,7 +477,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
         /// A percent of the most shares IB's margin allows in the stock: a new long for buys, a new
         /// short for sells (see `TradingEngine.sizeFromBuyingPower`).
         case buyingPower = "% Buying power"
-        /// Steps of $1,000 or 20% of the buying power, as `SizeMode` says (⌘⇧M): 3 is $3,000 or 60%; past 5 (100%)
+        /// Steps of $1,000 or 20% of the buying power, as `SizeMode` says (⌘⇧M): 3 is $3,000 or 60%; past 4 (80%)
         /// a percent has no size.
         case steps = "$ / % steps"
         var id: String { rawValue }
@@ -595,7 +595,7 @@ nonisolated struct Hotkey: Codable, Identifiable, Equatable {
     }
 
     /// Sized in steps (see `SizeMode`): the same order in dollars or a percent of the buying power, as the
-    /// switch is now (its automatic label too); nil when the steps have no size in it (past 100%). Any other as
+    /// switch is now (its automatic label too); nil when the steps have no size in it (past 80%). Any other as
     /// it is.
     var resolved: Hotkey? {
         guard sizing == .steps else { return self }

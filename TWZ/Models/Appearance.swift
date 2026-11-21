@@ -102,20 +102,20 @@ enum TimeframeSwitch {
 
 /// What the order numbers are, switched with ⌘⇧M or the order pad's $ and % buttons: dollars, $1,000 a step
 /// (1–9 are $1,000–$9,000), or a percent of the buying power IB's margin allows in the stock, 20% a step up to
-/// 100% (1–5 are 20%, 40%, 60%, 80%, 100%; 6–9 have no size and send nothing). The order pad's numbers, and the
+/// 80% (1–4 are 20%, 40%, 60%, 80%; 5–9 have no size and send nothing). The order pad's numbers, and the
 /// order keys and hotkeys sized in steps (by default ⌘1–9 buys, ⌥⌘1–9 sells), go by it; the top bar's KEYS badge
 /// shows it, KEYS $ or KEYS %. Saved.
 nonisolated enum SizeMode: String {
     case dollars, percent
     static let storageKey = "sizeMode"
-    /// The most steps there are of the buying power (5 × 20% = 100%).
-    static let maxPercentSteps = 5.0
+    /// The most steps there are of the buying power (4 × 20% = 80%).
+    static let maxPercentSteps = 4.0
 
     static var current: SizeMode {
         UserDefaults.standard.string(forKey: storageKey).flatMap(SizeMode.init(rawValue:)) ?? .percent
     }
 
-    /// `steps` in this mode: dollars, or a percent of the buying power; nil past 100%.
+    /// `steps` in this mode: dollars, or a percent of the buying power; nil past 80%.
     func amount(steps: Double) -> Double? {
         guard steps > 0 else { return nil }
         if self == .dollars { return steps * 1_000 }

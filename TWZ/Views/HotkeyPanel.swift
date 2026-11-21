@@ -242,7 +242,7 @@ private struct OrderPadView: View {
                     sizeMode = .dollars
                 }
                 button("%", "Buying power", lit: sizeMode == .percent,
-                       help: "The numbers are a share of the buying power IB's margin allows in the stock: 1 is 20%, 5 is 100%, 6–9 none (⌘⇧M switches)") {
+                       help: "The numbers are a share of the buying power IB's margin allows in the stock: 1 is 20%, 4 is 80%, 5–9 none (⌘⇧M switches)") {
                     sizeMode = .percent
                 }
                 ForEach(OrderPad.Kind.allCases) { kind in
@@ -254,7 +254,7 @@ private struct OrderPadView: View {
             HStack(spacing: spacing) {
                 ForEach(OrderPad.numbers, id: \.self) { number in
                     button("\(number)", pad.amountText(number), lit: pad.number == number,
-                           help: sizeMode.amount(steps: Double(number)) == nil ? "No size in %: 1–5 are 20–100% (⌘⇧M for $)"
+                           help: sizeMode.amount(steps: Double(number)) == nil ? "No size in %: 1–4 are 20–80% (⌘⇧M for $)"
                                 : "\(pad.amountText(number))\(sizeMode == .percent ? " of the buying power" : "")") {
                         workspace.orderPad.number = number
                     }
@@ -439,7 +439,7 @@ private struct HotkeyFields: View {
                 .pickerStyle(.segmented)
                 TextField(amountTitle, value: $hotkey.amount, format: .number)
                 if hotkey.sizing == .steps {
-                    Text("As the $ / % switch is (⌘⇧M, or the order pad's $ and %): $1,000 a step in $ (3 is $3,000), or 20% of the buying power IB's margin allows in the stock a step in % (3 is 60%; past 5, 100%, nothing is sent). Now \(SizeMode.current.text(steps: hotkey.amount)).")
+                    Text("As the $ / % switch is (⌘⇧M, or the order pad's $ and %): $1,000 a step in $ (3 is $3,000), or 20% of the buying power IB's margin allows in the stock a step in % (3 is 60%; past 4, 80%, nothing is sent). Now \(SizeMode.current.text(steps: hotkey.amount)).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

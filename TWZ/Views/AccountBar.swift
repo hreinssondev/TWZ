@@ -209,7 +209,7 @@ private struct OrderShortcutsBadge: View {
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(isOn ? Color.orange : Color.primary.opacity(0.08)))
             .help("Order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩ and ⌘⌫) \(isOn ? "send orders" : "are off: ⌘ and the Globe (fn) key turn them on")."
-                  + (sizeMode == .dollars ? " Numbers in dollars: 1 is $1,000, 9 is $9,000." : " Numbers in % of the buying power: 1 is 20%, 5 is 100%, 6–9 none.")
+                  + (sizeMode == .dollars ? " Numbers in dollars: 1 is $1,000, 9 is $9,000." : " Numbers in % of the buying power: 1 is 20%, 4 is 80%, 5–9 none.")
                   + " ⌘⇧M switches $ and %. They're off at every launch. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<), and ⌃ with any of them (a what-if trade), always work.")
     }
 }

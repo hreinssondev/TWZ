@@ -35,8 +35,8 @@ management in one window built for quick entries and exits.
 - **Trading from the chart**: ⌃-click places a stop loss or take profit, and order lines show their
   fill as it happens. Double-click an order line to cancel it.
 - **$ / % switch** (⌘⇧M, or the order pad's $ and %): the order numbers are dollars, $1,000 a step (1–9 are
-  $1,000–$9,000), or a percent of the buying power IB's margin allows in the stock, 20% a step (1–5 are 20%, 40%,
-  60%, 80%, 100%; 6–9 send nothing). The top bar's KEYS badge shows it: KEYS $ or KEYS %.
+  $1,000–$9,000), or a percent of the buying power IB's margin allows in the stock, 20% a step (1–4 are 20%, 40%,
+  60%, 80%; 5–9 send nothing). The top bar's KEYS badge shows it: KEYS $ or KEYS %.
 - **Order pad and hotkeys**: the order pad's buttons pick an order: $ or %, the price or order type (mid, bid,
   ask, last, across the spread, market or IBKR MIDPRICE) and 1–9. Beside it, configurable hotkey buttons
   (buying, selling, closing, cancelling), each with an optional keyboard shortcut; clicking one selects it in

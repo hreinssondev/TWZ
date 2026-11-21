@@ -182,7 +182,7 @@ struct TradingShortcuts: ViewModifier {
                             let next: SizeMode = SizeMode.current == .dollars ? .percent : .dollars
                             UserDefaults.standard.set(next.rawValue, forKey: SizeMode.storageKey)
                             broker.say(next == .dollars ? "KEYS $: the numbers are dollars, 1 is $1,000, 9 is $9,000"
-                                                        : "KEYS %: the numbers are a share of the buying power, 1 is 20%, 5 is 100% (6–9 none)")
+                                                        : "KEYS %: the numbers are a share of the buying power, 1 is 20%, 4 is 80% (5–9 none)")
                         }
                         return nil
                     }

@@ -498,10 +498,10 @@ final class Broker {
     }
 
     /// A hotkey sized in steps in dollars or a percent of the buying power, as `SizeMode` is now; nil, saying
-    /// so, when it has no size in it (6–9 in %).
+    /// so, when it has no size in it (5–9 in %).
     func resolved(_ hotkey: Hotkey) -> Hotkey? {
         if let resolved = hotkey.resolved { return resolved }
-        say("\(hotkey.shortcut.map { $0.display + " " } ?? "")\(hotkey.action.rawValue): no size at \(Fmt.shares(hotkey.amount)) in % (1–5 are 20–100%; ⌘⇧M for $), so nothing was sent")
+        say("\(hotkey.shortcut.map { $0.display + " " } ?? "")\(hotkey.action.rawValue): no size at \(Fmt.shares(hotkey.amount)) in % (1–4 are 20–80%; ⌘⇧M for $), so nothing was sent")
         return nil
     }
 
