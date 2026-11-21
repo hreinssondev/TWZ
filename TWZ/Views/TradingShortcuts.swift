@@ -29,8 +29,8 @@
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  ⌘⌥ and 1–9 sends a Mode order of 10–90% of the buying power at the mid (see `OrderKeys`), with the
 //  order shortcuts on.
-//  With the order shortcuts on, ⌘1 / 2 / 3 buys $1,000 / $2,000 / $3,000 at the mid, no offset, outside regular
-//  hours too (see `OrderKeys.buyHotkey`); ⌘4–9 are for hotkeys.
+//  With the order shortcuts on, ⌘1 / 2 / 3 / 4 buys $1,000 / $2,000 / $3,000 / 85% of the buying power at the
+//  mid, no offset, outside regular hours too (see `OrderKeys.buyHotkey`); ⌘5–9 are for hotkeys.
 //  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⇧1–6 outside a text field, ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
@@ -92,7 +92,8 @@ struct TradingShortcuts: ViewModifier {
                         broker.say("Order shortcuts are off: ⌘🌐 turns them on")
                         return nil
                     }
-                    // KEYS ON: ⌘1 / 2 / 3 buys $1,000 / $2,000 / $3,000 at the mid (see `OrderKeys.buyHotkey`), once
+                    // KEYS ON: ⌘1 / 2 / 3 / 4 buys $1,000 / $2,000 / $3,000 / 85% of the buying power at the mid
+                    // (see `OrderKeys.buyHotkey`), once
                     // per press (a held key doesn't repeat it); off, they switch timeframes (below).
                     if inMainWindow, modifiers == .command, workspace.orderShortcutsOn,
                        let hotkey = OrderKeys.number(keyCode: event.keyCode).flatMap(OrderKeys.buyHotkey(number:)) {
@@ -202,10 +203,10 @@ struct TradingShortcuts: ViewModifier {
                         broker.run(OrderKeys.hotkey(number: number), symbol: workspace.targetSymbol)
                         return nil
                     }
-                    // With the order shortcuts on, ⌘4–9 are the hotkeys' (above): one with none does nothing.
+                    // With the order shortcuts on, ⌘5–9 are the hotkeys' (above): one with none does nothing.
                     if inMainWindow, modifiers == .command, workspace.orderShortcutsOn, OrderKeys.number(keyCode: event.keyCode) != nil {
                         NSSound.beep()
-                        broker.say("\(KeyShortcut(event).display) has no hotkey (KEYS ON: ⌘4–9 are for hotkeys)")
+                        broker.say("\(KeyShortcut(event).display) has no hotkey (KEYS ON: ⌘5–9 are for hotkeys)")
                         return nil
                     }
                     // ⌥1–6, ⇧1–6 (outside a text field) or ⌥⇧1–6, or ⌘1–6 while the order shortcuts are off: the
@@ -329,7 +330,8 @@ extension KeyShortcut {
         }
         if command, !option, !control, !shift, let number = OrderKeys.number(keyCode: keyCode),
            OrderKeys.buyNumbers.contains(number) {
-            return "\(display) buys $\((number * 1000).formatted()) at the mid with KEYS ON (a timeframe with them off)"
+            let size = number == 4 ? "85% of the buying power" : "$" + (number * 1000).formatted()
+            return "\(display) buys \(size) at the mid with KEYS ON (a timeframe with them off)"
         }
         if command, !option, !control {
             if keyCode == 36 || keyCode == 76 {

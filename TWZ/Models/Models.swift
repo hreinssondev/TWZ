@@ -317,14 +317,16 @@ nonisolated enum OrderKeys {
         OrderPad(buyingPower: true, kind: .mid, number: number).hotkey
     }
 
-    /// ⌘1 / 2 / 3 with KEYS ON: a buy of $1,000 / $2,000 / $3,000, limit at the mid, no offset, outside
-    /// regular hours too, DAY (with KEYS off they switch timeframes); nil for the other numbers.
-    static let buyNumbers = 1...3
+    /// ⌘1 / 2 / 3 / 4 with KEYS ON: a buy of $1,000 / $2,000 / $3,000 / 85% of the buying power IB's margin
+    /// allows in the stock, limit at the mid (not MIDPRICE), no offset, outside regular hours too, DAY (with
+    /// KEYS off they switch timeframes); nil for the other numbers.
+    static let buyNumbers = 1...4
     static func buyHotkey(number: Int) -> Hotkey? {
         guard buyNumbers.contains(number) else { return nil }
-        let amount = Double(number * 1000)
-        var hotkey = Hotkey(label: Hotkey.autoLabel(action: .buy, sizing: .dollars, amount: amount), action: .buy,
-                            sizing: .dollars, amount: amount, orderType: .limit, priceReference: .mid, offset: 0)
+        let sizing: Hotkey.Sizing = number == 4 ? .buyingPower : .dollars
+        let amount = number == 4 ? 85 : Double(number * 1000)
+        var hotkey = Hotkey(label: Hotkey.autoLabel(action: .buy, sizing: sizing, amount: amount), action: .buy,
+                            sizing: sizing, amount: amount, orderType: .limit, priceReference: .mid, offset: 0)
         hotkey.outsideRth = true
         hotkey.tif = .day
         return hotkey

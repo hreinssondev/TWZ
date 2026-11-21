@@ -220,7 +220,7 @@ private struct TradingSettings: View {
     @AppStorage(Confetti.enabledKey) private var confetti = Confetti.defaultEnabled
 
     private let shortcuts: [(String, String)] = [
-        ("⌘🌐 (⌘ fn)", "Turn the shortcuts that send orders (hotkeys' own, ⌘⇧↩, ⌘⌫) on or off; off at every launch, KEYS ON in the top bar while on, when ⌘1–3 buy and ⌘4–9 are the hotkeys' instead of timeframes"),
+        ("⌘🌐 (⌘ fn)", "Turn the shortcuts that send orders (hotkeys' own, ⌘⇧↩, ⌘⌫) on or off; off at every launch, KEYS ON in the top bar while on, when ⌘1–4 buy and ⌘5–9 are the hotkeys' instead of timeframes"),
         ("⌘⇧↩", "Send the selected hotkey button's order, or with none selected the order pad's"),
         ("⌘↩", "Keep the selected chart's tick-by-tick trades on or off once it's deselected (⚡ while on, "
             + "a red circle once IB's limit leaves it out); the selected chart always gets trades and bid/ask"),
@@ -234,8 +234,8 @@ private struct TradingSettings: View {
             + "Top Gainers, Forex (S, H and L wait a moment for a second letter)"),
         ("⌘⇧ L+O  /  S+H", "Both letters held together: the trade mode, LONG or SHORT (the top bar's LIVE / PAPER badge green or red); Mode hotkeys buy while LONG, sell short while SHORT"),
         ("⌥, ⇧ or ⌥⇧ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D (also ⌘ 1–6 with KEYS off)"),
-        ("⌘ 1 2 3 with KEYS ON", "Buy $1,000 / $2,000 / $3,000 of the selected chart's stock: limit at the mid, no offset, outside regular hours too"),
-        ("⌘ 4–9 with KEYS ON", "Free for hotkeys: give a hotkey button one as its shortcut to send its order"),
+        ("⌘ 1 2 3 4 with KEYS ON", "Buy $1,000 / $2,000 / $3,000 / 85% of the buying power IB allows in the selected chart's stock: limit at the mid (not MIDPRICE), no offset, outside regular hours too"),
+        ("⌘ 5–9 with KEYS ON", "Free for hotkeys: give a hotkey button one as its shortcut to send its order"),
         ("⌘⌥ 1–9", "A Mode order (buy while LONG, short while SHORT) of 10–90% of the buying power IB allows in the stock: limit at the mid, no offset, outside regular hours too (with KEYS ON)"),
         ("⌘R, ⇧R or ⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("⌥0  /  ⇧A", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes); ⇧A not while typing"),

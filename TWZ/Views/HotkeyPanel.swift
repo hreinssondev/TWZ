@@ -7,7 +7,7 @@
 //  hotkey button is selected.
 //  On the right, a two-row grid of configurable hotkey buttons (closing, cancelling, or orders of
 //  their own) acting on the selected chart's symbol. Clicking one selects it (never sends it):
-//  ⌘⇧↩ sends it, and its own shortcut (⌘4–9 too, with KEYS ON) sends it any time. New buttons go in on the left. Click the "Hotkeys" title to customize them
+//  ⌘⇧↩ sends it, and its own shortcut (⌘5–9 too, with KEYS ON) sends it any time. New buttons go in on the left. Click the "Hotkeys" title to customize them
 //  all, or right-click a button to edit just that one.
 //
 
