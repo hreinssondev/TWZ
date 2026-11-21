@@ -201,9 +201,8 @@ final class Workspace {
         return orderKeys.first { $0.shortcut?.numberRow == pressed }
     }
     /// KEYS ON: the order shortcuts (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫) go to IB; off, SIM, they trade what-if
-    /// positions (see `TradingShortcuts`). ⌘ and the Globe (fn) key switch it; the Positions column follows, real
-    /// positions or what-if trades (with the real positions above them while one is open). Not saved: SIM at
-    /// launch, or KEYS ON once IB's positions are in with a real one open.
+    /// positions (see `TradingShortcuts`). ⌘ and the Globe (fn) key switch it; Positions and the charts show both
+    /// either way. Not saved: SIM at launch, or KEYS ON once IB's positions are in with a real one open.
     var orderShortcutsOn = false
     /// KEYS ON or SIM has been settled since launch, by IB's positions coming in or by ⌘🌐. Not saved.
     var launchModeChosen = false
@@ -430,8 +429,7 @@ final class Workspace {
 
         selectedHotkeyID = defaults.string(forKey: "selectedHotkey").flatMap(UUID.init(uuidString:))
         orderPad = defaults.data(forKey: OrderPad.storageKey).flatMap { try? JSONDecoder().decode(OrderPad.self, from: $0) } ?? OrderPad()
-        // SIM (KEYS off) at every launch: the Positions column on the what-if trades.
-        defaults.set(true, forKey: PositionsView.showsSimKey)
+        defaults.removeObject(forKey: "positionsShowSim")  // the old Positions header switch
         // The $ / % switch was the order pad's own before ⌘⇧M: it starts as the pad was.
         if defaults.string(forKey: SizeMode.storageKey) == nil {
             struct LegacyPad: Decodable { var buyingPower: Bool? }

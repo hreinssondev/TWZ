@@ -6,8 +6,8 @@
 //  The ones that send orders (order keys, a hotkey's own shortcut, ⌘⇧↩, ⌥⌘⇧↩, ⌘⌫) go to IB only with KEYS ON, ⌘ and
 //  the Globe (fn) key turning it on and off (see `Workspace.orderShortcutsOn`); with KEYS off, SIM, as at every
 //  launch (KEYS ON at launch with a live position open), the same shortcuts trade what-if positions instead
-//  (simulated, never sent to IB, see `Broker.runSim`; ⌘⌫ closes the what-if trade), and the Positions column shows
-//  the what-if trades below the real positions (only the real positions with KEYS ON).
+//  (simulated, never sent to IB, see `Broker.runSim`; ⌘⌫ closes the what-if trade). Positions and the charts show
+//  the real positions and orders and the what-if trades together either way.
 //  Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) works on real orders either way.
 //  ⌥Z cancels the last order placed; ⌥< cancels every order in the selected chart's symbol,
 //  stop loss and take profit included. Matched by character, so ⌥< is the < key on Nordic
@@ -55,14 +55,13 @@ struct TradingShortcuts: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            // At launch, once IB's positions are in: with a real one open, KEYS ON and the real positions (else
-            // SIM, as the app starts). Once, not on reconnecting, nor after ⌘🌐.
+            // At launch, once IB's positions are in: with a real one open, KEYS ON (else SIM, as the app starts).
+            // Once, not on reconnecting, nor after ⌘🌐.
             .onChange(of: broker.positionsLoaded, initial: true) { _, loaded in
                 guard loaded, !workspace.launchModeChosen else { return }
                 workspace.launchModeChosen = true
                 guard broker.hasLivePositions else { return }
                 workspace.orderShortcutsOn = true
-                UserDefaults.standard.set(false, forKey: PositionsView.showsSimKey)
                 broker.say("KEYS ON: a live position is open, so order shortcuts go to IB, for real (⌘🌐: SIM)")
             }
             .onAppear {
@@ -79,9 +78,6 @@ struct TradingShortcuts: ViewModifier {
                         if wentDown, flags == [.command, .function], event.window?.attachedSheet == nil {
                             workspace.orderShortcutsOn.toggle()
                             workspace.launchModeChosen = true
-                            // Positions and the charts' trades follow; in SIM the real positions show too while
-                            // one is open (see `PositionsView`, `TradingChart`).
-                            UserDefaults.standard.set(!workspace.orderShortcutsOn, forKey: PositionsView.showsSimKey)
                             broker.say(workspace.orderShortcutsOn ? "KEYS ON: order shortcuts go to IB, for real (⌘🌐: SIM)"
                                                                   : "SIM: order shortcuts trade what-if positions, nothing goes to IB (⌘🌐: KEYS ON)")
                         }
@@ -102,12 +98,9 @@ struct TradingShortcuts: ViewModifier {
                             broker.cancelOrders(for: symbol)
                         }
                     }
-                    /// An order: with KEYS ON for real, with them off (SIM) as a what-if trade (see `Broker.runSim`);
-                    /// Positions shows the real positions or the what-if trades to match.
+                    /// An order: with KEYS ON for real, with them off (SIM) as a what-if trade (see `Broker.runSim`).
                     func place(_ hotkey: Hotkey) {
-                        let real = workspace.orderShortcutsOn
-                        UserDefaults.standard.set(!real, forKey: PositionsView.showsSimKey)
-                        if real {
+                        if workspace.orderShortcutsOn {
                             broker.run(hotkey, symbol: workspace.targetSymbol)
                         } else {
                             broker.runSim(hotkey, symbol: workspace.targetSymbol)
@@ -249,14 +242,12 @@ struct TradingShortcuts: ViewModifier {
                                 NSSound.beep()
                             } else if workspace.orderShortcutsOn {
                                 workspace.whatIfs[symbol] = nil
-                                UserDefaults.standard.set(false, forKey: PositionsView.showsSimKey)
                                 broker.closePosition(symbol)
                             } else if broker.simPositions[s] == nil {
                                 NSSound.beep()
                                 broker.say("SIM: no what-if trade in \(s) to close (KEYS ON, ⌘🌐, closes the real position)")
                             } else {
                                 workspace.whatIfs[symbol] = nil
-                                UserDefaults.standard.set(true, forKey: PositionsView.showsSimKey)
                                 broker.closeSimAtMarket(s)
                             }
                         case "z":

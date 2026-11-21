@@ -4,11 +4,10 @@
 //
 //  Orders and Positions side by side as two always-visible columns, with a draggable divider
 //  between them; clicking the Orders header stacks them instead, Positions on top (clicking again
-//  puts them side by side). Clicking the Positions header switches it between real positions and
-//  what-if trades, and the charts' arrows with it (see `PositionsView`). Rows are two lines so they
-//  fit the narrow columns.
+//  puts them side by side). Positions lists the real positions and the what-if trades together, in
+//  KEYS ON and SIM alike. Rows are two lines so they fit the narrow columns.
 //  Orders lists the working orders and, once done, what each filled: dimmed, at its average fill price.
-//  Positions lists the newest first, then the what-if trades, newest first too (see `positionItems`).
+//  Positions lists the newest first, then a row's height of space, then the what-if trades, newest first too (see `positionItems`).
 //  A ⌃-click what-if buy shows among them too, as What-if, with IB's preview of its commissions and fees
 //  and the margin it would take (it's never sent); its ✕ removes it, like ⌃-clicking its line.
 //  Fills of orders entered in TWS (which IB reports without an order id) in the same symbol, side and
@@ -41,8 +40,6 @@ struct OrdersPanel: View {
     @AppStorage("ordersStacked") private var stacked = false
     /// Height of the Positions row as a share of the stack; Orders takes the rest.
     @AppStorage("positionsRow") private var positionsRowShare: Double = 1 / 3
-    /// Positions shows what-if trades instead of real positions (see `PositionsView`).
-    @AppStorage(PositionsView.showsSimKey) private var showsSim = false
     /// Height of the three columns as a share of the panel; round trips take the rest.
     @AppStorage("roundTripsSplit") private var columnsShare: Double = 0.5
     @AppStorage("bottomTab") private var bottomTab: BottomTab = .roundTrips
@@ -130,15 +127,15 @@ struct OrdersPanel: View {
         column("Orders", count: activeOrders.count, onEmptyClick: deselectChart, onHeaderClick: toggleStacked) { orderRows }
     }
 
-    /// Its header switches between real positions and what-if trades (the Orders header stacks them).
+    /// Real positions and what-if trades together (the Orders header stacks the columns).
     private var positionsColumn: some View {
         column(title: {
-            Text(showsSim ? "Sim positions" : "Positions").fontWeight(.semibold)
-                .foregroundStyle(showsSim ? TradingChart.whatIfColor : Color.primary)
-            Text("\(showsSim ? broker.simPositions.count : broker.positions.count)").foregroundStyle(.secondary)
-        }, onEmptyClick: deselectChart, onHeaderClick: { showsSim.toggle() },
-           headerHelp: showsSim ? "Click to show real positions (and their trade arrows on the charts)"
-                                : "Click to show what-if trades (and their arrows on the charts)") { positionRows }
+            Text("Positions").fontWeight(.semibold)
+            Text("\(broker.positions.count)").foregroundStyle(.secondary)
+            if !broker.simPositions.isEmpty {
+                Text("+ \(broker.simPositions.count) sim").foregroundStyle(TradingChart.whatIfColor)
+            }
+        }, onEmptyClick: deselectChart) { positionRows }
     }
 
     private func toggleStacked() {
@@ -492,13 +489,9 @@ struct OrdersPanel: View {
             RoundTrip.build(fills: Array(broker.fills.values), positions: broker.positions)
                 .filter { $0.isOpen && $0.carried == 0 }.map { ($0.symbol, $0.start) },
             uniquingKeysWith: max)
-        // Real positions or what-if trades, as the header switches (see `PositionsView`); with what-if trades
-        // shown, the open real positions above them too.
-        let real = broker.positions.values.map { (item: PositionItem.real($0), opened: opened[$0.symbol]) }
-        let sim = broker.simPositions.values.map { (item: PositionItem.sim($0), opened: Optional($0.opened)) }
-        let items = showsSim
-            ? real.filter { if case .real(let p) = $0.item { p.quantity != 0 } else { false } } + sim
-            : real
+        // Real positions and what-if trades together, in KEYS ON and SIM alike; the real ones first.
+        let items = broker.positions.values.map { (item: PositionItem.real($0), opened: opened[$0.symbol]) }
+            + broker.simPositions.values.map { (item: PositionItem.sim($0), opened: Optional($0.opened)) }
         return items.sorted { a, b in
             if a.item.isSim != b.item.isSim { return b.item.isSim }
             return switch (a.opened, b.opened) {
@@ -516,7 +509,7 @@ struct OrdersPanel: View {
         let real = items.filter { !$0.isSim }, sim = items.filter(\.isSim)
         // Real positions over what-if trades: a row's height of space between them.
         let gap: Position? = sim.isEmpty ? nil : real.lazy.compactMap { if case .real(let p) = $0 { p } else { nil } }.first
-        if items.isEmpty { empty(showsSim ? "No what-if trades" : "No positions") }
+        if items.isEmpty { empty("No positions") }
         ForEach(real + sim) { item in
             switch item {
             case .real(let p): positionRow(p, tripOrders: openTripOrders[p.symbol])

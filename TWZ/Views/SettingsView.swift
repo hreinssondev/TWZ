@@ -335,7 +335,7 @@ private struct OrderKeysSettings: View {
     }
 
     private static let fixed: [(String, String)] = [
-        ("⌘🌐 (⌘ fn)", "KEYS ON / SIM: with KEYS ON every order shortcut here goes to IB, for real, and Positions shows the real positions; off, SIM (as at every launch), the same shortcuts trade what-if positions, never sent to IB, filled at once at the order's price (a limit at its reference ± offset, MIDPRICE at the mid, market at the ask or bid), and Positions shows the what-if trades. At launch it's KEYS ON instead when a live position is open; in SIM the live positions stay on the charts and in Positions, above the what-if trades. The top bar reads KEYS $ / % or SIM $ / %"),
+        ("⌘🌐 (⌘ fn)", "KEYS ON / SIM: with KEYS ON every order shortcut here goes to IB, for real; off, SIM (as at launch), the same shortcuts trade what-if positions, never sent to IB, filled at once at the order's price (a limit at its reference ± offset, MIDPRICE at the mid, market at the ask or bid). At launch it's KEYS ON instead when a live position is open. The charts and Positions show the real positions and orders and the what-if trades together either way. The top bar reads KEYS $ / % or SIM $ / %"),
         ("⌘⇧↩  /  ⌥⌘⇧↩", "Send the selected hotkey button's order; with none selected, buy (⌘⇧↩) or sell short (⌥⌘⇧↩) the order pad's"),
         ("⌘⇧M", "Switch the order numbers between dollars ($1,000 a step: 1–9 are $1,000–$9,000) and a percent of the buying power (20% a step: 1–4 are 20–80%, 5–9 none): KEYS $ or KEYS % in the top bar, and the order pad's $ and %"),
         ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market; removes its ⌃-click what-if too. In SIM it closes the chart's what-if trade instead"),

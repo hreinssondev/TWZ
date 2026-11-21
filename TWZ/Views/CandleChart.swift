@@ -111,9 +111,6 @@ struct CandleChart: View {
     var shownFillIds: Set<String> = []
     /// ⇧-, ⌘-, ⌥- or ⌃-swipe on the trackpad: the grid's zoom times this (above 1: zoomed out), as its Zoom slider.
     var onZoomAll: ((Double) -> Void)?
-    /// Real trades' arrows with the top bar's Trades on; off while the Positions column shows what-if
-    /// trades (see `PositionsView`). A round trip shown from the Round trips tab shows either way.
-    var showsRealTrades = true
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
 
@@ -569,7 +566,7 @@ struct CandleChart: View {
         plotCtx.fill(downBodies, with: .color(down))
 
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
-        if (showTrades && showsRealTrades) || !shownFillIds.isEmpty {
+        if showTrades || !shownFillIds.isEmpty {
             drawTrades(in: &plotCtx, bars: bars, start: start, end: end, bodyWidth: bodyWidth, x: x, y: y)
         }
         if !pointers.isEmpty {
@@ -672,7 +669,7 @@ struct CandleChart: View {
     /// The day's fills in this chart's symbol, on the visible bars.
     private func drawTrades(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, bodyWidth: CGFloat,
                             x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
-        let fills = broker.fills.values.filter { $0.symbol == chart.symbol && ((showTrades && showsRealTrades) || shownFillIds.contains($0.id)) }
+        let fills = broker.fills.values.filter { $0.symbol == chart.symbol && (showTrades || shownFillIds.contains($0.id)) }
         guard !fills.isEmpty else { return }
         var groups: [String: (bar: Int, isBuy: Bool, shares: Double, cost: Double)] = [:]
         for fill in fills {

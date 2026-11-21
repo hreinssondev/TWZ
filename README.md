@@ -43,11 +43,11 @@ management in one window built for quick entries and exits.
   place of the pad's order. ⌘⇧↩ sends the selected hotkey, or buys the pad's order; ⌥⌘⇧↩ sells the pad's order
   short; ⌘⌫ cancels the symbol's orders and closes the position at market.
 - **KEYS ON and SIM** (⌘ and the Globe (fn) key switch): with KEYS ON every order shortcut (order keys, hotkeys'
-  own, ⌘⇧↩, ⌥⌘⇧↩, ⌘⌫) goes to IB and Positions shows the real positions; in SIM, as at every launch, the same
-  shortcuts trade what-if positions instead, never sent to IB, filled at once at the order's price (a limit at
-  its reference ± offset, MIDPRICE at the mid, market at the ask or bid), and Positions shows the what-if
-  trades (⌘⌫ closes the what-if trade). At launch it's KEYS ON instead when a live position is open; in SIM the
-  live positions stay on the charts and in Positions, above the what-if trades. The top bar reads KEYS $ / KEYS % in orange, or SIM $ / SIM % dimmed.
+  own, ⌘⇧↩, ⌥⌘⇧↩, ⌘⌫) goes to IB; in SIM, as at launch, the same shortcuts trade what-if positions instead,
+  never sent to IB, filled at once at the order's price (a limit at its reference ± offset, MIDPRICE at the
+  mid, market at the ask or bid); ⌘⌫ closes the what-if trade. At launch it's KEYS ON instead when a live
+  position is open. Either way the charts and Positions show the real positions and orders and the what-if
+  trades together, the real positions on top and a row's space above the what-if trades. The top bar reads KEYS $ / KEYS % in orange, or SIM $ / SIM % dimmed.
 - **Order keys** (Settings › Order Keys): keyboard shortcuts that send an order without a button, listed by
   shortcut, added, edited or deleted there, beside the hotkey buttons' shortcuts and the fixed ones. By default
   ⌘1–9 buys and ⌥⌘1–9 sells short that many steps of the $ / % switch (⌘3: $3,000 or 60%; the buy and sell
@@ -62,8 +62,7 @@ management in one window built for quick entries and exits.
 - **Scanner lists**: gainers, losers, after-hours gainers and most active by dollar volume, with
   each stock's 5-minute change. One click charts a stock; the load button fills the grid from a list.
 - **Orders, fills and positions** side by side or stacked, with today's round trips and their P/L.
-  Clicking the Positions header switches it between real positions and what-if trades, and the
-  charts' trade arrows with it. Double-clicking a position, order or round trip selects its stock's
+  Positions lists the real positions and the what-if trades together. Double-clicking a position, order or round trip selects its stock's
   chart; with none on screen, the grid goes back to where it last showed the stock (its list, as ⌘⇧
   and the list's letter loads it, and its cell) instead of replacing a chart you're looking at; one it
   never showed goes to the list that has it now (the grid's own first), and a forex pair always to Forex.
