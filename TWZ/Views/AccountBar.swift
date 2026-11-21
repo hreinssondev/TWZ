@@ -181,25 +181,20 @@ private struct ScaleButtons: View {
 }
 
 /// LIVE or PAPER (the gateway port), in the color of the trade mode Mode hotkeys go by (see
-/// `TradeMode`): green while LONG, red while SHORT; SIM in the what-if pink in SIM mode (see `SimMode`);
-/// dimmed grey, as KEYS OFF, while the order shortcuts are off.
+/// `TradeMode`): green while LONG, red while SHORT; dimmed grey, as KEYS OFF, while the order shortcuts are off.
 private struct AccountBadge: View {
     let isLive: Bool
     let keysOn: Bool
     @AppStorage(TradeMode.storageKey) private var mode: TradeMode = .long
-    @AppStorage(SimMode.storageKey) private var sim = false
 
     var body: some View {
-        Text(sim ? "SIM" : isLive ? "LIVE" : "PAPER")
+        Text(isLive ? "LIVE" : "PAPER")
             .font(.system(size: 10, weight: .heavy))
-            .foregroundStyle(keysOn ? Color.white : sim ? TradingChart.whatIfColor : Color.secondary.opacity(0.7))
+            .foregroundStyle(keysOn ? Color.white : Color.secondary.opacity(0.7))
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(!keysOn ? Color.primary.opacity(0.08)
-                                       : sim ? TradingChart.whatIfColor.opacity(0.85)
                                        : mode == .long ? Color.green.opacity(0.8) : Color.red.opacity(0.85)))
-            .help(sim
-                  ? "SIM mode on the \(isLive ? "live" : "paper") account: order shortcuts trade what-if positions, nothing goes to IB; Mode orders \(mode == .long ? "buy (LONG)" : "sell short (SHORT)"). ⌘⇧ with L and O (together or one after the other): real trading, LONG; with S and H: SHORT"
-                  : "\(isLive ? "Live" : "Paper") account · \(mode == .long ? "LONG" : "SHORT"): Mode hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O (together or one after the other): LONG; with S and H: SHORT; with S and I: SIM mode")
+            .help("\(isLive ? "Live" : "Paper") account · \(mode == .long ? "LONG" : "SHORT"): Mode hotkeys \(mode == .long ? "buy" : "sell short"). ⌘⇧ with L and O (together or one after the other): LONG; with S and H: SHORT. ⌃ with any order shortcut: the same order as a what-if trade")
     }
 }
 

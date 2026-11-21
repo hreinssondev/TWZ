@@ -19,14 +19,16 @@
 //  (R, G, B, Y, O, P, M, W, K khaki, I pink, N brown, F turquoise, L lime) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
+//  ⌃ held with any order shortcut (an order key's or hotkey's own, ⌘⇧↩, ⌘⌫) does the same as a what-if trade
+//  (simulated, never sent to IB, see `Broker.runSim`), KEYS ON or not, and shows Positions' what-if trades; the
+//  same shortcut without ⌃ sends for real and shows the real positions.
 //  ⌃⌥⇧1 / 2 / 3 / 4 sells (shorts) a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 /
 //  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 no longer buys one: ⌥⇧ and
 //  numbers are timeframes). Matched by key, number row or keypad, whatever the keyboard layout types there.
 //  ⌘R, ⇧R (outside a text field) or ⌘⇧R does what the top bar's Reset does.
 //  ⌘⇧ with two letters, held together or pressed one after the other (within `chordWait`), switches the trade
-//  mode (see `TradeMode`): S + H SHORT, L + O LONG,
-//  both trading for real, out of SIM mode; S + I SIM mode (see `SimMode`), where every order shortcut trades
-//  what-if positions instead. S, H and L alone (lists' letters too) wait a moment for the other letter first.
+//  mode (see `TradeMode`): S + H SHORT, L + O LONG. S, H and L alone (lists' letters too) wait a moment for the
+//  other letter first.
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
 //  With the order shortcuts on, an order key (Settings › Order Keys, see `OrderKeys`) sends its order, once per
@@ -49,37 +51,12 @@ struct TradingShortcuts: ViewModifier {
     @Environment(Workspace.self) private var workspace
     @State private var monitor: Any?
 
-    /// What a two-letter ⌘⇧ shortcut switches to.
-    private enum ChordTarget { case long, short, sim }
-    /// The two-letter ⌘⇧ shortcuts, by either letter's key: the other letter's, and what they switch to.
-    /// S + H SHORT, L + O LONG, S + I SIM (by position, as on a US keyboard).
-    private static let chords: [UInt16: [(partner: CGKeyCode, target: ChordTarget)]] = [
-        1: [(4, .short), (34, .sim)], 4: [(1, .short)],     // S, H
-        34: [(1, .sim)],                                      // I
-        37: [(31, .long)], 31: [(37, .long)],                 // L, O
+    /// The two-letter ⌘⇧ shortcuts, by either letter's key: the other letter's, and the trade mode they
+    /// switch to. S + H SHORT, L + O LONG (by position, as on a US keyboard).
+    private static let chords: [UInt16: [(partner: CGKeyCode, mode: TradeMode)]] = [
+        1: [(4, .short)], 4: [(1, .short)],       // S, H
+        37: [(31, .long)], 31: [(37, .long)],     // L, O
     ]
-
-    /// ⌘⇧ L+O / S+H: LONG / SHORT, trading for real (out of SIM mode, the Positions column back on the real
-    /// positions); S+I: SIM mode, the Positions column on the what-if trades (see `SimMode`).
-    private static func switchMode(to target: ChordTarget, broker: Broker) {
-        let defaults = UserDefaults.standard
-        let wasSim = SimMode.isOn
-        switch target {
-        case .sim:
-            defaults.set(true, forKey: SimMode.storageKey)
-            defaults.set(true, forKey: PositionsView.showsSimKey)
-            if !wasSim {
-                broker.say("SIM mode: order shortcuts trade what-if positions, nothing goes to IB (⌘⇧ L+O or S+H trades for real again)")
-            }
-        case .long, .short:
-            defaults.set((target == .long ? TradeMode.long : .short).rawValue, forKey: TradeMode.storageKey)
-            if wasSim {
-                defaults.set(false, forKey: SimMode.storageKey)
-                defaults.set(false, forKey: PositionsView.showsSimKey)
-                broker.say("Real trading, \(target == .long ? "LONG" : "SHORT"): order shortcuts go to IB again")
-            }
-        }
-    }
     /// How long S, H or L alone wait for the other letter before showing their list, and how soon after the
     /// first letter the second makes the chord when pressed one after the other.
     private static let chordWait = 0.4
@@ -122,6 +99,29 @@ struct TradingShortcuts: ViewModifier {
                         broker.say("Order shortcuts are off: ⌘🌐 turns them on")
                         return nil
                     }
+                    /// An order for real: Positions shows the real positions again.
+                    func send(_ hotkey: Hotkey) {
+                        UserDefaults.standard.set(false, forKey: PositionsView.showsSimKey)
+                        broker.run(hotkey, symbol: workspace.targetSymbol)
+                    }
+                    /// ⌃ and an order shortcut: the same order as a what-if trade (see `Broker.runSim`), shown under
+                    /// Positions' what-if trades.
+                    func simulate(_ hotkey: Hotkey) {
+                        UserDefaults.standard.set(true, forKey: PositionsView.showsSimKey)
+                        broker.runSim(hotkey, symbol: workspace.targetSymbol)
+                    }
+                    // ⌃ and an order key's or hotkey's shortcut (one with no ⌃ of its own): that order as a what-if
+                    // trade, KEYS ON or not, once per press.
+                    if inMainWindow, modifiers.contains(.control) {
+                        let exact = KeyShortcut(event)
+                        var plain = exact
+                        plain.control = false
+                        if workspace.orderKey(for: exact) == nil, !workspace.hotkeys.contains(where: { $0.shortcut == exact }),
+                           let hotkey = workspace.orderKey(for: plain) ?? workspace.hotkeys.first(where: { $0.shortcut == plain }) {
+                            if !event.isARepeat { simulate(hotkey) }
+                            return nil
+                        }
+                    }
                     // ⌘1–6 switch timeframes while the order shortcuts are off, an order key or hotkey on one of them or not.
                     let timeframeKey = modifiers == .command && Timeframe(keyCode: event.keyCode) != nil
                     // An order key (Settings › Order Keys): with KEYS ON its order, once per press (a held key doesn't
@@ -129,7 +129,7 @@ struct TradingShortcuts: ViewModifier {
                     if inMainWindow, let orderKey = workspace.orderKey(for: KeyShortcut(event)), workspace.orderShortcutsOn || !timeframeKey {
                         if event.window?.firstResponder is NSTextView, KeyShortcut(event).isPlain { return event }
                         guard workspace.orderShortcutsOn else { return refuse() }
-                        if !event.isARepeat { broker.run(orderKey, symbol: workspace.targetSymbol) }
+                        if !event.isARepeat { send(orderKey) }
                         return nil
                     }
                     if inMainWindow, workspace.orderShortcutsOn || !timeframeKey,
@@ -140,16 +140,35 @@ struct TradingShortcuts: ViewModifier {
                             return event
                         }
                         guard workspace.orderShortcutsOn else { return refuse() }
-                        broker.run(hotkey, symbol: workspace.targetSymbol)
+                        send(hotkey)
                         return nil
                     }
                     let isReturn = event.keyCode == 36 || event.keyCode == 76      // Return or keypad Enter
+                    // ⌃⌘⇧↩: the selected hotkey's (or the order pad's) order as a what-if trade.
+                    if modifiers == [.control, .command, .shift], isReturn, inMainWindow, let window = event.window {
+                        if window.firstResponder is NSTextView { return event }
+                        if !event.isARepeat { simulate(workspace.activeHotkey) }
+                        return nil
+                    }
+                    // ⌃⌘⌫: closes the selected chart's what-if trade at market (⌘⌫ without ⌃ the real position).
+                    if modifiers == [.control, .command], event.keyCode == 51, inMainWindow, let window = event.window {
+                        if window.firstResponder is NSTextView { return event }
+                        let symbol = workspace.targetSymbol.uppercased()
+                        if symbol.isEmpty || broker.simPositions[symbol] == nil {
+                            NSSound.beep()
+                            broker.say(symbol.isEmpty ? "Select a chart first" : "No what-if trade in \(symbol) to close")
+                        } else {
+                            UserDefaults.standard.set(true, forKey: PositionsView.showsSimKey)
+                            broker.closeSimAtMarket(symbol)
+                        }
+                        return nil
+                    }
                     // ⌘⇧↩: a symbol still being typed isn't the chart's yet.
                     if modifiers == [.command, .shift], isReturn, inMainWindow, let window = event.window {
                         if window.firstResponder is NSTextView { return event }
                         guard workspace.orderShortcutsOn else { return refuse() }
                         // The selected hotkey button, or the order pad's order (see `OrderPad`).
-                        broker.run(workspace.activeHotkey, symbol: workspace.targetSymbol)
+                        send(workspace.activeHotkey)
                         return nil
                     }
                     // ⌃⌥⇧1–4 sells a what-if trade in the selected chart's symbol (⌥⇧ and numbers are timeframes).
@@ -177,8 +196,8 @@ struct TradingShortcuts: ViewModifier {
                         return nil
                     }
                     // ⌘⇧ with two letters, held together or one after the other: S + H the SHORT trade mode, L + O
-                    // the LONG one (see `TradeMode`), S + I SIM mode (see `SimMode`). S, H and L alone are lists'
-                    // letters too: those wait a moment for the other letter before showing the list.
+                    // the LONG one (see `TradeMode`). S, H and L alone are lists' letters too: those wait a moment for
+                    // the other letter before showing the list.
                     if inMainWindow, modifiers == [.command, .shift], let chords = Self.chords[event.keyCode] {
                         if event.isARepeat { return nil }
                         let previous = Self.lastChordKey.flatMap { Date().timeIntervalSince($0.time) <= Self.chordWait ? $0.code : nil }
@@ -189,7 +208,7 @@ struct TradingShortcuts: ViewModifier {
                             Self.lastChordKey = nil
                             Self.pendingList?.cancel()
                             Self.pendingList = nil
-                            Self.switchMode(to: chord.target, broker: broker)
+                            UserDefaults.standard.set(chord.mode.rawValue, forKey: TradeMode.storageKey)
                             return nil
                         }
                         Self.lastChordKey = (event.keyCode, Date())
@@ -274,9 +293,7 @@ struct TradingShortcuts: ViewModifier {
                             if typing { return event }
                             // A what-if trade alone closes either way (see `Broker.closePosition`).
                             let s = symbol.uppercased()
-                            // SIM mode: only ever the what-if trade (see `Broker.closePosition`).
-                            let simOnly = SimMode.isOn
-                                || (broker.positions[s].map { $0.quantity == 0 } ?? true) && broker.simPositions[s] != nil
+                            let simOnly = (broker.positions[s].map { $0.quantity == 0 } ?? true) && broker.simPositions[s] != nil
                             if symbol.isEmpty {
                                 NSSound.beep()
                             } else if !workspace.orderShortcutsOn, !simOnly {
@@ -347,9 +364,6 @@ extension KeyShortcut {
         }
         if command, shift, !option, !control, k == "o" {
             return "⌘⇧ with L and O (together or one after the other) switches to LONG"
-        }
-        if command, shift, !option, !control, k == "i" {
-            return "⌘⇧ with S and I (together or one after the other) switches to SIM mode"
         }
         if shift, !command, !option, !control, k == "r" {
             return "⇧R resets the chart grid, as the top bar's Reset"

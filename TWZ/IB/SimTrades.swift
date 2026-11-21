@@ -12,10 +12,10 @@
 //  the last price reaches it: a stop at the bid / ask, no better than its price; a take profit at its
 //  price. ⌘⌫ closes it at market, ⌘A takes its stop loss and take profit off. Nothing is simulated in
 //  a symbol with a real position open. Kept across launches.
-//  SIM mode (⌘⇧ with S and I, see `SimMode`): every order shortcut trades what-if positions in the
-//  same way: an order key's or hotkey's side, size (shares, dollars or a percent of the buying power) and
-//  price, filled at once at that price, a limit at its reference ± offset, MIDPRICE at the mid ± offset,
-//  market at the ask or bid (nothing rests); closing, cancelling and flattening act on the what-if trades.
+//  ⌃ held with any order shortcut (an order key's or hotkey's own, ⌘⇧↩, ⌘⌫) trades what-if positions the
+//  same way: the order's side, size (shares, dollars or a percent of the buying power) and price, filled at
+//  once at that price, a limit at its reference ± offset, MIDPRICE at the mid ± offset, market at the ask or
+//  bid (nothing rests); closing, cancelling and flattening act on the what-if trades.
 //
 
 import Foundation
@@ -67,7 +67,7 @@ nonisolated struct SimPosition: Codable, Equatable, Identifiable {
     }
 }
 
-/// What ⌥⇧1–4 (⌃⌥⇧1–4), or an order in SIM mode, trades.
+/// What ⌥⇧1–4 (⌃⌥⇧1–4), or ⌃ and an order shortcut, trades.
 nonisolated enum SimSize: Equatable {
     case shares(Double)
     case dollars(Double)
@@ -108,7 +108,7 @@ extension Broker {
     }
 
     /// ⌥⇧1–4 (`BUY`) / ⌃⌥⇧1–4 (`SELL`): a what-if trade in `symbol`, at market (see the file's notes); in
-    /// SIM mode at `hotkey`'s price (see `runSim`).
+    /// for ⌃ and an order shortcut at `hotkey`'s price (see `runSim`).
     func placeSim(_ action: String, _ size: SimSize, symbol rawSymbol: String, pricedAs hotkey: Hotkey? = nil) {
         let symbol = rawSymbol.uppercased(), isBuy = action == "BUY"
         guard state == .connected else { return say("Not connected to IB Gateway") }
@@ -145,7 +145,7 @@ extension Broker {
         }
     }
 
-    /// SIM mode (see `SimMode`): `hotkey`'s order as a what-if trade, never sent to IB: a Mode order the
+    /// ⌃ and an order shortcut (see `TradingShortcuts`): `hotkey`'s order as a what-if trade, never sent to IB: a Mode order the
     /// trade mode's way, a buy or sell of its size at its price (see `simOrderPrice`); Close 50% / 100% the
     /// what-if trade at its price; Cancel Symbol / Cancel All take the what-if trades' stop losses and take
     /// profits off; Flatten All closes every one at market.
@@ -166,7 +166,7 @@ extension Broker {
             }
             placeSim(hotkey.action == .buy ? "BUY" : "SELL", size, symbol: symbol, pricedAs: hotkey)
         case .closeHalf, .closeAll:
-            guard let sim = simPositions[symbol] else { return say("SIM mode: no what-if trade in \(symbol)") }
+            guard let sim = simPositions[symbol] else { return say("No what-if trade in \(symbol)") }
             guard let price = simOrderPrice(symbol, hotkey: hotkey, isBuy: !sim.isLong) else {
                 return say("\(symbol): no live price yet, so the what-if trade can't close")
             }
@@ -181,12 +181,12 @@ extension Broker {
             }
         case .cancelSymbol:
             removeSimProtective(symbol)
-            say("SIM mode: \(symbol)'s what-if stop loss and take profit off")
+            say("\(symbol)'s what-if stop loss and take profit off")
         case .cancelAll:
             for s in simPositions.keys { removeSimProtective(s) }
-            say("SIM mode: every what-if stop loss and take profit off")
+            say("Every what-if stop loss and take profit off")
         case .flattenAll:
-            if simPositions.isEmpty { say("SIM mode: no what-if trades to close") }
+            if simPositions.isEmpty { say("No what-if trades to close") }
             for s in Array(simPositions.keys) { closeSimAtMarket(s) }
         }
     }
@@ -277,7 +277,7 @@ extension Broker {
         return [isBuy ? q?.ask : q?.bid, q?.last].compactMap { $0 }.first { $0 > 0 }
     }
 
-    /// Where a SIM-mode order fills (see `runSim`): a limit at its price (its reference ± offset: plus for a
+    /// Where a ⌃ (what-if) order fills (see `runSim`): a limit at its price (its reference ± offset: plus for a
     /// buy, minus for a sell), MIDPRICE at the mid ± offset, a market order at the ask or bid; on the symbol's
     /// steps. The last price stands in for a side of the quote not in yet.
     private func simOrderPrice(_ symbol: String, hotkey: Hotkey, isBuy: Bool) -> Double? {

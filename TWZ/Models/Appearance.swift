@@ -113,16 +113,6 @@ enum TradeMode: String {
     }
 }
 
-/// SIM mode: ⌘⇧ with S and I, held together or one after the other. Every order shortcut (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫) then
-/// trades what-if positions (see `Broker.runSim`), never IB, until ⌘⇧ L+O or S+H picks LONG or SHORT and
-/// real trading again; Mode orders keep going the way the trade mode last was. Going in shows the Positions
-/// column's what-if trades, coming out its real positions (see `PositionsView`); the top bar's badge reads
-/// SIM, in the what-if pink. Saved.
-enum SimMode {
-    static let storageKey = "simMode"
-    static var isOn: Bool { UserDefaults.standard.bool(forKey: storageKey) }
-}
-
 /// The Positions column shows real positions or what-if trades (simulated, see `SimTrades.swift`),
 /// switched by clicking its header; the charts follow: trade arrows of the one shown (real ones with the
 /// top bar's Trades on), and the what-if trades' badge, stop loss / take profit lines, hover P/L and

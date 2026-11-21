@@ -89,6 +89,20 @@ struct ShortcutRecorder: View {
             problem = "\(new.display) is already the order key \"\(other.label)\". Try another."
             return
         }
+        // ⌃ and a hotkey's or order key's shortcut sends its order as a what-if trade (see `TradingShortcuts`),
+        // so a shortcut can't be another's with ⌃ added or taken off.
+        if owner != .chartsWindow {
+            var flipped = new
+            flipped.control.toggle()
+            let other = workspace.hotkeys.first(where: { owner != .hotkey($0.id) && $0.shortcut == flipped })?.label
+                ?? workspace.orderKeys.first(where: { owner != .orderKey($0.id) && $0.shortcut?.numberRow == flipped.numberRow })?.label
+            if let other {
+                problem = new.control
+                    ? "\(new.display) is \"\(other)\" as a what-if trade (⌃ and its shortcut). Try another."
+                    : "⌃\(new.display) would be \"\(other)\"'s own shortcut, not this one's what-if trade. Try another."
+                return
+            }
+        }
         if owner != .chartsWindow, workspace.chartsWindowShortcut == new {
             problem = "\(new.display) shows and hides the Charts window. Try another."
             return

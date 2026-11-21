@@ -49,11 +49,10 @@ management in one window built for quick entries and exits.
   $2,000 / $3,000 / 80%, and ⌥⌘5 / 6 / 7 / 8 / 9 sends a Mode order of 25% / 30% / 50% / 75% / 85%, all limit at
   the mid, no offset, outside regular hours too. With KEYS ON only, once per press; with KEYS off ⌘1–6 switch
   timeframes.
-- **SIM mode** (⌘⇧ with S and I, together or one after the other): every order shortcut (order keys, hotkeys' own, ⌘⇧↩, ⌘⌫)
-  trades what-if positions instead of sending to IB: the same side, size and price, filled at once at the
-  order's price (a limit at its reference ± offset, MIDPRICE at the mid, market at the ask or bid). The top
-  bar's badge reads SIM in pink and Positions shows the what-if trades; ⌘⇧ L+O or S+H trades for real again,
-  LONG or SHORT, Positions back on the real ones. Mode orders go the way the trade mode last was.
+- **Simulated orders**: ⌃ held with any order shortcut (an order key's or hotkey's own, ⌘⇧↩, ⌘⌫ to close)
+  sends the same order as a what-if trade instead of to IB, KEYS ON or not: the same side, size and price,
+  filled at once at the order's price (a limit at its reference ± offset, MIDPRICE at the mid, market at the
+  ask or bid). Positions then shows the what-if trades; an order without ⌃ shows the real positions again.
 - **What-if trades**: ⌃⌥⇧1–4 shorts $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB; on the chart, an arrow, green for a long
   and red for a short, ringed in pink, points at each of its fills. It shows like a position, its symbol in pink,
