@@ -462,11 +462,6 @@ final class Broker {
         order { $0.cancelOrders(for: symbol) }
     }
 
-    /// ⌘A with no chart selected: every working order in every symbol except stop losses and take profits.
-    func cancelEntryOrders() {
-        order { $0.cancelEntryOrders() }
-    }
-
     /// ⌘⌫: cancels every order in `symbol`, stop loss and take profit included, then closes the whole
     /// position at market; with no position but a what-if trade, closes that.
     func closePosition(_ symbol: String) {

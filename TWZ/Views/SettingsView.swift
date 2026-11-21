@@ -224,7 +224,7 @@ private struct TradingSettings: View {
         ("⌘⇧↩", "Send the selected hotkey button's order, or with none selected the order pad's"),
         ("⌘↩", "Keep the selected chart's tick-by-tick trades on or off once it's deselected (⚡ while on, "
             + "a red circle once IB's limit leaves it out); the selected chart always gets trades and bid/ask"),
-        ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if); with no chart selected, ⌘A cancels every symbol's orders except stop losses and take profits"),
+        ("⌘A  /  ⌥<", "Cancel every order in the chart's symbol, stop loss and take profit included (⌘A also removes its ⌃-click what-if)"),
         ("⌘⌫", "Cancel every order in the chart's symbol, then close 100% of the position at market; removes its ⌃-click what-if too"),
         ("⌘⇧⌫", "Remove the chart's ⌃-click what-if (so does double-clicking anywhere on the chart)"),
         ("⌘Z  /  ⌥Z", "Cancel the last order placed"),
