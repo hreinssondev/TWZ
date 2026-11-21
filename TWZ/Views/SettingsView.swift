@@ -375,7 +375,8 @@ private struct OrderKeysSettings: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(sortedKeys) { key in
-                    OrderKeyRow(key: key, onEdit: { editing = Editing(key: key) }) {
+                    OrderKeyRow(key: key, overriddenBy: key.shortcut.flatMap(workspace.hotkeyOverriding)?.label,
+                                onEdit: { editing = Editing(key: key) }) {
                         workspace.orderKeys.removeAll { $0.id == key.id }
                     }
                 }
@@ -407,7 +408,9 @@ private struct OrderKeysSettings: View {
                 if keyed.isEmpty {
                     Text("None yet.").foregroundStyle(.secondary)
                 }
-                ForEach(keyed) { OrderKeyRow(key: $0) }
+                ForEach(keyed) { button in
+                    OrderKeyRow(key: button, overrides: button.shortcut.flatMap(workspace.orderKey(for:))?.label)
+                }
                 Text("Edited in the hotkey panel: right-click a button, or click the Hotkeys title.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -446,6 +449,10 @@ private struct OrderKeysSettings: View {
 /// now, and the other way) and how it's priced; the pencil and trash where it's edited here.
 private struct OrderKeyRow: View {
     let key: Hotkey
+    /// An order key's: the hotkey button that has its shortcut now, overriding it.
+    var overriddenBy: String?
+    /// A hotkey button's: the order key whose shortcut it has, overriding it.
+    var overrides: String?
     @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent
     var onEdit: (() -> Void)?
     var onDelete: (() -> Void)?
@@ -468,7 +475,16 @@ private struct OrderKeyRow: View {
                 if !details.isEmpty {
                     Text(details).font(.caption).foregroundStyle(.secondary)
                 }
+                if let overriddenBy {
+                    Text("Overridden by the \"\(overriddenBy)\" button while it has this shortcut")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                if let overrides {
+                    Text("Overrides the order key \"\(overrides)\" while it has this shortcut")
+                        .font(.caption).foregroundStyle(.orange)
+                }
             }
+            .opacity(overriddenBy == nil ? 1 : 0.6)
             Spacer(minLength: 4)
             if let onEdit {
                 Button(action: onEdit) { Image(systemName: "pencil") }

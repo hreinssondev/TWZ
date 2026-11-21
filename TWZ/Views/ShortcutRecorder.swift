@@ -4,7 +4,8 @@
 //
 //  Records a hotkey's, an order key's or the Charts window's keyboard shortcut: click, then press the keys.
 //  Esc cancels, Delete clears. Shortcuts the app or macOS already uses, or another hotkey, order key or the
-//  Charts window has, are refused with the reason.
+//  Charts window has, are refused with the reason; but a hotkey button may take an order key's, overriding it
+//  while it has it (see `Workspace.hotkeyOverriding`).
 //
 
 import AppKit
@@ -49,10 +50,22 @@ struct ShortcutRecorder: View {
                 }
                 if let problem {
                     Text(problem).font(.caption).foregroundStyle(.red)
+                } else if isHotkey, let shortcut, monitor == nil,
+                          let key = workspace.orderKeys.first(where: { $0.shortcut?.numberRow == shortcut.numberRow }) {
+                    Text("Overrides the order key \"\(key.label)\" while this button has it; that one works again once this changes or the button goes.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
         .onDisappear(perform: stop)
+    }
+
+    private var isHotkey: Bool {
+        if case .hotkey = owner { return true }
+        return false
     }
 
     private func start() {
@@ -82,11 +95,13 @@ struct ShortcutRecorder: View {
             problem = "\(reason). Try another."
             return
         }
-        if let other = workspace.hotkeys.first(where: { owner != .hotkey($0.id) && $0.shortcut == new }) {
-            problem = "\(new.display) is already \"\(other.label)\". Try another."
+        if let other = workspace.hotkeys.first(where: { owner != .hotkey($0.id) && $0.shortcut?.numberRow == new.numberRow }) {
+            problem = "\(new.display) is already the \"\(other.label)\" button's. Try another."
             return
         }
-        if let other = workspace.orderKeys.first(where: { owner != .orderKey($0.id) && $0.shortcut?.numberRow == new.numberRow }) {
+        // A hotkey button may take an order key's shortcut: it overrides the order key while it has it (see
+        // `Workspace.hotkeyOverriding`); anything else may not.
+        if !isHotkey, let other = workspace.orderKeys.first(where: { owner != .orderKey($0.id) && $0.shortcut?.numberRow == new.numberRow }) {
             problem = "\(new.display) is already the order key \"\(other.label)\". Try another."
             return
         }

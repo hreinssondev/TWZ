@@ -90,15 +90,18 @@ struct TradingShortcuts: ViewModifier {
                         if !event.isARepeat { workspace.resetToGainers() }
                         return nil
                     }
+                    // A hotkey button's own shortcut, before the order keys: one given an order key's shortcut overrides
+                    // that order key while it has it (see `Workspace.hotkeyOverriding`). A keypad number counts as the
+                    // number row's.
+                    if inMainWindow, let hotkey = workspace.hotkeyOverriding(KeyShortcut(event)) {
+                        if event.window?.firstResponder is NSTextView, KeyShortcut(event).isPlain { return event }
+                        if !event.isARepeat { place(hotkey) }
+                        return nil
+                    }
                     // An order key (Settings › Order Keys): its order, once per press (a held key doesn't send another).
                     if inMainWindow, let orderKey = workspace.orderKey(for: KeyShortcut(event)) {
                         if event.window?.firstResponder is NSTextView, KeyShortcut(event).isPlain { return event }
                         if !event.isARepeat { place(orderKey) }
-                        return nil
-                    }
-                    if inMainWindow, let hotkey = workspace.hotkeys.first(where: { $0.shortcut == KeyShortcut(event) }) {
-                        if event.window?.firstResponder is NSTextView, KeyShortcut(event).isPlain { return event }
-                        if !event.isARepeat { place(hotkey) }
                         return nil
                     }
                     let isReturn = event.keyCode == 36 || event.keyCode == 76      // Return or keypad Enter

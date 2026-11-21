@@ -156,7 +156,8 @@ final class Workspace {
 
     /// The 1–9 order keys' modifiers, buying or `selling`, become `new`: every order key on a number with the old
     /// ones moves to the new ones. Nil once done; else why not (nothing changes): no ⌘, ⌥ or ⌃, the other side's,
-    /// or a number with them taken (timeframes, what-if trades, a hotkey, another order key, macOS's screenshots).
+    /// or a number with them taken (timeframes, what-if trades, another order key, macOS's screenshots). A hotkey
+    /// button on one of them overrides that order key (see `hotkeyOverriding`).
     func setNumberModifiers(_ new: ModifierSet, selling: Bool) -> String? {
         let old = selling ? sellModifiers : buyModifiers
         let other = selling ? buyModifiers : sellModifiers
@@ -171,7 +172,6 @@ final class Workspace {
         for digit in 1...9 {
             let s = new.shortcut(digit: digit)
             if let reason = s.reservedFor { return "\(s.display): \(reason)" }
-            if let hotkey = hotkeys.first(where: { $0.shortcut?.numberRow == s }) { return "\(s.display) is the hotkey \"\(hotkey.label)\"" }
             if let key = orderKeys.first(where: { !onNumber($0.shortcut, old) && $0.shortcut?.numberRow == s }) {
                 return "\(s.display) is already the order key \"\(key.label)\""
             }
@@ -185,6 +185,14 @@ final class Workspace {
         }
         if selling { sellModifiers = new } else { buyModifiers = new }
         return nil
+    }
+
+    /// The hotkey button `shortcut` presses (a keypad digit as the number row's), if any. One given an order key's
+    /// shortcut overrides that order key while it has it: the order key is left as it is, so it works again once the
+    /// button's shortcut changes or the button goes.
+    func hotkeyOverriding(_ shortcut: KeyShortcut) -> Hotkey? {
+        let pressed = shortcut.numberRow
+        return hotkeys.first { $0.shortcut?.numberRow == pressed }
     }
 
     /// The order key `shortcut` presses, if any (a keypad digit as the number row's).
