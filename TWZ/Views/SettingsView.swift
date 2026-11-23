@@ -84,6 +84,7 @@ private struct ConnectionSettings: View {
     @State private var confirmLive = false
     @AppStorage(OrderLog.enabledKey) private var orderLog = true
     @AppStorage(SimShare.enabledKey) private var shareSim = true
+    @AppStorage(KeepAwake.key) private var keepAwake = true
 
     private let presets: [(String, Int)] = [
         ("IB Gateway – Paper", 4002), ("IB Gateway – Live", 4001),
@@ -121,6 +122,11 @@ private struct ConnectionSettings: View {
                         if on { SimShare.shared.start(broker: broker) } else { SimShare.shared.stop() }
                     }
                 Text("Read-only, on port \(String(SimShare.port)), and only to this Mac and Tailscale's addresses (100.x).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Keep the Mac awake while TWZ runs", isOn: $keepAwake)
+                    .onChange(of: keepAwake) { KeepAwake.update() }
+                Text("The Mac doesn't sleep when left idle, so IB Gateway stays reachable from the iPhone app. Closing the lid still puts it to sleep (unless it's on power with an external display). Uses more battery.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

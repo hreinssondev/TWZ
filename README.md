@@ -99,6 +99,8 @@ assume a NOK base currency (converted at the live USD/NOK rate).
 3. Run. In Settings › Connection, set the gateway's host, port (4002 paper / 4001 live for IB
    Gateway, 7497 / 7496 for TWS) and a client ID, then Connect. After the Mac sleeps, TWZ reconnects
    on its own a few seconds after waking (trying again every 10 s for two minutes if the gateway isn't back).
+   Settings › Connection › Keep the Mac awake (on by default) stops idle sleep while TWZ runs, so the
+   gateway stays reachable from elsewhere.
 
 ## License
 
