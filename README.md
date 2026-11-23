@@ -93,7 +93,8 @@ assume a NOK base currency (converted at the live USD/NOK rate).
 1. Open `TWZ.xcodeproj` in Xcode.
 2. Under the TWZ target's *Signing & Capabilities*, pick your own team.
 3. Run. In Settings › Connection, set the gateway's host, port (4002 paper / 4001 live for IB
-   Gateway, 7497 / 7496 for TWS) and a client ID, then Connect.
+   Gateway, 7497 / 7496 for TWS) and a client ID, then Connect. After the Mac sleeps, TWZ reconnects
+   on its own a few seconds after waking (trying again every 10 s for two minutes if the gateway isn't back).
 
 ## License
 

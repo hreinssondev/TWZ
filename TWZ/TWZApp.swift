@@ -67,6 +67,33 @@ struct TWZApp: App {
 /// here watching them.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var broker: Broker?
+    /// Reconnecting after the Mac woke (see `reconnectAfterWake`).
+    private var wakeReconnect: Task<Void, Never>?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reconnectAfterWake() }
+        }
+    }
+
+    /// The connection to IB rarely survives the Mac sleeping (the socket can even look open, with nothing
+    /// coming through): a few seconds after waking, for the network to come back, a fresh one; while the
+    /// gateway can't be reached yet, another try every 10 s for two minutes.
+    private func reconnectAfterWake() {
+        wakeReconnect?.cancel()
+        wakeReconnect = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled, let broker = self?.broker else { return }
+            broker.say("Woke from sleep: reconnecting to IB")
+            broker.disconnect()
+            broker.connect()
+            for _ in 0..<12 {
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled, let broker = self?.broker, broker.state == .disconnected else { return }
+                broker.connect()
+            }
+        }
+    }
 
     /// Where every chart is, for the next launch (see `ChartViews`).
     func applicationWillTerminate(_ notification: Notification) {
