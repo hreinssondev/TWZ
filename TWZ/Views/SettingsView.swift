@@ -102,6 +102,17 @@ private struct ConnectionSettings: View {
                     ForEach(presets, id: \.1) { name, p in Text("\(name) (\(String(p)))").tag(p) }
                 }
                 TextField("Client ID", value: $clientId, format: .number.grouping(.never))
+                LabeledContent("Status") {
+                    HStack {
+                        Text(broker.statusText).foregroundStyle(.secondary).lineLimit(1)
+                        // With the saved host, port and client ID (Save & Reconnect applies changed ones).
+                        Button("Reconnect") {
+                            broker.disconnect()
+                            broker.connect()
+                        }
+                        .controlSize(.small)
+                    }
+                }
             }
             Section("Market data") {
                 Text("Real-time data only. Stocks you aren't subscribed for show no quote; if no real-time data comes through at all, the app goes offline.")

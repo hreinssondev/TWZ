@@ -599,10 +599,17 @@ struct CandleChart: View {
         }
         visibleLines.filter { $0.movesAsideForLastPrice || isOrder($0) }.forEach(draw)
 
-        // Crosshair (horizontal only).
+        // Crosshair: the price line across, and a line down through the hovered bar with its time in a box
+        // on the time axis.
         if let hover, plot.contains(hover) {
             var cross = Path()
             cross.move(to: CGPoint(x: plot.minX, y: hover.y)); cross.addLine(to: CGPoint(x: plot.maxX, y: hover.y))
+            let hoverIndex = Int((anchor - 0.5 - Double((anchorX - hover.x) / barWidth)).rounded())
+            let hoverTime = time(atIndex: hoverIndex, bars: bars, rest: v.rest)
+            let hoverX = x(hoverIndex)
+            if hoverTime != nil, hoverX >= plot.minX, hoverX <= plot.maxX {
+                cross.move(to: CGPoint(x: hoverX, y: plot.minY)); cross.addLine(to: CGPoint(x: hoverX, y: plot.maxY))
+            }
             let hoverColor = LineColors.resolve(hoverHex, default: LineColors.defaultHover)
             // Holding ⌥ / ⌘ tints the price tag (and with `tintsHoverLine` the line): a click places there.
             let modifierTint: Color? = optionHeld && onAltClick != nil ? altClickTint
@@ -623,7 +630,40 @@ struct CandleChart: View {
                     drawPnLTag(in: &ctx, pnl: pnl, y: hover.y, plot: plot)
                 }
             }
+            if let hoverTime, hoverX >= plot.minX, hoverX <= plot.maxX {
+                drawTimeTag(in: &ctx, text: hoverTimeLabel(hoverTime), x: hoverX, plot: plot, color: hoverColor)
+            }
         }
+    }
+
+    /// The time of the bar at `index`: a bar's own, or past the last one, the empty slot's (the rest of the
+    /// day's, or one bar's length on from the last bar); nil before the first bar.
+    private func time(atIndex index: Int, bars: [Bar], rest: RestOfDay?) -> Date? {
+        guard index >= 0 else { return nil }
+        if index < bars.count { return bars[index].time }
+        guard let last = bars.last else { return nil }
+        if let rest { return rest.from.addingTimeInterval(Double(index - bars.count) * rest.barSeconds) }
+        let seconds = chart.timeframe.barSeconds ?? 86_400
+        return last.time.addingTimeInterval(Double(index - bars.count + 1) * seconds)
+    }
+
+    /// The hovered time: HH:mm (with seconds under a minute's bars), the date in front if not today; the
+    /// date for daily bars and longer.
+    private func hoverTimeLabel(_ date: Date) -> String {
+        guard chart.timeframe.isIntraday else { return Self.hoverDayFormatter.string(from: date) }
+        let time = ((chart.timeframe.barSeconds ?? 60) < 60 ? Self.secondsFormatter : Self.timeFormatter).string(from: date)
+        return Calendar.current.isDateInToday(date) ? time : "\(Self.dayFormatter.string(from: date)) \(time)"
+    }
+
+    /// A box on the time axis, centered on `x` (kept inside the plot's width), in the hover color.
+    private func drawTimeTag(in ctx: inout GraphicsContext, text: String, x: CGFloat, plot: CGRect, color: Color) {
+        let resolved = ctx.resolve(Text(text).font(.system(size: 9, weight: .semibold).monospacedDigit())
+            .foregroundStyle(color.isLight ? Color.black : Color.white))
+        let width = resolved.measure(in: CGSize(width: 300, height: 40)).width + 8
+        let minX = min(max(plot.minX, x - width / 2), plot.maxX - width)
+        let rect = CGRect(x: minX, y: plot.maxY + 1, width: width, height: timeAxisHeight - 1)
+        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color))
+        ctx.draw(resolved, at: CGPoint(x: rect.midX, y: rect.midY))
     }
 
     // MARK: Indicators
@@ -872,6 +912,14 @@ struct CandleChart: View {
 
     private static let dayFormatter: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "MMM d"; return f
+    }()
+
+    private static let secondsFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f
+    }()
+
+    private static let hoverDayFormatter: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "MMM d, yyyy"; return f
     }()
 
     static func niceTicks(lo: Double, hi: Double, count: Int, minStep: Double = 0) -> [Double] {
