@@ -14,6 +14,8 @@ enum CandleTheme: String, CaseIterable, Identifiable {
     case blueOrange = "Blue / Orange"
     case cyanPink = "Cyan / Pink"
     case mono = "Monochrome"
+    /// TWZ-iOS's candle colors.
+    case ios = "iOS Colors"
     case custom = "Custom"
     var id: String { rawValue }
 
@@ -31,6 +33,7 @@ enum CandleTheme: String, CaseIterable, Identifiable {
         case .blueOrange: (Color(red: 0.25, green: 0.55, blue: 0.95), Color(red: 0.98, green: 0.55, blue: 0.15))
         case .cyanPink: (Color(red: 0.20, green: 0.80, blue: 0.90), Color(red: 0.95, green: 0.35, blue: 0.65))
         case .mono: (Color(white: 0.90), Color(white: 0.45))
+        case .ios: (Color(red: 0.15, green: 0.75, blue: 0.60), Color(red: 0.95, green: 0.30, blue: 0.35))
         case .custom: (Color(hex: customUp) ?? Color(hex: Self.defaultUpHex)!,
                        Color(hex: customDown) ?? Color(hex: Self.defaultDownHex)!)
         }
