@@ -121,7 +121,7 @@ private struct ConnectionSettings: View {
                     .onChange(of: shareSim) { _, on in
                         if on { SimShare.shared.start(broker: broker) } else { SimShare.shared.stop() }
                     }
-                Text("Read-only, on port \(String(SimShare.port)), and only to this Mac and Tailscale's addresses (100.x).")
+                Text("Its what-if trades on port \(String(SimShare.port)), and its widget's stock quote on \(String(SimShare.quotePort)). Read-only, and only to this Mac and Tailscale's addresses (100.x).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Keep the Mac awake while TWZ runs", isOn: $keepAwake)

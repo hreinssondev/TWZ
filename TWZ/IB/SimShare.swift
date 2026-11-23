@@ -3,8 +3,10 @@
 //  TWZ
 //
 //  Lets TWZ-iOS (the iPhone app) see the what-if trades, which live only here: a connection on port
-//  4010 gets them as JSON (`Broker.simPositions`) and is closed. Read-only, and only from this Mac or
-//  Tailscale's addresses (100.64.0.0/10). Settings › Connection turns it off.
+//  4010 gets them as JSON (`Broker.simPositions`) and is closed. Its widget asks on port 4011 for one
+//  stock's quote: it sends the symbol and a newline, and gets {symbol, last, prevClose, changePercent}
+//  (the stock's quote is kept coming from then on, so the next ask is answered at once). Read-only,
+//  and only from this Mac or Tailscale's addresses (100.64.0.0/10). Settings › Connection turns it off.
 //
 
 import Foundation
@@ -14,11 +16,16 @@ import Network
 final class SimShare {
     static let shared = SimShare()
     static let port: UInt16 = 4010
+    static let quotePort: UInt16 = 4011
+    /// The widget's stocks, whose quotes are kept coming (the last few asked for).
+    private var widgetSymbols: [String] = []
+    private static let widgetQuoteOwner = "ios-widget"
     static let enabledKey = "shareSimWithIOS"
     static var isEnabled: Bool { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
 
     weak var broker: Broker?
     private var listener: NWListener?
+    private var quoteListener: NWListener?
 
     func start(broker: Broker) {
         self.broker = broker
@@ -29,11 +36,63 @@ final class SimShare {
         }
         listener.start(queue: .main)
         self.listener = listener
+        if let quotePort = NWEndpoint.Port(rawValue: Self.quotePort), let quotes = try? NWListener(using: .tcp, on: quotePort) {
+            quotes.newConnectionHandler = { connection in
+                MainActor.assumeIsolated { SimShare.shared.serveQuote(connection) }
+            }
+            quotes.start(queue: .main)
+            quoteListener = quotes
+        }
     }
 
     func stop() {
         listener?.cancel()
         listener = nil
+        quoteListener?.cancel()
+        quoteListener = nil
+        widgetSymbols = []
+        broker?.setQuoteSymbols([], owner: Self.widgetQuoteOwner)
+    }
+
+    /// One stock's quote for the widget, once its symbol and a newline are in; a stock not quoted yet is
+    /// asked for and answered once its quote comes (or after 3 s, without one).
+    private func serveQuote(_ connection: NWConnection) {
+        guard Self.allowed(connection.endpoint), broker != nil else { connection.cancel(); return }
+        connection.start(queue: .main)
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64) { data, _, _, _ in
+            MainActor.assumeIsolated {
+                let line = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                let symbol = line.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                guard !symbol.isEmpty, symbol.count <= 12, let broker = SimShare.shared.broker else { connection.cancel(); return }
+                SimShare.shared.keepQuoting(symbol)
+                SimShare.shared.answer(connection, symbol: symbol, broker: broker, waited: 0)
+            }
+        }
+    }
+
+    private func keepQuoting(_ symbol: String) {
+        guard widgetSymbols.first != symbol else { return }
+        widgetSymbols.removeAll { $0 == symbol }
+        widgetSymbols.insert(symbol, at: 0)
+        widgetSymbols = Array(widgetSymbols.prefix(3))
+        broker?.setQuoteSymbols(widgetSymbols, owner: Self.widgetQuoteOwner)
+    }
+
+    private func answer(_ connection: NWConnection, symbol: String, broker: Broker, waited: Double) {
+        let quote = broker.quotes[symbol]
+        if quote?.last == nil || quote?.prevClose == nil, waited < 3 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                MainActor.assumeIsolated { SimShare.shared.answer(connection, symbol: symbol, broker: broker, waited: waited + 0.25) }
+            }
+            return
+        }
+        var reply: [String: Any] = ["symbol": symbol, "time": Date().timeIntervalSince1970]
+        if let last = quote?.last { reply["last"] = last }
+        if let prevClose = quote?.prevClose { reply["prevClose"] = prevClose }
+        if let change = quote?.changePercent { reply["changePercent"] = change }
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
+        connection.send(content: data, contentContext: .finalMessage, isComplete: true,
+                        completion: .contentProcessed { _ in connection.cancel() })
     }
 
     private func serve(_ connection: NWConnection) {
