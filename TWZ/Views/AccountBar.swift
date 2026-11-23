@@ -200,9 +200,10 @@ private struct AccountBadge: View {
 }
 
 /// Where the order shortcuts go and what their numbers are (see `SizeMode`): KEYS $ or KEYS % in orange with KEYS ON
-/// (real orders), SIM $ or SIM % dimmed with it off (what-if trades).
+/// (real orders), SIM $ or SIM % dimmed with it off (what-if trades). A click switches $ and %, as ⌘⇧M does.
 private struct OrderShortcutsBadge: View {
     let isOn: Bool
+    @Environment(Broker.self) private var broker
     @AppStorage(SizeMode.storageKey) private var sizeMode: SizeMode = .percent
 
     var body: some View {
@@ -211,11 +212,18 @@ private struct OrderShortcutsBadge: View {
             .foregroundStyle(isOn ? Color.white : Color.secondary.opacity(0.7))
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(isOn ? Color.orange : Color.primary.opacity(0.08)))
+            .contentShape(Capsule())
+            .onTapGesture {
+                sizeMode = sizeMode == .dollars ? .percent : .dollars
+                let badge = isOn ? "KEYS" : "SIM"
+                broker.say(sizeMode == .dollars ? "\(badge) $: the numbers are dollars, 1 is $1,000, 9 is $9,000"
+                                                : "\(badge) %: the numbers are a share of the buying power, 1 is 20%, 4 is 80% (5–9 none)")
+            }
             .help((isOn ? "KEYS ON: order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩, ⌘⌫) go to IB, for real."
                         : "SIM: order shortcuts (order keys, hotkeys' own keys, ⌘⇧↩, ⌘⌫) trade what-if positions, never sent to IB.")
                   + " ⌘ and the Globe (fn) key switch; SIM at launch, KEYS ON with a live position open. Positions and the charts show real and what-if trades together either way."
                   + (sizeMode == .dollars ? " Numbers in dollars: 1 is $1,000, 9 is $9,000." : " Numbers in % of the buying power: 1 is 20%, 4 is 80%, 5–9 none.")
-                  + " ⌘⇧M switches $ and %. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) works on real orders either way.")
+                  + " A click or ⌘⇧M switches $ and %. Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) works on real orders either way.")
     }
 }
 
