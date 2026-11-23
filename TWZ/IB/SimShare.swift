@@ -5,7 +5,8 @@
 //  Lets TWZ-iOS (the iPhone app) see the what-if trades, which live only here: a connection on port
 //  4010 gets them as JSON (`Broker.simPositions`) and is closed. Its widget asks on port 4011 for one
 //  stock's quote: it sends the symbol and a newline, and gets {symbol, last, prevClose, changePercent}
-//  (the stock's quote is kept coming from then on, so the next ask is answered at once). Read-only,
+//  (the stock's quote is kept coming from then on, so the next ask is answered at once); POSITIONS
+//  instead of a symbol gets the open positions' P/L (the real ones, else the what-if trades'). Read-only,
 //  and only from this Mac or Tailscale's addresses (100.64.0.0/10). Settings › Connection turns it off.
 //
 
@@ -64,10 +65,37 @@ final class SimShare {
                 let line = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
                 let symbol = line.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
                 guard !symbol.isEmpty, symbol.count <= 12, let broker = SimShare.shared.broker else { connection.cancel(); return }
+                if symbol == "POSITIONS" { return SimShare.shared.sendPositions(connection, broker: broker) }
                 SimShare.shared.keepQuoting(symbol)
                 SimShare.shared.answer(connection, symbol: symbol, broker: broker, waited: 0)
             }
         }
+    }
+
+    /// The positions widget's: the real positions' P/L in NOK (each, while any are open), else the what-if
+    /// trades'; a P/L left out while its stock has no price yet.
+    private func sendPositions(_ connection: NWConnection, broker: Broker) {
+        let real = broker.positions.values.filter { $0.quantity != 0 }.sorted { $0.symbol < $1.symbol }
+        var rows: [[String: Any]] = []
+        if real.isEmpty {
+            for sim in broker.simPositions.values.sorted(by: { $0.symbol < $1.symbol }) {
+                var row: [String: Any] = ["symbol": sim.symbol]
+                if let last = broker.quotes[sim.symbol]?.last, let pnl = broker.simPnLNOK(sim, at: last) { row["pnl"] = pnl }
+                rows.append(row)
+            }
+        } else {
+            for p in real {
+                var row: [String: Any] = ["symbol": p.symbol]
+                if let last = broker.quotes[p.symbol]?.last, let usd = broker.usdPerPriceUnit(p.symbol), let usdNok = broker.usdNok {
+                    row["pnl"] = (last - p.avgCost) * p.quantity * usd * usdNok
+                }
+                rows.append(row)
+            }
+        }
+        let reply: [String: Any] = ["isSim": real.isEmpty, "positions": rows, "time": Date().timeIntervalSince1970]
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
+        connection.send(content: data, contentContext: .finalMessage, isComplete: true,
+                        completion: .contentProcessed { _ in connection.cancel() })
     }
 
     private func keepQuoting(_ symbol: String) {
