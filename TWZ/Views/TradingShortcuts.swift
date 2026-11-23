@@ -38,6 +38,8 @@
 //  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌃1–6, or ⇧1–6 outside a text field: one modifier alone; ⌥⇧ and a number is free
 //  for a hotkey's or order key's shortcut) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
+//  ´ (outside a text field) goes back to the grid shown before, its list and timeframe, and again comes back (see
+//  `Workspace.previousGrid`).
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
 //  place and price scale (see `Workspace.matchViews`).
 //  Nothing fires while a shortcut is being recorded. With no chart selected there's no symbol, so
@@ -183,6 +185,29 @@ struct TradingShortcuts: ViewModifier {
                             if symbol.isEmpty { NSSound.beep() } else { workspace.setColor(color, of: symbol) }
                             return nil
                         }
+                    }
+                    // ´ (the key left of ⌫ on a Norwegian keyboard, a dead key) outside a text field: back to the grid
+                    // shown before, its list and timeframe (see `Workspace.previousGrid`); again, back here.
+                    let isAcute = event.charactersIgnoringModifiers == "´" || (event.keyCode == 24 && (event.characters ?? "").isEmpty)
+                    if modifiers.isEmpty, inMainWindow, isAcute {
+                        if event.window?.firstResponder is NSTextView { return event }
+                        if event.isARepeat { return nil }
+                        guard let target = workspace.previousGrid else {
+                            NSSound.beep()
+                            broker.say("No grid to go back to yet: ´ goes back once you've switched list or timeframe")
+                            return nil
+                        }
+                        let current = workspace.currentGridView
+                        workspace.gridSwitch = (current, target, Date())
+                        if target.timeframe != current.timeframe {
+                            UserDefaults.standard.set(target.timeframe.rawValue, forKey: MainGrid.timeframeKey)
+                            workspace.setMainTimeframe(target.timeframe, broker: broker)
+                        }
+                        if target.list != current.list {
+                            workspace.listShortcut = Workspace.ListShortcut(kind: target.list)
+                        }
+                        broker.say("Back to \(target.list.rawValue), \(target.timeframe.rawValue) (´ again: \(current.list.rawValue), \(current.timeframe.rawValue))")
+                        return nil
                     }
                     // ⌥0, or ⇧A outside a text field: the other charts take the selected chart's view.
                     let matchKey = modifiers == .option && (event.keyCode == 29 || event.keyCode == 82)
@@ -342,6 +367,7 @@ extension KeyShortcut {
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }
         if option, !command, !control, k == "z" || k == "<" { return "\(display) cancels orders" }
+        if !option, !shift, !command, !control, !isFunctionKey, k == "´" { return "´ goes back to the grid shown before" }
         if option, !shift, !command, !control, keyCode == 29 || keyCode == 82 {
             return "⌥0 gives every chart the selected chart's view"
         }

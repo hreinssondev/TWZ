@@ -302,6 +302,35 @@ final class Workspace {
         /// Given up after this, should the list's rows not come in.
         var until: Date
     }
+    /// What the main grid shows: its list and the top bar's timeframe (see `previousGrid`).
+    struct GridView: Equatable {
+        var list: ScannerKind
+        var timeframe: Timeframe
+    }
+    /// The main grid as it is now.
+    var currentGridView: GridView {
+        GridView(list: gridScan?.kind ?? .gainers,
+                 timeframe: defaults.string(forKey: MainGrid.timeframeKey).flatMap(Timeframe.init(rawValue:)) ?? .m1)
+    }
+    /// The grid shown before this one (another list or timeframe): ´ goes back to it, and pressed again comes back
+    /// (see `TradingShortcuts`). Not saved.
+    @ObservationIgnored var previousGrid: GridView?
+    /// ´ going to a grid: its list and timeframe change one after the other, and only the whole switch counts.
+    @ObservationIgnored var gridSwitch: (from: GridView, to: GridView, at: Date)?
+
+    /// The grid changed (ChartGrid sees it): the one left becomes the one ´ goes back to.
+    func noteGrid(from old: GridView, to new: GridView) {
+        if let pending = gridSwitch, Date().timeIntervalSince(pending.at) < 3 {
+            if new == pending.to {
+                previousGrid = pending.from
+                gridSwitch = nil
+            }
+            return
+        }
+        gridSwitch = nil
+        if old != new { previousGrid = old }
+    }
+
     /// ⌘⇧ + a list's letter (see `ScannerKind.forShortcut`): the list to show and load into the chart grid,
     /// taken up by the list panels (see `ListPanel`). A new one each press, so the same key works again.
     var listShortcut: ListShortcut?

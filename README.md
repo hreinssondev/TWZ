@@ -25,7 +25,7 @@ management in one window built for quick entries and exits.
   grid), across list switches and relaunches, until Reset or a right-click on the chart. ⇧-, ⌘-, ⌥- or ⌃-swipe
   (any of them, together too) zooms every chart from the swiped one's zoom, the top bar's Zoom slider
   following (⌃⌥-swipe squeezes or
-  stretches one chart's price axis); ⌥0 or ⇧A gives every chart the selected one's zoom,
+  stretches one chart's price axis); ´ goes back to the grid shown before (its list and timeframe) and again comes back; ⌥0 or ⇧A gives every chart the selected one's zoom,
   place and price scale. ⇧-clicking 1–5 in the top bar saves every chart's zoom and place on every
   timeframe as a view set, and clicking one puts them back;
   with Settings › Appearance's "Top bar numbers are scales" on, ⇧-click saves the selected chart's view

@@ -111,6 +111,10 @@ struct ChartGrid: View {
         .onChange(of: workspace.gridScale(workspace.activeScale)) { workspace.syncGridScale(to: broker) }
         .onChange(of: workspace.manualZoom) { workspace.syncGridScale(to: broker) }
         .onChange(of: timeframe) { _, new in workspace.setMainTimeframe(new, broker: broker) }
+        // The grid left (list or timeframe) is the one ´ goes back to.
+        .onChange(of: Workspace.GridView(list: workspace.gridScan?.kind ?? .gainers, timeframe: timeframe)) { old, new in
+            workspace.noteGrid(from: old, to: new)
+        }
         .onChange(of: workspace.layoutLoads) {
             columnSplits = Self.splits("mainChartColumnSplits", legacyKey: "chartColumnSplit")
             rowSplits = Self.splits("mainChartRowSplits", legacyKey: "chartRowSplit")
