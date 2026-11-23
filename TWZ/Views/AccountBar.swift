@@ -72,12 +72,16 @@ struct AccountBar: View {
             HStack(spacing: 18) {
                 IndicatorToggles()
 
-                // The status text (e.g. why it disconnected) shows on hover; disconnected, a click connects.
+                // The status text (e.g. why it disconnected) shows on hover; a click reconnects, as Settings ›
+                // Connection's Reconnect does.
                 Circle().fill(statusColor).frame(width: 8, height: 8)
                     .padding(4)
                     .contentShape(Rectangle())
-                    .onTapGesture { if broker.state == .disconnected { broker.connect() } }
-                    .help(broker.state == .disconnected ? "\(broker.statusText) · click to connect" : broker.statusText)
+                    .onTapGesture {
+                        broker.disconnect()
+                        broker.connect()
+                    }
+                    .help("\(broker.statusText) · click to reconnect")
 
                 Button {
                     workspace.showsSettings = true
