@@ -61,6 +61,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var ssrDay = MarketSession.dayKey()
     private var ssrRequested: Set<String> = []
     private var ssrSymbolByReq: [Int: String] = [:]
+    /// Daily bars asked for a stock whose quote came without yesterday's close (IB leaves it out for
+    /// some): its close from them (see `fillPrevClose`).
+    private var prevCloseSymbolByReq: [Int: String] = [:]
     /// Nasdaq's Rule 201 list (`SSRList`), handed over by the UI.
     private var nasdaqSSR: Set<String> = []
     /// What the last short sale under SSR was priced at, for `submit`'s status line.
@@ -455,6 +458,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         ssrChase.removeAll()
         ssrChaseSent.removeAll()
         ssrSymbolByReq.removeAll()
+        prevCloseSymbolByReq.removeAll()
         scans.removeAll()
         fxReq = nil
         detailsSymbolByReq.removeAll()
@@ -677,6 +681,17 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let forex = ForexPair.isForex(symbol)
         sendFields([1, 11, reqId] + contract(symbol) + [false, forex ? "" : "236", false, false, ""])   // reqMktData, 236: shortable
         if forex { requestContractDetails(symbol) }
+        // No close from IB in a few seconds: yesterday's from the daily bars, for the % change.
+        if !forex { queue.asyncAfter(deadline: .now() + 5) { [weak self] in self?.fillPrevClose(symbol) } }
+    }
+
+    /// A stock quoted without yesterday's close: asks for its last few regular-session daily bars.
+    private func fillPrevClose(_ symbol: String) {
+        guard apiReady, quoteReqBySymbol[symbol] != nil, smartQuotes[symbol]?.prevClose == nil,
+              !prevCloseSymbolByReq.values.contains(symbol) else { return }
+        let reqId = makeReqId()
+        prevCloseSymbolByReq[reqId] = symbol
+        sendFields([20, reqId] + contract(symbol) + [false, "", "1 day", "5 D", 1, "TRADES", 1, false, ""])
     }
 
     /// The contract details of what a forex pair's orders go to (its CFD, or IDEALPRO spot), for its
@@ -2571,6 +2586,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
         if closeKeyByReq.removeValue(forKey: reqId) != nil { return }
         if ssrSymbolByReq.removeValue(forKey: reqId) != nil { return }
+        if prevCloseSymbolByReq.removeValue(forKey: reqId) != nil { return }
         if let owner = scanOwnerByReq.removeValue(forKey: reqId) {
             scanReqByOwner[owner] = nil
             scans[owner, default: ScanResult()].error = text
@@ -2631,6 +2647,20 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if let key = closeKeyByReq.removeValue(forKey: reqId) {
             let closeIndex = 5 + (count - 1) * 8 + 4
             if count > 0, closeIndex < f.count { sessionCloses[key] = f.double(closeIndex) }
+            return
+        }
+        if let symbol = prevCloseSymbolByReq.removeValue(forKey: reqId) {
+            // The close of the last day before today (dates are "yyyyMMdd").
+            let today = MarketSession.dayKey()
+            let closes = stride(from: 5, to: min(f.count - 7, 5 + count * 8), by: 8)
+                .map { (day: String(f[$0].prefix(8)), close: f.double($0 + 4)) }
+                .filter { $0.day < today && $0.close > 0 }
+            if let close = closes.last?.close, smartQuotes[symbol]?.prevClose == nil, quoteReqBySymbol[symbol] != nil {
+                var q = smartQuotes[symbol] ?? Quote()
+                q.prevClose = close
+                smartQuotes[symbol] = q
+                updateQuote(symbol)
+            }
             return
         }
         if let symbol = ssrSymbolByReq.removeValue(forKey: reqId) {
