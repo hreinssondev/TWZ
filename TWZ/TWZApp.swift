@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showMenuBarPnL() {
         guard menuBarPnL == nil, let broker else { return }
         menuBarPnL = MenuBarPnL(broker: broker)
+        SimShare.shared.start(broker: broker)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

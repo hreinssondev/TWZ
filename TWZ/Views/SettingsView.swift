@@ -83,6 +83,7 @@ private struct ConnectionSettings: View {
     @State private var clientId = 1
     @State private var confirmLive = false
     @AppStorage(OrderLog.enabledKey) private var orderLog = true
+    @AppStorage(SimShare.enabledKey) private var shareSim = true
 
     private let presets: [(String, Int)] = [
         ("IB Gateway – Paper", 4002), ("IB Gateway – Live", 4001),
@@ -113,6 +114,15 @@ private struct ConnectionSettings: View {
                         .controlSize(.small)
                     }
                 }
+            }
+            Section("TWZ-iOS") {
+                Toggle("Share what-if trades with the iPhone app", isOn: $shareSim)
+                    .onChange(of: shareSim) { _, on in
+                        if on { SimShare.shared.start(broker: broker) } else { SimShare.shared.stop() }
+                    }
+                Text("Read-only, on port \(String(SimShare.port)), and only to this Mac and Tailscale's addresses (100.x).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Market data") {
                 Text("Real-time data only. Stocks you aren't subscribed for show no quote; if no real-time data comes through at all, the app goes offline.")
