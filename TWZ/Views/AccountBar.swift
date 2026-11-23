@@ -25,7 +25,13 @@ struct AccountBar: View {
         HStack(spacing: 0) {
             HStack(spacing: 18) {
                 // LIVE (red) or PAPER (blue).
-                AccountBadge(isLive: broker.isLivePort, isLit: workspace.orderShortcutsOn)
+                // A click switches KEYS ON and SIM, as ⌘🌐 does.
+                AccountBadge(isLive: broker.isLivePort, isLit: workspace.orderShortcutsOn) {
+                    workspace.orderShortcutsOn.toggle()
+                    workspace.launchModeChosen = true
+                    broker.say(workspace.orderShortcutsOn ? "KEYS ON: order shortcuts go to IB, for real (⌘🌐: SIM)"
+                                                          : "SIM: order shortcuts trade what-if positions, nothing goes to IB (⌘🌐: KEYS ON)")
+                }
 
                 OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
 
@@ -184,10 +190,13 @@ private struct ScaleButtons: View {
     }
 }
 
-/// LIVE (red) or PAPER (blue), the gateway port: lit with KEYS ON, dimmed like SIM's badge in SIM.
+/// LIVE (red) or PAPER (blue), the gateway port: lit with KEYS ON, dimmed like SIM's badge in SIM. A click
+/// switches KEYS ON and SIM.
 private struct AccountBadge: View {
     let isLive: Bool
     let isLit: Bool
+    /// A click: KEYS ON or SIM.
+    var onClick: () -> Void = {}
 
     var body: some View {
         Text(isLive ? "LIVE" : "PAPER")
@@ -195,7 +204,10 @@ private struct AccountBadge: View {
             .foregroundStyle(isLit ? Color.white : Color.secondary.opacity(0.7))
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(Capsule().fill(isLit ? (isLive ? Color.red.opacity(0.85) : Color.blue.opacity(0.8)) : Color.primary.opacity(0.08)))
-            .help("\(isLive ? "Live" : "Paper") account\(isLit ? "" : "; dimmed in SIM, where order shortcuts don't go to it")")
+            .contentShape(Capsule())
+            .onTapGesture(perform: onClick)
+            .help("\(isLive ? "Live" : "Paper") account\(isLit ? "" : "; dimmed in SIM, where order shortcuts don't go to it")"
+                  + ". Click to switch \(isLit ? "to SIM" : "KEYS ON, order shortcuts going to IB for real") (⌘🌐 too).")
     }
 }
 
