@@ -30,6 +30,7 @@ struct TWZApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     appDelegate.broker = broker
+                    appDelegate.showMenuBarPnL()
                     broker.registerCharts(workspace.mainCharts + workspace.secondaryCharts)
                     broker.setFastCharts(workspace.fastChartIDs)
                     broker.connect()
@@ -67,8 +68,15 @@ struct TWZApp: App {
 /// here watching them.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var broker: Broker?
+    /// The P/L in the menu bar (see `MenuBarPnL`).
+    private var menuBarPnL: MenuBarPnL?
     /// Reconnecting after the Mac woke (see `reconnectAfterWake`).
     private var wakeReconnect: Task<Void, Never>?
+
+    func showMenuBarPnL() {
+        guard menuBarPnL == nil, let broker else { return }
+        menuBarPnL = MenuBarPnL(broker: broker)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in

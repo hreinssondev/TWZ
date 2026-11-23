@@ -74,6 +74,8 @@ management in one window built for quick entries and exits.
   IDEALPRO spot (Settings › Trading).
 - **Short selling info**: shortable status and shares to lend, borrow fees, and the SEC Rule 201
   short sale restriction (from Nasdaq's daily list and IB's prices), with SSR-aware order pricing.
+- **Menu bar P/L**: the open positions' P/L in NOK as a bare number, green or red; with no position
+  open, the what-if trades'. A click brings TWZ to the front.
 - **Charts window**: a second grid of the top 18 gainers (or any size you set).
 - **Appearance**: candle and line colors, line styles, presets and saved window layouts.
 - **Confetti** over every screen when a LIVE trade opens (Settings › Trading).
