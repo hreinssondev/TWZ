@@ -381,6 +381,11 @@ final class Workspace {
         didSet { defaults.set(stockColors.mapValues(\.rawValue), forKey: StockColor.storageKey) }
     }
 
+    /// Horizontal trend lines' prices by symbol, ⌘-clicked on its charts (see `TrendLines`). Saved.
+    var trendLines: [String: [Double]] {
+        didSet { defaults.set(trendLines, forKey: TrendLines.storageKey) }
+    }
+
     /// Gives `symbol` a color, or takes its color off (nil). A color marks one stock: the stock that
     /// had it before loses it, on the charts or not.
     func setColor(_ color: StockColor?, of symbol: String) {
@@ -484,6 +489,7 @@ final class Workspace {
 
         stockColors = (defaults.dictionary(forKey: StockColor.storageKey) as? [String: String] ?? [:])
             .compactMapValues(StockColor.init(rawValue:))
+        trendLines = defaults.dictionary(forKey: TrendLines.storageKey) as? [String: [Double]] ?? [:]
 
         layouts = defaults.data(forKey: Layouts.storageKey)
             .flatMap { try? JSONDecoder().decode([SavedLayout].self, from: $0) } ?? []

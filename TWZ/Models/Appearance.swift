@@ -161,7 +161,7 @@ enum AppearanceDefaults {
         CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.closedTradeKey,
-        LineColors.showLastPriceLineKey,
+        LineColors.trendKey, TrendLines.widthKey, TrendLines.priceBoxKey, LineColors.showLastPriceLineKey,
         LineColors.showLastTradeLinesKey, LineColors.showGridKey, VolumeBars.opacityKey,
         SideColors.sourceKey, SideColors.customUpKey, SideColors.customDownKey, Dimmed.opacityKey,
         SelectedOutline.widthKey, TimeframePickerStyle.storageKey, AccountBarPosition.storageKey,
@@ -327,6 +327,9 @@ enum LineColors {
     static let showLastTradeLinesKey = "showLastTradeLines"
     /// On shows the chart's grid lines (off by default; the price and time labels show either way).
     static let showGridKey = "showChartGridLines"
+    /// ⌘-click trend lines (see `TrendLines`).
+    static let trendKey = "trendLineColor"
+    static let defaultTrend = Color.gray
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
     static let defaultAltClick = Color.white
@@ -340,6 +343,21 @@ enum LineColors {
     }
 }
 
+/// Horizontal trend lines: ⌘-click a chart for one at that price, double-click it to remove it. Kept per
+/// stock (see `Workspace.trendLines`), drawn across the chart in Settings' color, style and width.
+enum TrendLines {
+    static let storageKey = "trendLines"
+    static let widthKey = "trendLineWidth"
+    static let defaultWidth = 1.0
+    static let widthRange = 0.5...3.0
+    /// The price in a box on the axis.
+    static let priceBoxKey = "trendLinePriceBox"
+    static let defaultPriceBox = true
+    /// Stand in for order ids on the lines (below the what-if and SIM ones), so double-clicking one removes it.
+    static func lineId(_ index: Int) -> Int { -100 - index }
+    static func index(ofLineId id: Int) -> Int? { id <= -100 ? -100 - id : nil }
+}
+
 /// Whether each chart line is dashed (true) or solid, picked in Settings.
 enum LineDashes {
     static let lastPriceKey = "lastPriceLineDashed"
@@ -350,7 +368,8 @@ enum LineDashes {
     static let takeProfitKey = "takeProfitLineDashed"
     static let ordersKey = "orderLineDashed"
     static let lastTradeKey = "lastTradeLineDashed"
-    static let keys = [lastPriceKey, avgCostKey, altClickKey, hoverKey, stopLossKey, takeProfitKey, ordersKey, lastTradeKey]
+    static let trendKey = "trendLineDashed"
+    static let keys = [lastPriceKey, avgCostKey, altClickKey, hoverKey, stopLossKey, takeProfitKey, ordersKey, lastTradeKey, trendKey]
 
     static let defaultLastPrice = true
     static let defaultAvgCost = false
@@ -360,6 +379,7 @@ enum LineDashes {
     static let defaultTakeProfit = false
     static let defaultOrders = true
     static let defaultLastTrade = true
+    static let defaultTrend = false
 
     /// Whether a dashed line is drawn in small dots rather than longer dashes, stored beside its
     /// dashed key; unset, the line's default below.

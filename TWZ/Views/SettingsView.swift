@@ -690,6 +690,10 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.stopLossKey) private var stopLossHex = ""
     @AppStorage(LineColors.takeProfitKey) private var takeProfitHex = ""
     @AppStorage(LineColors.closedTradeKey) private var closedTradeHex = ""
+    @AppStorage(LineColors.trendKey) private var trendHex = ""
+    @AppStorage(TrendLines.widthKey) private var trendWidth = TrendLines.defaultWidth
+    @AppStorage(TrendLines.priceBoxKey) private var trendPriceBox = TrendLines.defaultPriceBox
+    @Environment(Workspace.self) private var workspace
     @Environment(\.sideColors) private var sideColors
     @AppStorage(LineColors.ordersKey) private var ordersHex = ""
     @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
@@ -810,6 +814,28 @@ private struct AppearanceSettings: View {
                 lineColorRow("Closed trade (exit)", key: LineColors.closedTradeKey, hex: $closedTradeHex,
                              default: sideColors.down,
                              dashedKey: LineDashes.lastTradeKey, dashedDefault: LineDashes.defaultLastTrade)
+                lineColorRow("Trend lines (⌘-click)", key: LineColors.trendKey, hex: $trendHex,
+                             default: LineColors.defaultTrend,
+                             dashedKey: LineDashes.trendKey, dashedDefault: LineDashes.defaultTrend)
+                LabeledContent("Trend line width") {
+                    HStack {
+                        Slider(value: $trendWidth, in: TrendLines.widthRange, step: 0.5)
+                        Text(trendWidth.formatted(.number.precision(.fractionLength(1))) + " pt")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+                Toggle("Show trend lines' price on the axis", isOn: $trendPriceBox)
+                HStack {
+                    Text("⌘-click a chart for a horizontal trend line at that price; double-click the line to remove it. Kept per stock.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    let count = workspace.trendLines.values.reduce(0) { $0 + $1.count }
+                    Button("Remove All (\(count))") { workspace.trendLines = [:] }
+                        .controlSize(.small)
+                        .disabled(count == 0)
+                }
                 Toggle("Show last trade lines after a round trip closes", isOn: $showLastTradeLines)
                 Toggle("Show grid lines (the price and time labels stay)", isOn: $showGrid)
                 Text("Once a round trip closes, its chart shows the exit line in the closed trade color, and the Avg line (same line style). On: they stay until you click the chart or place an order. Off: just the exit line, for 7 seconds or until a click.")

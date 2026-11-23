@@ -34,6 +34,8 @@ management in one window built for quick entries and exits.
   back to them, also after a relaunch or zoomed far out, shows at once.
 - **Trading from the chart**: ⌃-click places a stop loss or take profit, and order lines show their
   fill as it happens. Double-click an order line to cancel it.
+- **Trend lines**: ⌘-click a chart for a horizontal line at that price, kept per stock on every timeframe
+  and chart; double-click it to remove it. Color, style, width and price box in Settings › Appearance.
 - **$ / % switch** (⌘⇧M, or the order pad's $ and %): the order numbers are dollars, $1,000 a step (1–9 are
   $1,000–$9,000), or a percent of the buying power IB's margin allows in the stock, 20% a step (1–4 are 20%, 40%,
   60%, 80%; 5–9 send nothing). The top bar's KEYS badge shows it: KEYS $ or KEYS %.

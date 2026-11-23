@@ -56,6 +56,11 @@ struct PriceLine {
     /// A market order's line: it has no price of its own, so it sits at the last price, moving with
     /// it until the order fills (`price` is only used before the chart has a price).
     var followsLastPrice = false
+    /// Across the whole chart even with an `orderId`, its price box on the axis (a trend line).
+    var drawnAcross = false
+    var lineWidth: CGFloat = 1
+    /// Off: just the line, no price box.
+    var showsTag = true
 }
 
 /// A sideways arrow pointing right at a price at a time, its tip just left of that time's candle
@@ -576,7 +581,9 @@ struct CandleChart: View {
         // Position / order lines; orders and the ones that move aside for the last price (avg cost) go
         // on top of it.
         let last = (lastPrice ?? bars.last?.close).flatMap { $0 > lo && $0 < hi ? $0 : nil }
-        func isOrder(_ line: PriceLine) -> Bool { line.drawnLikeOrder || (line.orderId != nil && !line.movesAsideForLastPrice) }
+        func isOrder(_ line: PriceLine) -> Bool {
+            !line.drawnAcross && (line.drawnLikeOrder || (line.orderId != nil && !line.movesAsideForLastPrice))
+        }
         // Order lines run from the latest candle to the axis, not across the whole chart.
         let orderLineStart = min(max(x(bars.count - 1), plot.minX), plot.maxX)
         func draw(_ line: PriceLine) {
@@ -584,8 +591,8 @@ struct CandleChart: View {
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed, dotted: line.dotted,
                      tag: line.label.isEmpty ? Fmt.price(line.price, for: chart.symbol) : "\(line.label) \(Fmt.price(line.price, for: chart.symbol))",
-                     tagInside: covered || isOrder(line), chartTag: line.chartText,
-                     lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress)
+                     tagInside: covered || isOrder(line), chartTag: line.chartText, showsTag: line.showsTag,
+                     lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress, lineWidth: line.lineWidth)
         }
         let visibleLines = placedLines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)
@@ -817,14 +824,15 @@ struct CandleChart: View {
     /// `chartTag` is a second box in the chart, just left of the axis or of the tag when it's inside.
     private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, dotted: Bool = false, tag: String,
                           tagOpacity: Double = 1, tagInside: Bool = false, chartTag: String? = nil, showsLine: Bool = true,
-                          lineStart: CGFloat? = nil, progress: Double? = nil) {
+                          showsTag: Bool = true, lineStart: CGFloat? = nil, progress: Double? = nil, lineWidth: CGFloat = 1) {
         if showsLine {
             var path = Path()
             path.move(to: CGPoint(x: lineStart ?? plot.minX, y: y))
             path.addLine(to: CGPoint(x: plot.maxX, y: y))
             ctx.stroke(path, with: .color(color.opacity(0.8)),
-                       style: StrokeStyle(lineWidth: 1, dash: dotted ? [1, 2] : dashed ? [4, 3] : []))
+                       style: StrokeStyle(lineWidth: lineWidth, dash: dotted ? [1, 2] : dashed ? [4, 3] : []))
         }
+        guard showsTag else { return }
         let box = drawTag(in: &ctx, text: tag, y: y, plot: plot, color: color, opacity: tagOpacity, inside: tagInside, progress: progress)
         if let chartTag {
             drawTag(in: &ctx, text: chartTag, y: y, plot: plot, color: color, inside: true, insideRight: tagInside ? box.minX - 2 : nil)

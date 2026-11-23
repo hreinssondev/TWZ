@@ -478,6 +478,11 @@ struct TradingChart: View {
     @AppStorage(LineDashes.dotsKey(LineDashes.ordersKey)) private var ordersDots = LineDashes.defaultDots(LineDashes.ordersKey)
     @AppStorage(LineDashes.dotsKey(LineDashes.lastTradeKey)) private var lastTradeDots = LineDashes.defaultDots(LineDashes.lastTradeKey)
     @AppStorage(LineColors.closedTradeKey) private var closedTradeHex = ""
+    @AppStorage(LineColors.trendKey) private var trendHex = ""
+    @AppStorage(LineDashes.trendKey) private var trendDashed = LineDashes.defaultTrend
+    @AppStorage(LineDashes.dotsKey(LineDashes.trendKey)) private var trendDots = LineDashes.defaultDots(LineDashes.trendKey)
+    @AppStorage(TrendLines.widthKey) private var trendWidth = TrendLines.defaultWidth
+    @AppStorage(TrendLines.priceBoxKey) private var trendPriceBox = TrendLines.defaultPriceBox
     @AppStorage(LineColors.showLastTradeLinesKey) private var showLastTradeLines = true
     @AppStorage(HoverPnLSize.storageKey) private var hoverSizing: HoverPnLSize = .buyingPower
     @AppStorage(HoverPnLSize.amountKey) private var hoverAmountNOK = HoverPnLSize.defaultAmount
@@ -491,7 +496,13 @@ struct TradingChart: View {
         CandleChart(
             chart: chart, lines: priceLines, pointers: simPointers,
             // No ⌥-click orders for now (`TradingEngine.run(_:symbol:at:)` still places one at a price):
-            // without a handler ⌥ neither tints the price tag nor places orders. ⌘-click does nothing.
+            // without a handler ⌥ neither tints the price tag nor places orders.
+            // ⌘-click: a horizontal trend line at the price (see `TrendLines`); holding ⌘ tints the price tag its color.
+            onCommandClick: { price in
+                guard !chart.symbol.isEmpty else { return }
+                workspace.trendLines[chart.symbol, default: []].append(price)
+            },
+            commandClickTint: trendColor,
             onControlClick: { price in
                 guard !chart.symbol.isEmpty else { return }
                 onTrade()
@@ -551,6 +562,11 @@ struct TradingChart: View {
             onCancelOrder: { id in
                 if id == WhatIf.lineId {
                     workspace.whatIfs[chart.symbol] = nil
+                } else if let index = TrendLines.index(ofLineId: id) {
+                    // Double-clicking a trend line removes it.
+                    var prices = workspace.trendLines[chart.symbol] ?? []
+                    if prices.indices.contains(index) { prices.remove(at: index) }
+                    workspace.trendLines[chart.symbol] = prices.isEmpty ? nil : prices
                 } else if id == SimPosition.stopLossLineId || id == SimPosition.takeProfitLineId {
                     broker.removeSimProtective(chart.symbol, stopLoss: id == SimPosition.stopLossLineId,
                                                takeProfit: id == SimPosition.takeProfitLineId)
@@ -668,6 +684,7 @@ struct TradingChart: View {
 
     private var hasPosition: Bool { broker.positions[chart.symbol].map { $0.quantity != 0 } ?? false }
     private var hasSim: Bool { broker.simPositions[chart.symbol] != nil }
+    private var trendColor: Color { LineColors.resolve(trendHex, default: LineColors.defaultTrend) }
 
     private func protectiveColor(_ kind: Broker.Protective.Kind) -> Color {
         kind == .stopLoss
@@ -686,6 +703,12 @@ struct TradingChart: View {
     /// Line colors and solid / dashes / dots come from Settings.
     private var priceLines: [PriceLine] {
         var lines: [PriceLine] = []
+        // Trend lines (⌘-click) first, under the rest; a double-click on one removes it.
+        for (index, price) in (workspace.trendLines[chart.symbol] ?? []).enumerated() {
+            lines.append(PriceLine(price: price, color: trendColor, label: "", dashed: trendDashed,
+                                   dotted: trendDashed && trendDots, orderId: TrendLines.lineId(index),
+                                   drawnAcross: true, lineWidth: trendWidth, showsTag: trendPriceBox))
+        }
         if let trip = shownTrip {
             // Shown from the Round trips tab: small dots, green at the average entry (unknown for shares
             // held from before today), red at the average exit.
