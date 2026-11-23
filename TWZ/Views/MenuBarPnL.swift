@@ -4,10 +4,11 @@
 //
 //  The P/L in the menu bar, as a bare number in NOK: green above zero, red below. The real positions'
 //  (open P/L at the last price, as the Positions column sums them); with none open, the what-if
-//  trades' (see `SimTrades.swift`); 0 with neither. Updated every second; a click brings TWZ to the front.
+//  trades' (see `SimTrades.swift`), in their pink whatever its sign; 0 with neither. Updated every second; a click brings TWZ to the front.
 //
 
 import AppKit
+import SwiftUI
 
 @MainActor
 final class MenuBarPnL: NSObject {
@@ -35,6 +36,7 @@ final class MenuBarPnL: NSObject {
         guard let broker, let button = statusItem.button else { return }
         let real = broker.positions.values.filter { $0.quantity != 0 }
         let pnl: Double?, help: String
+        var isSim = false
         if !real.isEmpty {
             pnl = Self.sum(real.map { p in
                 broker.quote(p.symbol)?.last.flatMap { last in
@@ -44,6 +46,7 @@ final class MenuBarPnL: NSObject {
             help = "P/L of the \(real.count) open position\(real.count == 1 ? "" : "s"), NOK"
         } else if !broker.simPositions.isEmpty {
             pnl = Self.sum(broker.simPositions.values.map { sim in broker.quote(sim.symbol)?.last.flatMap { broker.simPnLNOK(sim, at: $0) } })
+            isSim = true
             help = "SIM: P/L of the \(broker.simPositions.count) what-if trade\(broker.simPositions.count == 1 ? "" : "s"), NOK"
         } else {
             pnl = 0
@@ -51,7 +54,9 @@ final class MenuBarPnL: NSObject {
         }
         let text = pnl.map { Fmt.nok($0, signed: true, groupedFrom: 0) } ?? "—"
         let rounded = (pnl ?? 0).rounded()
-        let color: NSColor = rounded > 0 ? .systemGreen : rounded < 0 ? .systemRed : .secondaryLabelColor
+        // What-if trades' P/L in their pink, whatever its sign.
+        let color: NSColor = isSim ? NSColor(TradingChart.whatIfColor)
+            : rounded > 0 ? .systemGreen : rounded < 0 ? .systemRed : .secondaryLabelColor
         let title = NSAttributedString(string: text, attributes: [
             .foregroundColor: color,
             .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium),
