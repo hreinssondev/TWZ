@@ -211,7 +211,8 @@ struct ChartPane: View {
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(MainGrid.zoomKey) private var gridZoom: Double = ChartModel.initialVisibleBars
     @State private var symbolText = ""
-    @FocusState private var symbolFocused: Bool
+    /// The symbol box is being edited: only a click on it starts that (see `SymbolField`).
+    @State private var symbolFocused = false
 
     private var isSelected: Bool { workspace.isChartSelected && workspace.selectedChartID == chart.id }
     /// Shows the selected chart's stock (in another chart).
@@ -280,16 +281,12 @@ struct ChartPane: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            TextField("Symbol", text: $symbolText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13, weight: .bold))
-                .frame(width: 70)
-                .focused($symbolFocused)
-                .onSubmit {
-                    workspace.loadByHand(symbolText, into: chart, broker: broker)
-                    symbolText = chart.symbol
-                    symbolFocused = false
-                }
+            SymbolField(text: $symbolText, isFocused: $symbolFocused) {
+                workspace.loadByHand(symbolText, into: chart, broker: broker)
+                symbolText = chart.symbol
+                symbolFocused = false
+            }
+            .frame(width: 70)
 
             // "2 LONG 23 322 +452": the orders that opened or added to the open round trip (an order in
             // several fills counts once), the market value in NOK (at cost until there's a quote), and the

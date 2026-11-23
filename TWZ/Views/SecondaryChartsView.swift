@@ -309,7 +309,8 @@ struct SecondaryChartPane: View {
 
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @State private var symbolText = ""
-    @FocusState private var symbolFocused: Bool
+    /// The symbol box is being edited: only a click on it starts that (see `SymbolField`).
+    @State private var symbolFocused = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -341,28 +342,24 @@ struct SecondaryChartPane: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            TextField("Symbol", text: $symbolText)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13, weight: .bold))
-                .frame(width: 70)
-                .focused($symbolFocused)
-                .onSubmit {
-                    // Typed by hand: the chart keeps it and its cell; an emptied field gives it back to the gainers.
-                    let symbol = ForexPair.normalize(symbolText)
-                    if symbol.isEmpty {
-                        workspace.secondaryDisplaced[chart.id] = nil
-                        workspace.secondaryPins[chart.id] = nil
-                    } else {
-                        // The stock it showed while following the gainers leaves the charts, so nothing else moves.
-                        if workspace.secondaryPins[chart.id] == nil, !chart.symbol.isEmpty {
-                            workspace.secondaryDisplaced[chart.id] = chart.symbol
-                        }
-                        if symbol != chart.symbol { workspace.load(symbol, into: chart, broker: broker) }
-                        if let cell { workspace.secondaryPins[chart.id] = cell }
+            SymbolField(text: $symbolText, isFocused: $symbolFocused) {
+                // Typed by hand: the chart keeps it and its cell; an emptied field gives it back to the gainers.
+                let symbol = ForexPair.normalize(symbolText)
+                if symbol.isEmpty {
+                    workspace.secondaryDisplaced[chart.id] = nil
+                    workspace.secondaryPins[chart.id] = nil
+                } else {
+                    // The stock it showed while following the gainers leaves the charts, so nothing else moves.
+                    if workspace.secondaryPins[chart.id] == nil, !chart.symbol.isEmpty {
+                        workspace.secondaryDisplaced[chart.id] = chart.symbol
                     }
-                    symbolText = chart.symbol
-                    symbolFocused = false
+                    if symbol != chart.symbol { workspace.load(symbol, into: chart, broker: broker) }
+                    if let cell { workspace.secondaryPins[chart.id] = cell }
                 }
+                symbolText = chart.symbol
+                symbolFocused = false
+            }
+            .frame(width: 70)
             Spacer()
         }
         .padding(.horizontal, 8)
