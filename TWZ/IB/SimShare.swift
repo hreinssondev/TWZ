@@ -74,7 +74,7 @@ final class SimShare {
         guard widgetSymbols.first != symbol else { return }
         widgetSymbols.removeAll { $0 == symbol }
         widgetSymbols.insert(symbol, at: 0)
-        widgetSymbols = Array(widgetSymbols.prefix(3))
+        widgetSymbols = Array(widgetSymbols.prefix(4))
         broker?.setQuoteSymbols(widgetSymbols, owner: Self.widgetQuoteOwner)
     }
 
