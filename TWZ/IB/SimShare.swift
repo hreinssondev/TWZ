@@ -60,39 +60,51 @@ final class SimShare {
     private func serveQuote(_ connection: NWConnection) {
         guard Self.allowed(connection.endpoint), broker != nil else { connection.cancel(); return }
         connection.start(queue: .main)
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 64) { data, _, _, _ in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 256) { data, _, _, _ in
             MainActor.assumeIsolated {
                 let line = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
                 let symbol = line.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-                guard !symbol.isEmpty, symbol.count <= 12, let broker = SimShare.shared.broker else { connection.cancel(); return }
+                guard !symbol.isEmpty, symbol.count <= 12 || symbol.hasPrefix("LIVE "), let broker = SimShare.shared.broker else { connection.cancel(); return }
                 if symbol == "POSITIONS" { return SimShare.shared.sendPositions(connection, broker: broker) }
+                // The Live Activity's push token (see `LivePush`), or END when it's over.
+                if symbol.hasPrefix("LIVE ") {
+                    let token = String(symbol.dropFirst(5)).lowercased()
+                    LivePush.shared.setToken(token == "end" ? nil : token)
+                    return connection.send(content: Data("{}".utf8), contentContext: .finalMessage, isComplete: true,
+                                           completion: .contentProcessed { _ in connection.cancel() })
+                }
                 SimShare.shared.keepQuoting(symbol)
                 SimShare.shared.answer(connection, symbol: symbol, broker: broker, waited: 0)
             }
         }
     }
 
-    /// The positions widget's: the real positions' P/L in NOK (each, while any are open), else the what-if
-    /// trades'; a P/L left out while its stock has no price yet.
-    private func sendPositions(_ connection: NWConnection, broker: Broker) {
+    /// The open positions, each with its P/L in NOK: the real ones while any are open, else the what-if
+    /// trades (`isSim`); a P/L left out while its stock has no price yet. For the widget and the Live Activity.
+    static func positionRows(_ broker: Broker) -> (isSim: Bool, rows: [(symbol: String, pnl: Double?)]) {
         let real = broker.positions.values.filter { $0.quantity != 0 }.sorted { $0.symbol < $1.symbol }
-        var rows: [[String: Any]] = []
         if real.isEmpty {
-            for sim in broker.simPositions.values.sorted(by: { $0.symbol < $1.symbol }) {
-                var row: [String: Any] = ["symbol": sim.symbol]
-                if let last = broker.quotes[sim.symbol]?.last, let pnl = broker.simPnLNOK(sim, at: last) { row["pnl"] = pnl }
-                rows.append(row)
-            }
-        } else {
-            for p in real {
-                var row: [String: Any] = ["symbol": p.symbol]
-                if let last = broker.quotes[p.symbol]?.last, let usd = broker.usdPerPriceUnit(p.symbol), let usdNok = broker.usdNok {
-                    row["pnl"] = (last - p.avgCost) * p.quantity * usd * usdNok
-                }
-                rows.append(row)
-            }
+            return (true, broker.simPositions.values.sorted { $0.symbol < $1.symbol }.map { sim in
+                (sim.symbol, broker.quotes[sim.symbol]?.last.flatMap { broker.simPnLNOK(sim, at: $0) })
+            })
         }
-        let reply: [String: Any] = ["isSim": real.isEmpty, "positions": rows, "time": Date().timeIntervalSince1970]
+        return (false, real.map { p in
+            let pnl = broker.quotes[p.symbol]?.last.flatMap { last in
+                broker.usdPerPriceUnit(p.symbol).flatMap { usd in broker.usdNok.map { (last - p.avgCost) * p.quantity * usd * $0 } }
+            }
+            return (p.symbol, pnl)
+        })
+    }
+
+    /// The positions widget's (see `positionRows`).
+    private func sendPositions(_ connection: NWConnection, broker: Broker) {
+        let (isSim, positions) = Self.positionRows(broker)
+        let rows: [[String: Any]] = positions.map { row in
+            var r: [String: Any] = ["symbol": row.symbol]
+            if let pnl = row.pnl { r["pnl"] = pnl }
+            return r
+        }
+        let reply: [String: Any] = ["isSim": isSim, "positions": rows, "time": Date().timeIntervalSince1970]
         let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data("{}".utf8)
         connection.send(content: data, contentContext: .finalMessage, isComplete: true,
                         completion: .contentProcessed { _ in connection.cancel() })

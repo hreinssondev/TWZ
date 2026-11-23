@@ -77,6 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard menuBarPnL == nil, let broker else { return }
         menuBarPnL = MenuBarPnL(broker: broker)
         SimShare.shared.start(broker: broker)
+        LivePush.shared.start(broker: broker)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
