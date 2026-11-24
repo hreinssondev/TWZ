@@ -59,8 +59,10 @@ struct NewsTab: View {
             }
             .font(.system(size: 10).monospacedDigit())
             .foregroundStyle(.secondary)
+            // Full-strength text color: a little brighter than the usual label color.
             Text(item.headline)
                 .font(.system(size: 11))
+                .foregroundStyle(Color(nsColor: .textColor))
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
         }
