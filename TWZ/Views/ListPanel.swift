@@ -201,7 +201,6 @@ struct ListPanel: View {
         // starts at the list's last rows if it was shown before (see `TradingEngine.setScanner`).
         let rows = scanner == kind ? symbols : []
         scanner = kind
-        tab = .list
         workspace.loadList(rows, scan: spec, timeframe: gridTimeframe, broker: broker)
     }
 
