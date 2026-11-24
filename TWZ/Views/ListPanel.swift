@@ -9,7 +9,11 @@
 //  its order and as it changes, in place of the gainers until the account bar's Reset (see `ChartGrid`). The price columns' widths drag from their header's left edge (double-click
 //  resets) and are kept per list; a list narrower than its columns clips them on the right. Clicking a row loads it into the selected chart, which keeps it until the
 //  account bar's Reset (see `ChartGrid`). Prices refresh every
-//  2 seconds rather than every tick, which keeps the UI free for the charts.
+//  2 seconds rather than every tick, which keeps the UI free for the charts. A newspaper after a
+//  symbol: news since the last close (hover for the headline).
+//
+//  The top bar's tabs switch the panel between its list and News (see `NewsTab`): the list's name,
+//  then News. The list keeps scanning behind the News tab.
 //
 
 import SwiftUI
@@ -22,6 +26,8 @@ struct ListPanel: View {
 
     let panelId: String
     @AppStorage private var scanner: ScannerKind
+    @AppStorage private var tab: ListTab
+    @AppStorage private var newsScope: NewsScope
     /// One list across the lists' space instead of two (see `ContentView`); the button beside the
     /// filters switches.
     @AppStorage(ListPanel.singleKey) private var isSingle = false
@@ -53,6 +59,8 @@ struct ListPanel: View {
     init(panelId: String, defaultScanner: ScannerKind) {
         self.panelId = panelId
         _scanner = AppStorage(wrappedValue: defaultScanner, "scanner.\(panelId)")
+        _tab = AppStorage(wrappedValue: .list, "listTab.\(panelId)")
+        _newsScope = AppStorage(wrappedValue: .stock, "newsScope.\(panelId)")
         _lastWidth = AppStorage(wrappedValue: Self.defaultWidths.last, "listColumn.last.\(panelId)")
         _changeWidth = AppStorage(wrappedValue: Self.defaultWidths.change, "listColumn.change.\(panelId)")
         _recentWidth = AppStorage(wrappedValue: Self.defaultWidths.recent, "listColumn.recent.\(panelId)")
@@ -69,75 +77,86 @@ struct ListPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 4) {
-                Picker("", selection: $scanner) {
-                    ForEach(ScannerKind.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .labelsHidden()
-                .controlSize(.small)
-                .help(ScannerKind.shortcutHelp)
-
-                Button {
-                    showFilter.toggle()
-                } label: {
-                    Image(systemName: "line.3.horizontal.decrease.circle")
-                }
-                .buttonStyle(.borderless)
-                .disabled(scanner == .forex)
-                .help(scanner == .forex ? "The Forex list has no filters" : "Scanner filters")
-                .popover(isPresented: $showFilter, arrowEdge: .bottom) {
-                    ScanFilterEditor(filter: workspace.scanFilter(panel: panelId, scanner), defaults: scanner.defaultFilter) { filter in
-                        workspace.setScanFilter(filter, panel: panelId, scanner)
-                        showFilter = false
+                if tab == .list {
+                    Picker("", selection: $scanner) {
+                        ForEach(ScannerKind.allCases) { Text($0.rawValue).tag($0) }
                     }
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .help(ScannerKind.shortcutHelp)
+                } else {
+                    tabLabel(scanner.rawValue, isOpen: false) { tab = .list }
                 }
+                tabLabel("News", isOpen: tab == .news) { tab = .news }
+                    .help("Headlines from IB's free news (Briefing.com, Dow Jones newsletters)")
+                Spacer(minLength: 0)
+                if tab == .list {
+                    Button {
+                        showFilter.toggle()
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(scanner == .forex)
+                    .help(scanner == .forex ? "The Forex list has no filters" : "Scanner filters")
+                    .popover(isPresented: $showFilter, arrowEdge: .bottom) {
+                        ScanFilterEditor(filter: workspace.scanFilter(panel: panelId, scanner), defaults: scanner.defaultFilter) { filter in
+                            workspace.setScanFilter(filter, panel: panelId, scanner)
+                            showFilter = false
+                        }
+                    }
 
-                Button {
-                    isSingle.toggle()
-                } label: {
-                    // A small dot, brighter while the lists are one.
-                    Circle()
-                        .fill(isSingle ? Color.primary.opacity(0.8) : Color.secondary.opacity(0.6))
-                        .frame(width: 6, height: 6)
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
+                    singleListButton
+                    Button {
+                        workspace.loadList(symbols, scan: scanSpec, timeframe: gridTimeframe, broker: broker)
+                    } label: {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 10))
+                            .frame(width: 16, height: 16)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .disabled(symbols.isEmpty)
+                    .help("The chart grid follows this list, top first, as it changes (until Reset)")
+                } else {
+                    tabLabel(workspace.targetSymbol.isEmpty ? "Chart" : workspace.targetSymbol, isOpen: newsScope == .stock) {
+                        newsScope = .stock
+                    }
+                    .help("The selected chart's news")
+                    tabLabel("All", isOpen: newsScope == .all) { newsScope = .all }
+                        .help("Every headline, as it comes")
+                    singleListButton
                 }
-                .buttonStyle(.plain)
-                .help(isSingle ? "Split into two lists" : "One list across both")
-
-                Button {
-                    workspace.loadList(symbols, scan: scanSpec, timeframe: gridTimeframe, broker: broker)
-                } label: {
-                    Image(systemName: "arrow.down")
-                        .font(.system(size: 10))
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .disabled(symbols.isEmpty)
-                .help("The chart grid follows this list, top first, as it changes (until Reset)")
             }
+            .frame(height: 20)
             .padding(6)
 
-            columnHeader
-            Divider()
+            if tab == .list {
+                columnHeader
+                Divider()
 
-            ScrollView {
-                let traded = tradedSymbols
-                LazyVStack(spacing: 0) {
-                    ForEach(symbols, id: \.self) { symbol in
-                        row(symbol, traded: traded.contains(symbol))
+                ScrollView {
+                    let traded = tradedSymbols
+                    LazyVStack(spacing: 0) {
+                        ForEach(symbols, id: \.self) { symbol in
+                            row(symbol, traded: traded.contains(symbol))
+                        }
                     }
                 }
-            }
 
-            Divider()
-            scanStatus
+                Divider()
+                scanStatus
+            } else {
+                Divider()
+                NewsTab(scope: newsScope)
+            }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
         .onAppear {
+            syncNews()
             workspace.shownLists[panelId] = scanner
             broker.setScanner(scanSpec, owner: panelId)
             broker.setQuoteSymbols(symbols, owner: panelId)
@@ -148,7 +167,11 @@ struct ListPanel: View {
             workspace.shownLists[panelId] = nil
             broker.setScanner(nil, owner: panelId)
             broker.setQuoteSymbols([], owner: panelId)
+            broker.setNews(owner: panelId, symbol: nil, all: false)
         }
+        .onChange(of: tab) { syncNews() }
+        .onChange(of: newsScope) { syncNews() }
+        .onChange(of: workspace.targetSymbol) { syncNews() }
         .onChange(of: scanSpec) { _, new in broker.setScanner(new, owner: panelId) }
         .onChange(of: scanner) { _, new in workspace.shownLists[panelId] = new }
         .onChange(of: workspace.listShortcut) { _, request in takeUp(request) }
@@ -178,7 +201,41 @@ struct ListPanel: View {
         // starts at the list's last rows if it was shown before (see `TradingEngine.setScanner`).
         let rows = scanner == kind ? symbols : []
         scanner = kind
+        tab = .list
         workspace.loadList(rows, scan: spec, timeframe: gridTimeframe, broker: broker)
+    }
+
+    /// The engine streams the news this panel's News tab shows; none while the list is shown.
+    private func syncNews() {
+        guard tab == .news else { return broker.setNews(owner: panelId, symbol: nil, all: false) }
+        broker.setNews(owner: panelId, symbol: newsScope == .stock ? workspace.targetSymbol : nil, all: newsScope == .all)
+    }
+
+    /// Merges the two lists into one, or splits them again.
+    private var singleListButton: some View {
+        Button {
+            isSingle.toggle()
+        } label: {
+            // A small dot, brighter while the lists are one.
+            Circle()
+                .fill(isSingle ? Color.primary.opacity(0.8) : Color.secondary.opacity(0.6))
+                .frame(width: 6, height: 6)
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(isSingle ? "Split into two lists" : "One list across both")
+    }
+
+    /// One of the top bar's tabs, bold while open.
+    private func tabLabel(_ title: String, isOpen: Bool, open: @escaping () -> Void) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: isOpen ? .semibold : .regular))
+            .foregroundStyle(isOpen ? Color.primary : Color.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 3)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: open)
     }
 
     private func refreshRows() {
@@ -270,6 +327,12 @@ struct ListPanel: View {
                     Circle().fill(Color.green).frame(width: 5, height: 5)
                         .help("Traded today")
                 }
+                if let item = broker.listNews[symbol] {
+                    Image(systemName: "newspaper.fill")
+                        .font(.system(size: 8))
+                        .foregroundStyle(Color.accentColor)
+                        .help("News \(NewsTab.time(item.time)): \(item.headline)")
+                }
             }
             .frame(minWidth: Self.minSymbolWidth, maxWidth: .infinity, alignment: .leading)
             Text(Fmt.price(values?.last, for: symbol)).frame(width: lastWidth, alignment: .trailing)
@@ -304,6 +367,9 @@ struct ListPanel: View {
         }
     }
 }
+
+/// What a list panel shows: its list, or News (see `NewsTab`).
+enum ListTab: String { case list, news }
 
 /// Price/volume filter for a scanner; applied on "Apply" so typing doesn't resubscribe.
 private struct ScanFilterEditor: View {

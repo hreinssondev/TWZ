@@ -51,6 +51,14 @@ final class Broker {
     @ObservationIgnored private var quoteBoxes: [String: QuoteBox] = [:]
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private(set) var unavailableQuotes: [String: String] = [:]
+    /// Headlines from IB's free providers, newest first, by feed: a stock's symbol, or `News.allFeed`.
+    private(set) var news: [String: [NewsItem]] = [:]
+    /// The lists' stocks with a headline since the last close: their newest one.
+    private(set) var listNews: [String: NewsItem] = [:]
+    /// Articles asked for with `loadNewsArticle`, by article id.
+    private(set) var newsArticles: [String: NewsArticle] = [:]
+    /// Why the News tab has nothing (IB refused the feed).
+    private(set) var newsError: String?
     /// Latest scanner results per list panel, as shown: with Hide restricted stocks on, without the
     /// stocks in `restricted` (see `filterScans`).
     private(set) var scans: [String: ScanResult] = [:]
@@ -330,6 +338,16 @@ final class Broker {
     /// Each UI component ("chart-0", "list-left", …) declares the symbols it needs quotes for.
     func setQuoteSymbols(_ symbols: [String], owner: String) {
         engine.perform { $0.setQuoteSymbols(symbols, owner: owner) }
+    }
+
+    /// A list panel's News tab shows `symbol`'s news, or all news; nil and false when it's closed.
+    func setNews(owner: String, symbol: String?, all: Bool) {
+        engine.perform { $0.setNews(owner: owner, symbol: symbol, all: all) }
+    }
+
+    func loadNewsArticle(_ item: NewsItem) {
+        let (provider, id) = (item.provider, item.id)
+        engine.perform { $0.requestNewsArticle(provider: provider, id: id) }
     }
 
     /// Each list panel declares the scanner it shows (nil to stop it).
@@ -717,6 +735,10 @@ final class Broker {
             if !simPositions.isEmpty { checkSimExits() }
         }
         if let v = s.unavailableQuotes { update(\.unavailableQuotes, v) }
+        if let v = s.news { update(\.news, v) }
+        if let v = s.listNews { update(\.listNews, v) }
+        if let v = s.newsArticles { update(\.newsArticles, v) }
+        if let v = s.newsError { update(\.newsError, v) }
         if let v = s.scans { rawScans = v }
         if let v = s.restricted { update(\.restricted, v) }
         if s.scans != nil || s.restricted != nil || s.positions != nil || s.orders != nil { filterScans() }

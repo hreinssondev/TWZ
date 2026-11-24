@@ -81,6 +81,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private var ssrChaseRecheck: Set<String> = []
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private var unavailableQuotes: [String: String] = [:] { didSet { changed(.unavailable) } }
+    /// Headlines from IB's free providers, newest first, by feed: a stock's symbol, or `News.allFeed`.
+    private var news: [String: [NewsItem]] = [:] { didSet { changed(.news) } }
+    /// The lists' stocks with a headline since the last close: their newest one (see `checkListNews`).
+    private var listNews: [String: NewsItem] = [:] { didSet { changed(.news) } }
+    /// Articles asked for, by article id.
+    private var newsArticles: [String: NewsArticle] = [:] { didSet { changed(.news) } }
+    /// Why the news tab has nothing (IB refused the feed).
+    private var newsError: String? { didSet { changed(.news) } }
     /// Latest scanner results per list panel.
     private var scans: [String: ScanResult] = [:] { didSet { changed(.scans); scheduleRestrictionCheck() } }
     /// Regular-session closes keyed "SYMBOL|yyyyMMdd", fetched for after-hours scanner rows.
@@ -233,6 +241,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         static let shortability = Dirty(rawValue: 1 << 12)
         static let restricted = Dirty(rawValue: 1 << 13)
         static let entries = Dirty(rawValue: 1 << 14)
+        static let news = Dirty(rawValue: 1 << 15)
     }
 
     /// One display frame at 120 Hz (ProMotion): the UI never gets more snapshots than it can show.
@@ -278,7 +287,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// Everything the UI shows, for its initial state. Call on the engine queue.
     func fullSnapshot() -> EngineSnapshot {
-        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources, .tickStreams, .shortability, .restricted]
+        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources, .tickStreams, .shortability, .restricted, .news]
         return takeSnapshot()
     }
 
@@ -337,6 +346,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             entries.removeAll()
         }
         if dirty.contains(.restricted) { s.restricted = restricted.mapValues(\.reason) }
+        if dirty.contains(.news) {
+            s.news = news
+            s.listNews = listNews
+            s.newsArticles = newsArticles
+            s.newsError = newsError
+        }
         if dirty.contains(.tickStreams) {
             s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind != .bidAsk }.map(\.symbol))
             s.tickLimitedSymbols = tickLimitedSymbols
@@ -463,6 +478,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         fxReq = nil
         detailsSymbolByReq.removeAll()
         pairsWithoutCFD.removeAll()
+        resetNews()
         fxBid = nil
         fxAsk = nil
         usdNokIsLive = false
@@ -533,6 +549,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         syncTickByTick()
         for owner in scanSpecs.keys { startScan(owner) }
         scheduleRestrictionCheck()
+        syncNews()
+        watchListNews()
     }
 
     // MARK: - Market data
@@ -2320,6 +2338,250 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return (p * scale).rounded() / scale
     }
 
+    // MARK: - News
+
+    /// Per owner (a list panel's News tab): the stock whose news it shows, and whether it shows all news.
+    private var newsWanted: [String: (symbol: String?, all: Bool)] = [:]
+    /// IB's contract id per stock, which its past headlines are asked by: from the lists, positions and
+    /// contract details.
+    private var conIds: [String: Int] = [:]
+    private var conIdSymbolByReq: [Int: String] = [:]
+    /// Live headline streams (generic tick 292): a stock's symbol, or "*BRFG" for a provider's feed of all news.
+    private var newsReqByStream: [String: Int] = [:]
+    private var newsStreamByReq: [Int: String] = [:]
+    /// Past headlines, asked for one request at a time: IB drops some of several sent together.
+    private struct NewsQuery {
+        var symbol: String
+        var conId: Int
+        var count: Int
+        /// For the lists' news marks rather than the News tab.
+        var forList: Bool
+    }
+    private var newsQueries: [NewsQuery] = []
+    private var newsQueryInFlight: (reqId: Int, query: NewsQuery, results: [NewsItem])?
+    /// When each list stock's news was last checked.
+    private var listNewsChecked: [String: Date] = [:]
+    private var articleByReq: [Int: String] = [:]
+    private static let newsProviderCodes = News.providers.joined(separator: "+")
+    private static let newsTimeFormat: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss.S"
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+    /// Headlines kept per feed.
+    private static let newsKept = 150
+    /// How often a list stock's news is checked again.
+    private static let listNewsInterval: TimeInterval = 300
+
+    /// A News tab shows `symbol`'s news, or all news (nil for neither: the tab is closed).
+    func setNews(owner: String, symbol: String?, all: Bool) {
+        if symbol == nil, !all { newsWanted[owner] = nil } else { newsWanted[owner] = (symbol, all) }
+        syncNews()
+    }
+
+    /// Fetches an article (once; `newsArticles` keeps it).
+    func requestNewsArticle(provider: String, id: String) {
+        guard apiReady, newsArticles[id] == nil || newsArticles[id]?.error != nil,
+              !articleByReq.values.contains(id) else { return }
+        let reqId = makeReqId()
+        articleByReq[reqId] = id
+        send(84, reqId, provider, id, "")                                         // reqNewsArticle
+    }
+
+    private func resetNews() {
+        conIdSymbolByReq.removeAll()
+        newsReqByStream.removeAll()
+        newsStreamByReq.removeAll()
+        newsQueries.removeAll()
+        newsQueryInFlight = nil
+        listNewsChecked.removeAll()
+        articleByReq.removeAll()
+    }
+
+    /// Opens the live streams the News tabs need, closes the others, and asks for the past headlines of
+    /// a stock newly shown.
+    private func syncNews() {
+        guard apiReady else { return }
+        let symbols = Set(newsWanted.values.compactMap(\.symbol).filter { !$0.isEmpty && !ForexPair.isForex($0) })
+        var streams = symbols
+        if newsWanted.values.contains(where: \.all) { streams.formUnion(News.broadtapes.map { "*" + $0 }) }
+        for (stream, reqId) in newsReqByStream where !streams.contains(stream) {
+            send(2, 2, reqId)                                                      // cancelMktData
+            newsReqByStream[stream] = nil
+            newsStreamByReq[reqId] = nil
+        }
+        for stream in streams.sorted() where newsReqByStream[stream] == nil {
+            let reqId = makeReqId()
+            newsReqByStream[stream] = reqId
+            newsStreamByReq[reqId] = stream
+            if stream.hasPrefix("*") {
+                let provider = String(stream.dropFirst())
+                sendFields([1, 11, reqId, 0, "\(provider):\(provider)_ALL", "NEWS", "", 0.0, "", "", provider, "", "", "", "",
+                            false, "mdoff,292", false, false, ""])                 // reqMktData: a provider's feed
+            } else {
+                sendFields([1, 11, reqId] + contract(stream) + [false, "mdoff,292:\(Self.newsProviderCodes)", false, false, ""])
+                if let conId = conIds[stream] {
+                    queueNews(NewsQuery(symbol: stream, conId: conId, count: 50, forList: false))
+                } else {
+                    requestConId(stream)
+                }
+            }
+        }
+    }
+
+    private func requestConId(_ symbol: String) {
+        guard !conIdSymbolByReq.values.contains(symbol) else { return }
+        let reqId = makeReqId()
+        conIdSymbolByReq[reqId] = symbol
+        // reqContractDetails: version 8, reqId, contract, includeExpired, secIdType, secId, issuerId (server ≥ 176)
+        var f: [Any] = [9, 8, reqId] + contract(symbol) + [false, "", ""]
+        if serverVersion >= 176 { f.append("") }
+        sendFields(f)
+    }
+
+    private func conIdArrived(_ symbol: String, _ conId: Int) {
+        guard conId > 0 else { return }
+        conIds[symbol] = conId
+        if newsReqByStream[symbol] != nil { queueNews(NewsQuery(symbol: symbol, conId: conId, count: 50, forList: false)) }
+    }
+
+    /// The News tab's queries go before the lists' checks.
+    private func queueNews(_ query: NewsQuery) {
+        guard newsQueryInFlight?.query.symbol != query.symbol || newsQueryInFlight?.query.forList != query.forList,
+              !newsQueries.contains(where: { $0.symbol == query.symbol && $0.forList == query.forList }) else { return }
+        if query.forList { newsQueries.append(query) } else { newsQueries.insert(query, at: 0) }
+        sendNextNewsQuery()
+    }
+
+    private func sendNextNewsQuery() {
+        guard apiReady, newsQueryInFlight == nil, !newsQueries.isEmpty else { return }
+        let query = newsQueries.removeFirst()
+        let reqId = makeReqId()
+        newsQueryInFlight = (reqId, query, [])
+        send(86, reqId, query.conId, Self.newsProviderCodes, "", "", query.count, "")   // reqHistoricalNews
+        // IB now and then never answers one: move on.
+        let current = session
+        queue.asyncAfter(deadline: .now() + 8) { [weak self] in
+            guard let self, self.session == current, self.newsQueryInFlight?.reqId == reqId else { return }
+            self.finishNewsQuery()
+        }
+    }
+
+    private func finishNewsQuery() {
+        guard let inFlight = newsQueryInFlight else { return }
+        let (query, results) = (inFlight.query, inFlight.results)
+        newsQueryInFlight = nil
+        if query.forList {
+            listNewsChecked[query.symbol] = Date()
+            let newest = results.max { $0.time < $1.time }
+            let fresh = newest.flatMap { $0.time > News.lastClose() ? $0 : nil }
+            if listNews[query.symbol] != fresh { listNews[query.symbol] = fresh }
+        } else {
+            addNews(results, to: query.symbol)
+        }
+        sendNextNewsQuery()
+    }
+
+    private func addNews(_ items: [NewsItem], to feed: String) {
+        guard !items.isEmpty else { return }
+        var list = news[feed] ?? []
+        let known = Set(list.map(\.id))
+        let new = items.filter { !known.contains($0.id) }
+        guard !new.isEmpty else { return }
+        if newsError != nil { newsError = nil }
+        list = Array((list + new).sorted { $0.time > $1.time }.prefix(Self.newsKept))
+        news[feed] = list
+        // A list stock's headline as it comes: marked right away.
+        if feed != News.allFeed, let newest = list.first, newest.time > News.lastClose(), listNews[feed] != newest,
+           listNews[feed].map({ $0.time < newest.time }) ?? isListed(feed) {
+            listNews[feed] = newest
+        }
+    }
+
+    private func isListed(_ symbol: String) -> Bool {
+        scans.values.contains { $0.symbols.contains(symbol) }
+    }
+
+    /// Every 20 s, the lists' stocks not checked in the last five minutes get asked for their newest headline.
+    private func watchListNews() {
+        let current = session
+        queue.asyncAfter(deadline: .now() + 20) { [weak self] in
+            guard let self, self.session == current, self.apiReady else { return }
+            self.checkListNews()
+            self.watchListNews()
+        }
+        checkListNews()
+    }
+
+    private func checkListNews() {
+        let now = Date()
+        var seen: Set<String> = []
+        for scan in scans.values {
+            for symbol in scan.symbols where seen.insert(symbol).inserted && !ForexPair.isForex(symbol) {
+                guard let conId = conIds[symbol],
+                      listNewsChecked[symbol].map({ now.timeIntervalSince($0) > Self.listNewsInterval }) ?? true else { continue }
+                queueNews(NewsQuery(symbol: symbol, conId: conId, count: 1, forList: true))
+            }
+        }
+    }
+
+    private func tickNews(_ f: [String]) {
+        // reqId, timeStamp (ms), providerCode, articleId, headline, extraData
+        guard let stream = newsStreamByReq[f.int(1)], News.providers.contains(f.str(3)) else { return }
+        let item = NewsItem(id: f.str(4), provider: f.str(3), time: Date(timeIntervalSince1970: f.double(2) / 1000),
+                            headline: News.cleanHeadline(f.str(5)))
+        addNews([item], to: stream.hasPrefix("*") ? News.allFeed : stream)
+    }
+
+    private func historicalNews(_ f: [String]) {
+        // reqId, time ("2026-11-11 12:26:23.0", UTC), providerCode, articleId, headline
+        guard newsQueryInFlight?.reqId == f.int(1), News.providers.contains(f.str(3)),
+              let time = Self.newsTimeFormat.date(from: f.str(2)) else { return }
+        newsQueryInFlight?.results.append(NewsItem(id: f.str(4), provider: f.str(3), time: time,
+                                                   headline: News.cleanHeadline(f.str(5))))
+    }
+
+    private func historicalNewsEnd(_ f: [String]) {
+        guard newsQueryInFlight?.reqId == f.int(1) else { return }
+        finishNewsQuery()
+    }
+
+    private func newsArticle(_ f: [String]) {
+        // reqId, articleType (0 text/HTML, 1 PDF in base64), articleText
+        guard let id = articleByReq.removeValue(forKey: f.int(1)) else { return }
+        if f.int(2) == 1 {
+            newsArticles[id] = NewsArticle(pdf: Data(base64Encoded: f.str(3), options: .ignoreUnknownCharacters))
+        } else {
+            let (text, link) = News.plainText(fromHTML: f.str(3))
+            newsArticles[id] = NewsArticle(text: text, link: link)
+        }
+    }
+
+    /// An error for one of the news requests: handled here (true), not shown as a status message.
+    private func newsError(reqId: Int, code: Int, text: String) -> Bool {
+        if let id = articleByReq.removeValue(forKey: reqId) {
+            newsArticles[id] = NewsArticle(error: text)
+            return true
+        }
+        if let symbol = conIdSymbolByReq.removeValue(forKey: reqId) {
+            if newsReqByStream[symbol] != nil { newsError = "\(symbol): \(text)" }
+            return true
+        }
+        if newsQueryInFlight?.reqId == reqId {
+            if newsQueryInFlight?.query.forList == false { newsError = text }
+            finishNewsQuery()
+            return true
+        }
+        if let stream = newsStreamByReq[reqId] {
+            // No such contract (a provider without a feed of all news): nothing to show from it.
+            if code != 200 { newsError = stream.hasPrefix("*") ? "\(stream.dropFirst()): \(text)" : "\(stream): \(text)" }
+            return true
+        }
+        return false
+    }
+
     // MARK: - Incoming messages
 
     private func dispatch(_ f: [String]) {
@@ -2356,6 +2618,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case 90: historicalDataUpdate(f)
         case 94: pnl(f)
         case 99: tickByTick(f)
+        case 83: newsArticle(f)
+        case 84: tickNews(f)
+        case 86: historicalNews(f)
+        case 87: historicalNewsEnd(f)
         default: break
         }
     }
@@ -2389,6 +2655,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         // [version (server < 164)], reqId, symbol, secType, lastTradeDate, strike, right, exchange,
         // currency, localSymbol, marketName, tradingClass, conId, minTick, …
         let i = serverVersion < 164 ? 2 : 1
+        if let symbol = conIdSymbolByReq.removeValue(forKey: f.int(i)) { return conIdArrived(symbol, f.int(i + 11)) }
         guard let symbol = detailsSymbolByReq.removeValue(forKey: f.int(i)) else { return }
         let tick = f.double(i + 12)
         if tick > 0, tick < 1 { minTicks[symbol] = tick }
@@ -2534,6 +2801,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         // 2100-2199 are connectivity/farm status notices; 10167 = "displaying delayed data".
         if (2100...2199).contains(code) || code == 10167 || code == 399 { return }
 
+        if newsError(reqId: reqId, code: code, text: text) { return }
         if reqId == fxReq {
             fxReq = nil
             lastMessage = "USD.NOK rate: \(text)" + (usdNok.map { " (using saved \(Fmt.price($0)))" } ?? "")
@@ -2757,6 +3025,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             guard i + stride <= f.count else { break }
             let symbol = f[i + symbolOffset]
             if !symbol.isEmpty, !symbols.contains(symbol) { symbols.append(symbol) }
+            if version >= 3, f[i + 3] == "STK", let conId = Int(f[i + 1]), conId > 0 { conIds[symbol] = conId }
             i += stride
         }
         scans[owner] = ScanResult(symbols: symbols, updated: Date())
@@ -2807,6 +3076,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard f.str(2) == account,
               secType == "STK" || (Self.isPair(f.str(4), secType: secType) && secType == (forexCFD ? "CFD" : "CASH")) else { return }
         let symbol = Self.symbol(f.str(4), secType: f.str(5), currency: f.str(11))
+        if secType == "STK", f.int(3) > 0 { conIds[symbol] = f.int(3) }
         let qty = f.double(14)
         let old = positions[symbol]?.quantity ?? 0
         if positionsLoaded, qty != 0, old == 0 || (old > 0) != (qty > 0) {
@@ -3043,6 +3313,11 @@ nonisolated struct EngineSnapshot: Sendable {
     var restricted: [String: String]?
     /// Symbols whose position opened since the last snapshot (see `TradingEngine.entries`).
     var entries: [String]?
+    /// Headlines by feed, the lists' stocks with news since the last close, articles, and why there's none.
+    var news: [String: [NewsItem]]?
+    var listNews: [String: NewsItem]?
+    var newsArticles: [String: NewsArticle]?
+    var newsError: String??
     var charts: [ChartPatch] = []
 }
 
