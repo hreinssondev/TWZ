@@ -5,7 +5,8 @@
 //  Confetti over every screen when a LIVE trade opens (Settings › Trading), in the style of
 //  Raycast's: a cannon in each bottom corner fires up and in, and the pieces flutter down. One
 //  borderless, transparent window per screen, above every app; clicks and keys go straight through
-//  it, and it never takes focus, so it's never in the way of the next order.
+//  it, and it never takes focus, so it's never in the way of the next order. Each window's display
+//  link asks for 120 fps (ProMotion), so the pieces move smoothly; the Settings preview is the same.
 //
 
 import AppKit
@@ -30,6 +31,7 @@ final class ConfettiOverlay {
 
     private let show = ConfettiShow()
     private var windows: [NSWindow] = []
+    private var clocks: [ConfettiClock] = []
     private var hideTask: Task<Void, Never>?
 
     func fire() {
@@ -42,6 +44,7 @@ final class ConfettiOverlay {
             try? await Task.sleep(for: .seconds(ConfettiBurst.duration))
             guard !Task.isCancelled, let self else { return }
             self.show.bursts.removeAll()
+            for clock in self.clocks { clock.stop() }
             for window in self.windows { window.orderOut(nil) }
         }
     }
@@ -50,13 +53,18 @@ final class ConfettiOverlay {
     private func orderFront() {
         let screens = NSScreen.screens
         if windows.count != screens.count || zip(windows, screens).contains(where: { $0.frame != $1.frame }) {
+            for clock in clocks { clock.stop() }
             for window in windows { window.close() }
-            windows = screens.map(makeWindow)
+            clocks = screens.map { _ in ConfettiClock() }
+            windows = zip(screens, clocks).map(makeWindow)
         }
-        for window in windows { window.orderFrontRegardless() }
+        for (window, clock) in zip(windows, clocks) {
+            window.orderFrontRegardless()
+            if let view = window.contentView { clock.start(on: view) }
+        }
     }
 
-    private func makeWindow(on screen: NSScreen) -> NSWindow {
+    private func makeWindow(on screen: NSScreen, clock: ConfettiClock) -> NSWindow {
         let panel = NSPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
@@ -69,7 +77,7 @@ final class ConfettiOverlay {
         panel.animationBehavior = .none
         panel.level = .screenSaver
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        let host = NSHostingView(rootView: ConfettiView(show: show))
+        let host = NSHostingView(rootView: ConfettiView(show: show, clock: clock))
         host.sizingOptions = []
         panel.contentView = host
         panel.setFrame(screen.frame, display: false)
@@ -80,6 +88,36 @@ final class ConfettiOverlay {
 @Observable
 final class ConfettiShow {
     var bursts: [ConfettiBurst] = []
+}
+
+/// A window's frame clock: a display link at up to 120 fps (TimelineView's `.animation` stays at 60
+/// on macOS), running only while confetti falls.
+@MainActor
+final class ConfettiClock: NSObject {
+    @MainActor @Observable
+    final class Frame { var date = Date() }
+
+    let frame = Frame()
+    private var link: CADisplayLink?
+
+    func start(on view: NSView) {
+        guard link == nil else { return }
+        let link = view.displayLink(target: self, selector: #selector(tick))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        link.add(to: .main, forMode: .common)
+        self.link = link
+        frame.date = Date()
+    }
+
+    func stop() {
+        link?.invalidate()
+        link = nil
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        // When this frame will be on screen, so the pieces are where they'll be seen.
+        frame.date = Date(timeIntervalSinceNow: link.targetTimestamp - CACurrentMediaTime())
+    }
 }
 
 /// Both cannons' pieces, each on a path worked out from the time since it was fired (no state to step).
@@ -190,14 +228,16 @@ struct ConfettiPiece {
 
 struct ConfettiView: View {
     let show: ConfettiShow
+    let clock: ConfettiClock
 
     var body: some View {
-        TimelineView(.animation(paused: show.bursts.isEmpty)) { timeline in
-            Canvas { context, size in
-                for burst in show.bursts {
-                    let time = timeline.date.timeIntervalSince(burst.start)
-                    if time >= 0 { burst.draw(in: context, size: size, at: time) }
-                }
+        // Read here, so every tick of the clock draws the canvas again.
+        let now = clock.frame.date
+        let bursts = show.bursts
+        Canvas { context, size in
+            for burst in bursts {
+                let time = now.timeIntervalSince(burst.start)
+                if time >= 0 { burst.draw(in: context, size: size, at: time) }
             }
         }
         .ignoresSafeArea()
