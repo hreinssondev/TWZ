@@ -30,6 +30,7 @@
 //  Hovering the price area shows, left of the price tag, the P/L at the hovered price (see `hoverPnL`).
 //  ⌃-clicking with no position open places a what-if buy at that price (see `WhatIf`); ⌃-clicking its
 //  line, or double-clicking anywhere on the chart, removes it.
+//  Triple-clicking the price area puts an option at that price in the Options window (see `onTripleClick`).
 //
 
 import SwiftUI
@@ -175,6 +176,9 @@ struct CandleChart: View {
     var shownFillIds: Set<String> = []
     /// ⇧-, ⌘- or ⌥-swipe on the trackpad: the grid's zoom times this (above 1: zoomed out), as its Zoom slider.
     var onZoomAll: ((Double) -> Void)?
+    /// Triple-click in the price area: called with the price under the cursor. With it, a double-click's view reset
+    /// (not an order line's cancel) waits a double-click's time, so a third click can take it instead.
+    var onTripleClick: ((Double) -> Void)?
 
     @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
 
@@ -205,6 +209,9 @@ struct CandleChart: View {
     @State private var optionHeld = false
     @State private var controlHeld = false
     @State private var commandHeld = false
+    /// A double-click's reset, waiting to see if a third click comes (see `onTripleClick`).
+    @State private var pendingReset: Task<Void, Never>?
+    @State private var tripleClickAt = Date.distantPast
 
     /// Widens with the axis text so larger prices still fit.
     private var axisWidth: CGFloat { max(58, (axisFontSize * 5.8).rounded()) }
@@ -234,8 +241,15 @@ struct CandleChart: View {
             .onTapGesture(count: 2) { location in
                 if let id = orderLine(near: location, size: geo.size) {
                     onCancelOrder?(id)
-                } else if onDoubleClick?() != true {
-                    resetView()
+                } else if onTripleClick == nil {
+                    if onDoubleClick?() != true { resetView() }
+                } else if Date().timeIntervalSince(tripleClickAt) > NSEvent.doubleClickInterval {
+                    pendingReset?.cancel()
+                    pendingReset = Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(NSEvent.doubleClickInterval))
+                        guard !Task.isCancelled else { return }
+                        if onDoubleClick?() != true { resetView() }
+                    }
                 }
             }
             .onTapGesture { location in
@@ -270,7 +284,15 @@ struct CandleChart: View {
                     controlHeld = flags.contains(.control)
                     commandHeld = flags.isSuperset(of: [.command, .shift])
                 },
-                onRightClick: resetView
+                onRightClick: resetView,
+                onTripleClick: onTripleClick.map { handler in
+                    { location in
+                        tripleClickAt = Date()
+                        pendingReset?.cancel()
+                        pendingReset = nil
+                        if let price = price(at: location, size: geo.size) { handler(price) }
+                    }
+                }
             ))
         }
         .onChange(of: oldestBarShown, initial: true) { _, shown in
@@ -1041,6 +1063,8 @@ private struct ScrollCatcher: NSViewRepresentable {
     var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
     var onModifierKeys: (NSEvent.ModifierFlags) -> Void
     var onRightClick: () -> Void
+    /// A plain triple-click's location.
+    var onTripleClick: ((CGPoint) -> Void)? = nil
 
     func makeNSView(context: Context) -> CatcherView {
         let view = CatcherView()
@@ -1058,6 +1082,7 @@ private struct ScrollCatcher: NSViewRepresentable {
         view.onModifiedClick = onModifiedClick
         view.onModifierKeys = onModifierKeys
         view.onRightClick = onRightClick
+        view.onTripleClick = onTripleClick
     }
 
     static func dismantleNSView(_ view: CatcherView, coordinator: ()) {
@@ -1098,6 +1123,7 @@ private struct ScrollCatcher: NSViewRepresentable {
         var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
         var onModifierKeys: ((NSEvent.ModifierFlags) -> Void)?
         var onRightClick: (() -> Void)?
+        var onTripleClick: ((CGPoint) -> Void)?
         private var monitor: Any?
 
         override var isFlipped: Bool { true }
@@ -1124,6 +1150,7 @@ private struct ScrollCatcher: NSViewRepresentable {
                 case .leftMouseDown:
                     self.onClick?()
                     let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
+                    if event.clickCount == 3, flags.isEmpty { self.onTripleClick?(location) }
                     guard flags == .option || flags == .control || flags == [.command, .shift], let onModifiedClick = self.onModifiedClick,
                           onModifiedClick(location, flags) else { return event }
                 default:

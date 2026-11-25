@@ -8,6 +8,8 @@
 //  profit, said in plain words. Chain: the classic chain, calls left, puts right, a click on a bid sells, on an ask buys.
 //  Strategy: what you expect the stock to do, a strategy for it built around the price, its profit and loss chart and
 //  odds. Positions: the option positions with their P/L, Greeks and days left, a risk chart, and closing them.
+//  Triple-clicking a chart's price area (main or Charts window) brings this window up with that stock's option at the
+//  clicked price in the ticket: the strike nearest it, a call above the price, a put below, bought, at the window's expiry.
 //  The underlying follows the chart selected in the main or Charts window while the top bar's 🔗 is on (forex pairs
 //  aside); typed in, it holds until the next chart is selected. Without real-time US options data at IB, the option
 //  quotes are IB's 15-minute delayed ones, said in the banner and the ticket.
@@ -129,6 +131,8 @@ final class OptionsDesk {
     var width = 1
     var shift = 0
     var reviewing = false
+    /// A chart's triple-click price, until the underlying's options are in to pick its option.
+    var pendingPick: Double?
     /// Why the strategy's legs couldn't all be built, if they couldn't.
     var buildNote: String?
 
@@ -321,6 +325,16 @@ struct OptionsView: View {
             if let expiry = desk.expiry, broker.state == .connected { broker.loadOptionSeries(desk.underlying, expiry: expiry) }
         }
         .onChange(of: workspace.targetSymbol, initial: true) { _, symbol in if follow { adopt(symbol) } }
+        // A chart triple-clicked: its stock's option at that price.
+        .onChange(of: workspace.optionPick?.id, initial: true) {
+            guard let pick = workspace.optionPick else { return }
+            workspace.optionPick = nil
+            desk.underlying = pick.symbol
+            if desk.layout == .strategy || desk.layout == .positions { desk.layout = .simple }
+            desk.pendingPick = pick.price
+            resolvePick(book: book, spot: spot)
+        }
+        .onChange(of: "\(book.underlying)|\(book.expiry ?? "")|\(book.isLoaded)|\(spot != nil)") { resolvePick(book: book, spot: spot) }
         .onChange(of: follow) { _, on in if on { adopt(workspace.targetSymbol) } }
         // On close only: nothing streams for the window any more.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
@@ -335,6 +349,20 @@ struct OptionsView: View {
         let s = symbol.trimmingCharacters(in: .whitespaces).uppercased()
         guard !s.isEmpty, !ForexPair.isForex(s), !OptionContract.isOption(s), OptionCombo.underlying(of: s) == nil else { return }
         desk.underlying = s
+    }
+
+    /// The triple-clicked price's option, once the options are in: the strike nearest it, a call above the price and a
+    /// put below, bought, in the ticket.
+    private func resolvePick(book: OptionBook, spot: Double?) {
+        guard let price = desk.pendingPick, book.underlying == desk.underlying, book.isLoaded, let spot else { return }
+        desk.pendingPick = nil
+        let right: OptionRight = price >= spot ? .call : .put
+        guard let strike = book.strikes.min(by: { abs($0 - price) < abs($1 - price) }),
+              let contract = book.contract(strike, right) else { return }
+        desk.simpleBuy = true
+        desk.simpleRight = right
+        desk.legs = [OptionLeg(contract: contract, buy: true)]
+        broker.say("Options: \(contract.display), the strike nearest \(Fmt.price(price)) (\(right == .call ? "above" : "below") the price: a \(right.name.lowercased()))")
     }
 
     /// ⌘1–4: the layouts.

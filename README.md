@@ -87,7 +87,8 @@ management in one window built for quick entries and exits.
   (the one nearest 30 days out picked first), implied and historical volatility and the expected move in the top bar.
   The ticket shows max profit and loss, breakevens, chance of profit, delta and theta, and sends a limit order after a
   Review; several legs go as one combo order. Its 🔗 (on by default) shows the options of the chart selected in the
-  main or Charts window. Without IB's real-time US options data (OPRA), its quotes are IB's free 15-minute delayed ones. Its orders follow the main window's KEYS ON / SIM: in SIM they're what-if
+  main or Charts window; triple-clicking a chart's price area puts that stock's option at the clicked price in the
+  ticket (the nearest strike: a call above the price, a put below). Without IB's real-time US options data (OPRA), its quotes are IB's free 15-minute delayed ones. Its orders follow the main window's KEYS ON / SIM: in SIM they're what-if
   trades (filled at once at their price, never sent to IB, shown pink under Positions). Option quotes need IB's US options market data (OPRA); order keys and
   hotkeys don't work with this window in front.
 - **Charts window**: a second grid of the top 18 gainers (or any size you set). On the Forex list, its 1/2 button shows the pairs the grid has no room for, and 5D orders them by their range over the last 5 finished days (set once a day).

@@ -607,6 +607,23 @@ struct TradingChart: View {
     /// SIM (KEYS off): the hover P/L goes by the what-if trade before the real position, as the order shortcuts
     /// do; both show either way. A ⌃-click goes by a live position first in either.
     private var simFirst: Bool { !workspace.orderShortcutsOn }
+    @Environment(\.openWindow) private var openWindow
+
+    /// Triple-click: the option at the clicked price, in the Options window (opened, or brought forward without
+    /// taking the keyboard): a call above the price, a put below (see `Workspace.OptionPick`).
+    private func pickOption(at price: Double) {
+        let symbol = chart.symbol
+        guard !symbol.isEmpty else { return }
+        guard !ForexPair.isForex(symbol) else { return broker.say("\(symbol): no options for forex pairs here") }
+        onTrade()
+        workspace.optionPick = Workspace.OptionPick(symbol: symbol, price: price)
+        if let window = NSApp.windows.first(where: { OptionsWindow.isWindow($0) && ($0.isVisible || $0.isMiniaturized) }) {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.orderFront(nil)
+        } else {
+            openWindow(id: OptionsWindow.windowID)
+        }
+    }
 
     @AppStorage(LineColors.avgCostKey) private var avgCostHex = ""
     @AppStorage(LineColors.altClickKey) private var altClickHex = ""
@@ -737,7 +754,8 @@ struct TradingChart: View {
                 return workspace.whatIfs.removeValue(forKey: chart.symbol) != nil
             },
             shownFillIds: Set(shownTrip?.fillIds ?? []).union(workspace.shownOrderFills[chart.symbol] ?? []),
-            onZoomAll: onZoomAll
+            onZoomAll: onZoomAll,
+            onTripleClick: { pickOption(at: $0) }
         )
         // With the last trade lines off, a round trip that just closed (in the last 30 s, so not one
         // from before the chart showed the symbol) shows its exit line for 7 s.

@@ -239,6 +239,13 @@ final class Workspace {
     var orderShortcutsOn = false
     /// KEYS ON or SIM has been settled since launch, by IB's positions coming in or by ⌘🌐. Not saved.
     var launchModeChosen = false
+    /// A chart triple-clicked at a price: the Options window shows that stock's option there (see `OptionsView`).
+    struct OptionPick: Equatable {
+        let id = UUID()
+        var symbol: String
+        var price: Double
+    }
+    var optionPick: OptionPick?
     /// The Options window's orders go to IB with KEYS ON, as the order shortcuts do; in SIM they're what-if trades
     /// (see `Broker.fillSimOption`).
     var optionOrdersReal: Bool { orderShortcutsOn }
