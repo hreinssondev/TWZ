@@ -18,7 +18,9 @@
 //  timeframe picker lets those go too.
 //  Clicking a chart selects it, as in the main window: hotkeys, order keys and the other trading shortcuts go to
 //  its stock, it streams tick by tick (⌘↩ keeps it fast), and its header shows the position, ⚡, S, SSR, buying
-//  power and its own timeframe switch. ⌥1–6 (⌃ too) with this window in front sets every chart's timeframe here, and ⇧1–5 (or a click on the header's layout numbers) loads one of its own saved chart layouts (see `GridLayout`). With P on, or the
+//  power and its own timeframe switch. ⌥1–6 (⌃ too) with this window in front sets every chart's timeframe here, and ⇧1–5 (or a click on the header's layout numbers) loads one of its own saved chart layouts (see `GridLayout`).
+//  The header's 1–5 before them are this window's own view sets or scales, as the main window's top bar has (see
+//  `ScaleButtons`; ⌥⇧1–5 with this window in front). With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
 //
@@ -103,6 +105,69 @@ extension Workspace {
         setZoom(zoom, of: secondaryCharts, broker: broker, by: zoom / base)
         if zoom != sliderZoom { swipedChartsWindowZoom = zoom }
         return zoom
+    }
+
+    // MARK: - The Charts window's numbers (see `ScaleButtons`)
+
+    /// Tells the broker the Charts window's lit scale, which its charts loading a stock take (scales only as scales).
+    func syncChartsWindowScale(to broker: Broker) {
+        broker.chartsWindowScale = NumberButtons.areScales ? chartsWindowActiveScale.flatMap { chartsWindowScales[$0] } : nil
+    }
+
+    /// ⇧-click on a Charts window number, as view sets: every chart's zoom and place there on every timeframe, saved.
+    func saveChartsWindowViewSet(_ slot: Int, broker: Broker) {
+        broker.keepChartViews(of: secondaryCharts)
+        chartsWindowViewSets[slot] = ViewSet(views: broker.chartsWindowViews,
+                                             zooms: Dictionary(uniqueKeysWithValues: secondaryCharts.map { ($0.id, $0.zooms) }))
+        chartsWindowActiveViewSet = slot
+        broker.say("Charts window view set \(slot) saved: every chart's zoom and place there on every timeframe")
+    }
+
+    /// A click on a Charts window number, as view sets: every chart there back to it; lit, it goes off.
+    func pickChartsWindowViewSet(_ slot: Int, broker: Broker) {
+        if chartsWindowActiveViewSet == slot {
+            chartsWindowActiveViewSet = nil
+            return broker.say("Charts window view set \(slot) off: charts keep their views as they are")
+        }
+        guard let set = chartsWindowViewSets[slot] else {
+            NSSound.beep()
+            return broker.say("Nothing saved as Charts window view set \(slot) yet: ⇧-click its number to save every chart's zoom and place there")
+        }
+        broker.replaceChartsWindowViews(with: set.views)
+        for chart in secondaryCharts {
+            chart.zooms = set.zooms[chart.id] ?? [:]
+            broker.restoreView(of: chart)
+        }
+        chartsWindowActiveViewSet = slot
+        broker.say("Charts window view set \(slot): every chart's zoom and place there as saved")
+    }
+
+    /// ⇧-click on a Charts window number, as scales: the selected chart's view, if it's one of that window's; false otherwise.
+    func saveChartsWindowScale(_ slot: Int) -> Bool {
+        guard isChartSelected, ChartModel.isChartsWindow(selectedChartID), let chart = chart(id: selectedChartID),
+              !chart.symbol.isEmpty else { return false }
+        chartsWindowScales[slot] = ChartScale(of: chart)
+        chartsWindowActiveScale = slot
+        return true
+    }
+
+    /// A click on a Charts window number, as scales: every chart there takes it (those adjusted by hand too) and so do
+    /// those loading a stock while it's lit; lit, it goes off.
+    func pickChartsWindowScale(_ slot: Int, broker: Broker) {
+        if chartsWindowActiveScale == slot {
+            chartsWindowActiveScale = nil
+            syncChartsWindowScale(to: broker)
+            return broker.say("Charts window scale \(slot) off: charts keep their own views")
+        }
+        guard let scale = chartsWindowScales[slot] else {
+            NSSound.beep()
+            return broker.say("Nothing saved as Charts window scale \(slot) yet: ⇧-click its number to save the selected chart's view")
+        }
+        broker.forgetChartAdjustments(of: secondaryCharts)
+        for chart in secondaryCharts where !chart.symbol.isEmpty { scale.apply(to: chart) }
+        chartsWindowActiveScale = slot
+        syncChartsWindowScale(to: broker)
+        broker.say("Charts window scale \(slot) on every chart there, also as its list changes (pick it again to turn it off)")
     }
 
     /// Sets the charts' default zoom and zooms them to it. The zooms they were left at on other stocks
@@ -201,6 +266,7 @@ struct SecondaryChartsView: View {
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .onAppear {
             applyZoom()
+            workspace.syncChartsWindowScale(to: broker)
             if !isPaused { start() }
         }
         // On close only: hiding the window (ordering it out) keeps the charts live.
@@ -232,6 +298,7 @@ struct SecondaryChartsView: View {
             if !isPaused { start() }
         }
         .onChange(of: workspace.chartsWindowResets) {
+            workspace.syncChartsWindowScale(to: broker)
             workspace.resetViews(of: workspace.secondaryCharts, zoom: layout == .all ? allZoom : customZoom, broker: broker)
         }
         .onChange(of: layout) { applyZoom() }
@@ -284,7 +351,11 @@ struct SecondaryChartsView: View {
             }
             .buttonStyle(.plain)
             .help("Every chart here back to the Zoom slider's zoom, and the charts whose symbol you typed follow the list again. ⌘R does the first only, keeping those")
-            GridLayoutButtons(window: .chartsWindow)
+            // View sets / scales, then chart layouts, close together, as in the main window's top bar.
+            HStack(spacing: 3) {
+                ScaleButtons(window: .chartsWindow)
+                GridLayoutButtons(window: .chartsWindow, showsIcon: false)
+            }
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)

@@ -70,7 +70,7 @@ struct AccountBar: View {
 
                     // View sets / scales, then chart layouts, close together.
                     HStack(spacing: 3) {
-                        ScaleButtons()
+                        ScaleButtons(window: .main)
                         GridLayoutButtons(window: .main, showsIcon: false)
                     }
                 }
@@ -137,16 +137,24 @@ struct AccountBar: View {
 /// view saved under that number, and lights it: charts loading another stock take it too, until it's
 /// clicked again or Reset; ⇧-click saves the selected chart's view there. Either way a lit number
 /// clicked again goes off, and numbers with nothing saved are dimmer.
-private struct ScaleButtons: View {
+/// The Charts window's header has its own (`window` .chartsWindow): view sets and scales of its own, for its charts.
+struct ScaleButtons: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     @AppStorage(NumberButtons.scalesKey) private var asScales = NumberButtons.defaultScales
+    let window: GridLayout.Window
+
+    private var inChartsWindow: Bool { window == .chartsWindow }
 
     var body: some View {
         HStack(spacing: 1) {
             ForEach(ChartScale.slots, id: \.self) { slot in
-                let lit = asScales ? workspace.activeScale == slot : workspace.activeViewSet == slot
-                let saved = asScales ? workspace.chartScales[slot] != nil : workspace.viewSets[slot] != nil
+                let lit = inChartsWindow
+                    ? (asScales ? workspace.chartsWindowActiveScale == slot : workspace.chartsWindowActiveViewSet == slot)
+                    : (asScales ? workspace.activeScale == slot : workspace.activeViewSet == slot)
+                let saved = inChartsWindow
+                    ? (asScales ? workspace.chartsWindowScales[slot] != nil : workspace.chartsWindowViewSets[slot] != nil)
+                    : (asScales ? workspace.chartScales[slot] != nil : workspace.viewSets[slot] != nil)
                 Button {
                     pick(slot)
                 } label: {
@@ -163,10 +171,20 @@ private struct ScaleButtons: View {
             }
         }
         // Switching what the numbers are: scales apply to charts loading another stock only as scales.
-        .onChange(of: asScales) { workspace.syncGridScale(to: broker) }
+        .onChange(of: asScales) {
+            if inChartsWindow { workspace.syncChartsWindowScale(to: broker) } else { workspace.syncGridScale(to: broker) }
+        }
     }
 
     private func help(_ slot: Int, saved: Bool) -> String {
+        if inChartsWindow {
+            if !asScales {
+                return saved ? "Every chart here back to its zoom and place on every timeframe in view set \(slot) (⌥⇧\(slot) with this window in front); click again to turn it off. ⇧-click saves them here instead"
+                             : "⇧-click saves every chart's zoom and place here on every timeframe as view set \(slot)"
+            }
+            return saved ? "Every chart here takes scale \(slot) (⌥⇧\(slot) with this window in front), also as its list changes; click again to turn it off. ⇧-click saves the selected chart's view here instead"
+                         : "⇧-click saves the selected chart's view (one in this window) as scale \(slot)"
+        }
         if !asScales {
             return saved ? "Every chart's zoom and place on every timeframe go back to view set \(slot) (⌥⇧\(slot)); click again to turn it off. ⇧-click saves them here instead"
                          : "⇧-click saves every chart's zoom and place on every timeframe as view set \(slot)"
@@ -177,6 +195,20 @@ private struct ScaleButtons: View {
 
     private func pick(_ slot: Int) {
         let shift = NSEvent.modifierFlags.contains(.shift)
+        if inChartsWindow {
+            if !asScales {
+                if shift { workspace.saveChartsWindowViewSet(slot, broker: broker) } else { workspace.pickChartsWindowViewSet(slot, broker: broker) }
+            } else if !shift {
+                workspace.pickChartsWindowScale(slot, broker: broker)
+            } else if workspace.saveChartsWindowScale(slot), let symbol = workspace.chart(id: workspace.selectedChartID)?.symbol {
+                workspace.syncChartsWindowScale(to: broker)
+                broker.say("Charts window scale \(slot) saved from \(symbol)'s view")
+            } else {
+                NSSound.beep()
+                broker.say("Select a chart in the Charts window to save its view as scale \(slot)")
+            }
+            return
+        }
         if !asScales {
             if shift { workspace.saveViewSet(slot, broker: broker) } else { workspace.pickViewSet(slot, broker: broker) }
             return

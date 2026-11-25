@@ -183,6 +183,8 @@ final class Broker {
     /// chart's view belongs to.
     @ObservationIgnored var viewList: String?
     @ObservationIgnored private var loadedLists: [Int: String] = [:]
+    /// The Charts window's lit scale (see `Workspace.chartsWindowActiveScale`): every chart there loading a stock takes it.
+    @ObservationIgnored var chartsWindowScale: ChartScale?
     /// The zoom set by hand, trumping `gridScale`'s (see `Workspace.manualZoom`).
     @ObservationIgnored var gridZoomOverride: Double?
     @ObservationIgnored private var chartViewsSave: Task<Void, Never>?
@@ -209,6 +211,15 @@ final class Broker {
 
     /// The main window's kept views (saving a view set).
     var mainChartViews: [ChartViews.Key: ChartViews.View] { chartViews.entries(inChartsWindow: false) }
+
+    /// The Charts window's kept views (saving its view set).
+    var chartsWindowViews: [ChartViews.Key: ChartViews.View] { chartViews.entries(inChartsWindow: true) }
+
+    /// The Charts window's kept views become a view set's.
+    func replaceChartsWindowViews(with views: [ChartViews.Key: ChartViews.View]) {
+        chartViews.replace(inChartsWindow: true, with: views)
+        chartViewsChanged()
+    }
 
     /// The main window's kept views become a view set's.
     func replaceMainChartViews(with views: [ChartViews.Key: ChartViews.View]) {
@@ -450,6 +461,7 @@ final class Broker {
                 gridScale.apply(to: chart)
                 if let gridZoomOverride { chart.visibleBars = gridZoomOverride }
             }
+            if window, !chart.adjustedByHand, let chartsWindowScale { chartsWindowScale.apply(to: chart) }
         }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         var spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)

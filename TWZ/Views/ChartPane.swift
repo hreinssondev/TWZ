@@ -186,6 +186,7 @@ extension Workspace {
             secondaryPins = [:]
             secondaryDisplaced = [:]
         }
+        chartsWindowActiveScale = nil
         chartsWindowResets += 1
     }
 

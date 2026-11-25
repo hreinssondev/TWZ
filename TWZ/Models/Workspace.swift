@@ -415,6 +415,21 @@ final class Workspace {
     }
     /// The scale last saved or picked, lit or not (`reapplyNumber` goes back to it).
     var lastScale: Int?
+    /// The Charts window's own numbers (its header, see `ScaleButtons`): its view sets and scales by number, and the one
+    /// lit. Saved.
+    var chartsWindowViewSets: [Int: ViewSet] = [:] {
+        didSet { defaults.set(try? JSONEncoder().encode(chartsWindowViewSets), forKey: "chartsWindowViewSets") }
+    }
+    var chartsWindowActiveViewSet: Int? {
+        didSet { defaults.set(chartsWindowActiveViewSet, forKey: "chartsWindowActiveViewSet") }
+    }
+    var chartsWindowScales: [Int: ChartScale] = [:] {
+        didSet { defaults.set(try? JSONEncoder().encode(chartsWindowScales), forKey: "chartsWindowScales") }
+    }
+    /// While lit, every Charts window chart loading another stock takes it too (see `Broker.chartsWindowScale`).
+    var chartsWindowActiveScale: Int? {
+        didSet { defaults.set(chartsWindowActiveScale, forKey: "chartsWindowActiveScale") }
+    }
     /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧- / ⌘- / ⌥-swipe on a chart): it trumps the
     /// lit scale's zoom, on the charts now and on those loading another stock, until a scale is
     /// picked (its number clicked) or saved, or Reset. Saved.
@@ -564,6 +579,14 @@ final class Workspace {
             .flatMap { try? JSONDecoder().decode([Int: ViewSet].self, from: $0) } ?? [:]
         activeViewSet = (defaults.object(forKey: ViewSet.activeKey) as? Int).flatMap { viewSets[$0] != nil ? $0 : nil }
         lastViewSet = activeViewSet
+        chartsWindowViewSets = defaults.data(forKey: "chartsWindowViewSets")
+            .flatMap { try? JSONDecoder().decode([Int: ViewSet].self, from: $0) } ?? [:]
+        chartsWindowActiveViewSet = (defaults.object(forKey: "chartsWindowActiveViewSet") as? Int)
+            .flatMap { chartsWindowViewSets[$0] != nil ? $0 : nil }
+        chartsWindowScales = defaults.data(forKey: "chartsWindowScales")
+            .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
+        chartsWindowActiveScale = (defaults.object(forKey: "chartsWindowActiveScale") as? Int)
+            .flatMap { chartsWindowScales[$0] != nil ? $0 : nil }
         gridLayouts = defaults.data(forKey: GridLayout.storageKey)
             .flatMap { try? JSONDecoder().decode([GridLayout.Window: [Int: GridLayout]].self, from: $0) } ?? [:]
         activeGridLayout = defaults.data(forKey: GridLayout.activeKey)

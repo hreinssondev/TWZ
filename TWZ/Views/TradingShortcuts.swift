@@ -275,9 +275,16 @@ struct TradingShortcuts: ViewModifier {
                         return nil
                     }
                     // ⌥⇧1–5: the top bar's view set or scale under that number, as a click on it.
-                    if modifiers == [.option, .shift], inMainWindow, !SecondaryCharts.isWindow(event.window),
+                    if modifiers == [.option, .shift], inMainWindow,
                        let slot = OrderKeys.number(keyCode: event.keyCode), ChartScale.slots.contains(slot) {
-                        if !event.isARepeat {
+                        if !event.isARepeat, SecondaryCharts.isWindow(event.window) {
+                            // The Charts window in front: its own numbers.
+                            if NumberButtons.areScales {
+                                workspace.pickChartsWindowScale(slot, broker: broker)
+                            } else {
+                                workspace.pickChartsWindowViewSet(slot, broker: broker)
+                            }
+                        } else if !event.isARepeat {
                             if NumberButtons.areScales {
                                 workspace.pickScale(slot, byClick: true, broker: broker)
                             } else {
