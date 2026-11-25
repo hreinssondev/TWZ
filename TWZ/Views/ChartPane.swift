@@ -279,25 +279,49 @@ struct ChartPane: View {
 /// What a chart's header shows after its symbol field, in the main window and the Charts window alike: the
 /// position and what-if trade, ⚡ tick-by-tick, S shortable, SSR, the buying and short selling power, and
 /// the chart's own timeframe switch.
+///
+/// Settings › Appearance › Performance (`HeaderPerformance`), each on by default: the header's values come
+/// from its stock's own box, so it redraws only when they change (`Broker.headerBox`); its right side is
+/// laid out once from the width it has (`trailing`), not by trying each layout; and in the Charts window
+/// (`freezesUnlessLive`) it's drawn from values taken when its stock loads (and again a few seconds later),
+/// live only while the chart is selected or has a position or what-if trade open.
 struct ChartHeaderInfo: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     @Environment(\.sideColors) private var sideColors
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
+    @AppStorage(HeaderPerformance.layoutKey) private var layoutByWidth = HeaderPerformance.defaultOn
+    @AppStorage(HeaderPerformance.perStockKey) private var perStock = HeaderPerformance.defaultOn
     let chart: ChartModel
     /// Keeps the timeframe switch (as the main window's charts show it) for as long as it fits, dropping the
     /// buying and short selling power first; else the switch turns into a menu first.
     var keepsSwitch = false
+    /// The Charts window's headers with Settings' freezing on: drawn from `frozen` unless live.
+    var freezesUnlessLive = false
+
+    @State private var frozen: HeaderInfo?
+    /// The width right of the badges, for `trailing`.
+    @State private var trailingWidth: CGFloat = 0
+
+    /// Selected, or a position or what-if trade open: drawn from live values.
+    private var isLive: Bool {
+        workspace.selectedChartID == chart.id || broker.positions[chart.symbol] != nil || broker.simPositions[chart.symbol] != nil
+    }
+
+    private var liveInfo: HeaderInfo {
+        perStock ? broker.headerBox(chart.symbol).info : broker.headerInfo(chart.symbol)
+    }
 
     var body: some View {
+        let freezes = freezesUnlessLive && !isLive
+        let info = freezes ? frozen ?? liveInfo : liveInfo
         HStack(spacing: 8) {
             // "2 LONG 23 322 +452": the orders that opened or added to the open round trip (an order in
             // several fills counts once), the market value in NOK (at cost until there's a quote), and the
             // P/L in NOK once there's a quote; without a USD.NOK rate, shares and the P/L in dollars. A
             // forex pair's values convert at its currency's dollar rate (none shown until that's in).
-            if let p = broker.positions[chart.symbol] {
-                let fills = broker.fills.values.filter { $0.symbol == chart.symbol }
-                let orders = RoundTrip.build(fills: fills, positions: broker.positions).first(where: \.isOpen)?.orderCount ?? 0
+            if let p = info.position {
+                let orders = info.openTripOrders
                 let last = broker.quote(p.symbol)?.last
                 let usd = broker.usdPerPriceUnit(p.symbol)
                 let valueNOK = usd.flatMap { usd in broker.usdNok.map { abs(p.quantity) * (last ?? p.avgCost) * usd * $0 } }
@@ -318,7 +342,7 @@ struct ChartHeaderInfo: View {
 
             // A what-if trade (simulated, see `SimTrades.swift`): "SIM LONG 23 322 +452", its value and
             // P/L in NOK like a position's, outlined in the what-if color.
-            if let sim = broker.simPositions[chart.symbol] {
+            if let sim = info.sim {
                 let last = broker.quote(sim.symbol)?.last
                 let usd = broker.usdPerPriceUnit(sim.symbol)
                 let valueNOK = usd.flatMap { usd in broker.usdNok.map { abs(sim.quantity) * (last ?? sim.avgCost) * usd * $0 } }
@@ -341,14 +365,14 @@ struct ChartHeaderInfo: View {
             // or refused; a red circle instead once IB's limit leaves it out.
             let isFast = workspace.fastChartIDs.contains(chart.id)
             if isFast || chart.id == workspace.selectedChartID {
-                if broker.tickLimitedSymbols.contains(chart.symbol) {
+                if info.tickLimited {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 7, height: 7)
                         .help("IB's tick-by-tick limit reached: this chart keeps IB's regular bar updates; "
                               + "selecting it puts it first, ⌘↩ on another fast chart frees a stream")
                 } else {
-                    let streaming = broker.tickTradeSymbols.contains(chart.symbol)
+                    let streaming = info.tradesStreaming
                     Image(systemName: isFast ? "bolt.fill" : "bolt")
                         .font(.system(size: 9))
                         .foregroundStyle(streaming ? Color.yellow : Color.secondary.opacity(0.5))
@@ -361,7 +385,7 @@ struct ChartHeaderInfo: View {
             }
 
             // Shortable (IB's tick 46): red S, faint while hard to borrow; none when it can't be shorted.
-            if let shortable = broker.shortability[chart.symbol], shortable > 1.5 {
+            if let shortable = info.shortable, shortable > 1.5 {
                 Text("S")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(Color.red.opacity(shortable > 2.5 ? 1 : 0.45))
@@ -369,7 +393,7 @@ struct ChartHeaderInfo: View {
                                           : "Hard to borrow: shortable only if IB can locate shares")
             }
 
-            // Short sale restriction (SEC Rule 201), from Nasdaq's list or IB's prices.
+            // Short sale restriction (SEC Rule 201), from Nasdaq's list or IB's prices (rarely changes: live).
             if let reason = broker.ssrReason(chart.symbol) {
                 Text("SSR")
                     .font(.system(size: 9, weight: .heavy))
@@ -378,29 +402,97 @@ struct ChartHeaderInfo: View {
                           + "the next trading day. \(reason).")
             }
 
-            Spacer(minLength: 4)
-
-            // The short selling and buying power, then the timeframe switch. A chart too narrow for them
-            // (a big grid) gets a menu showing its timeframe instead of the switch, then drops the
-            // short selling power, then the buying power.
-            if keepsSwitch {
-                // The Charts window's smaller charts drop the powers before the switch.
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeSwitch }
-                    HStack(spacing: 4) { marginPower(.long); timeframeSwitch }
-                    timeframeSwitch
-                    timeframeMenu
-                }
+            if layoutByWidth {
+                // The rest of the header's width, measured only when it changes; the one layout that fits.
+                Color.clear
+                    .frame(minWidth: 4, maxWidth: .infinity)
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { trailingWidth = $0 }
+                    .overlay(alignment: .trailing) { trailing(info, width: trailingWidth - 4) }
             } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeSwitch }
-                    HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeMenu }
-                    HStack(spacing: 4) { marginPower(.long); timeframeMenu }
-                    timeframeMenu
+                Spacer(minLength: 4)
+
+                // The short selling and buying power, then the timeframe switch. A chart too narrow for them
+                // (a big grid) gets a menu showing its timeframe instead of the switch, then drops the
+                // short selling power, then the buying power.
+                if keepsSwitch {
+                    // The Charts window's smaller charts drop the powers before the switch.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeSwitch }
+                        HStack(spacing: 4) { power(info.longPower); timeframeSwitch }
+                        timeframeSwitch
+                        timeframeMenu
+                    }
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeSwitch }
+                        HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeMenu }
+                        HStack(spacing: 4) { power(info.longPower); timeframeMenu }
+                        timeframeMenu
+                    }
                 }
             }
         }
+        // Frozen: taken as the stock loads and again once its data has had a few seconds to come in, and
+        // whenever the chart stops being live.
+        .task(id: freezesUnlessLive ? chart.symbol : nil) {
+            guard freezesUnlessLive else { return frozen = nil }
+            frozen = broker.headerInfo(chart.symbol)
+            try? await Task.sleep(for: .seconds(6))
+            if !Task.isCancelled { frozen = broker.headerInfo(chart.symbol) }
+        }
+        // Not read at all in the main window, where headers are never frozen.
+        .onChange(of: freezesUnlessLive ? isLive : true) { _, live in
+            if freezesUnlessLive, !live { frozen = broker.headerInfo(chart.symbol) }
+        }
     }
+
+    /// The right side for `width`: the first of the layouts (as `ViewThatFits` would try them) whose
+    /// estimated width fits, built alone.
+    @ViewBuilder private func trailing(_ info: HeaderInfo, width: CGFloat) -> some View {
+        let short = info.shortPower.map { Self.powerWidth($0.text) }
+        let long = info.longPower.map { Self.powerWidth($0.text) }
+        let switchWidth = pickerStyle == .segmented ? 204 : Self.minimalSwitchWidth
+        let menuWidth = Self.textWidth(chart.timeframe.rawValue, weight: .semibold) + 22
+        if keepsSwitch {
+            if total([short, long, switchWidth]) <= width {
+                HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeSwitch }
+            } else if total([long, switchWidth]) <= width {
+                HStack(spacing: 4) { power(info.longPower); timeframeSwitch }
+            } else if switchWidth <= width {
+                timeframeSwitch
+            } else {
+                timeframeMenu
+            }
+        } else {
+            if total([short, long, switchWidth]) <= width {
+                HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeSwitch }
+            } else if total([short, long, menuWidth]) <= width {
+                HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeMenu }
+            } else if total([long, menuWidth]) <= width {
+                HStack(spacing: 4) { power(info.longPower); timeframeMenu }
+            } else {
+                timeframeMenu
+            }
+        }
+    }
+
+    /// Items 4 pt apart; a missing power takes no room.
+    private func total(_ parts: [CGFloat?]) -> CGFloat {
+        let present = parts.compactMap { $0 }
+        return present.reduce(0, +) + CGFloat(max(0, present.count - 1)) * 4
+    }
+
+    private static func textWidth(_ text: String, weight: NSFont.Weight = .regular) -> CGFloat {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: weight)
+        return ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    }
+
+    /// A power's text with its padding.
+    private static func powerWidth(_ text: String) -> CGFloat { textWidth(text) + 10 }
+
+    /// `TimeframePicker`: each label bold enough for the selected one, padded, 1 pt apart.
+    private static let minimalSwitchWidth: CGFloat = Timeframe.allCases
+        .map { textWidth($0.rawValue, weight: .semibold) + 10 }.reduce(0, +) + CGFloat(Timeframe.allCases.count - 1)
 
     private var timeframe: Binding<Timeframe> {
         Binding(
@@ -409,24 +501,15 @@ struct ChartHeaderInfo: View {
         )
     }
 
-    /// The most a new long (buying power) or short (short selling power) in the stock can be worth
-    /// in NOK now, by IB's margin (see `Broker.marginPowerNOK`), styled as an unselected timeframe.
-    /// None against the position: no buying power while short, no short selling power while long.
-    @ViewBuilder private func marginPower(_ side: Broker.MarginSide) -> some View {
-        let held = broker.positions[chart.symbol]?.quantity ?? 0
-        if side == .long ? held >= 0 : held <= 0, let nok = broker.marginPowerNOK(chart.symbol, side),
-           let shares = broker.maxNewShares(chart.symbol, side), let size = broker.marginSize(chart.symbol, side) {
-            let units = ForexPair(chart.symbol).map { " \($0.base)" } ?? " shares"
-            let lendLimited = side == .short && shares < (size.maxShares ?? 0)
-            Text(Fmt.nok(nok, groupedFrom: 0))
+    /// The buying or short selling power (see `HeaderInfo.Power`), styled as an unselected timeframe.
+    @ViewBuilder private func power(_ power: HeaderInfo.Power?) -> some View {
+        if let power {
+            Text(power.text)
                 .font(.system(size: 10, weight: .regular).monospacedDigit())
                 .foregroundStyle(Color.secondary.opacity(0.7))
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .help((side == .long ? "Buying power: IB's margin allows a long" : "Short selling power: IB's margin allows a short")
-                      + " of up to \(Fmt.shares(shares))\(units)\(lendLimited ? " (the shares IB has to lend)" : "") "
-                      + "at \(Fmt.price(size.price, for: chart.symbol)), \(Fmt.nok(nok, groupedFrom: 0)) NOK "
-                      + "(asked again each minute, and after a position changes)")
+                .help(power.help)
         }
     }
 

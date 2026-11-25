@@ -111,12 +111,17 @@ final class Broker {
     private(set) var orderSources: [Int: String] = [:]
     /// What-if trades: simulated positions by symbol, never sent to IB (see `SimTrades.swift`). Saved.
     var simPositions: [String: SimPosition] = SimPosition.saved() {
-        didSet { simPositionsChanged(from: oldValue) }
+        didSet {
+            simPositionsChanged(from: oldValue)
+            refreshHeaderBoxes()
+        }
     }
     /// The largest new long and new short IB's margin allows per symbol at about the last price, for
     /// the chart header's buying and short selling power and the hover P/L's pretend buy (see
     /// `refreshMarginSize`).
-    private(set) var marginSizes: [MarginKey: MarginSize] = [:]
+    private(set) var marginSizes: [MarginKey: MarginSize] = [:] { didSet { refreshHeaderBoxes() } }
+    /// Each charted stock's header values, observed on their own (see `headerBox`).
+    @ObservationIgnored var headerBoxes: [String: HeaderInfoBox] = [:]
     @ObservationIgnored private var marginSizeAsked: [MarginKey: Date] = [:]
 
     /// A new long (a buy) or a new short (a sell).
@@ -766,7 +771,14 @@ final class Broker {
             if chart.isLoading != patch.isLoading { chart.isLoading = patch.isLoading }
             if chart.error != patch.error { chart.error = patch.error }
         }
+        if s.status != nil || s.positions != nil || s.fills != nil || s.tickTradeSymbols != nil
+            || s.tickLimitedSymbols != nil || s.shortability != nil {
+            refreshHeaderBoxes()
+        }
     }
+
+    /// The stocks the registered charts show.
+    var chartedSymbols: Set<String> { Set(charts.map(\.symbol)) }
 
     /// A real position open, in any symbol.
     var hasLivePositions: Bool { positions.values.contains { $0.quantity != 0 } }

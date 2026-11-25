@@ -367,6 +367,7 @@ struct SecondaryChartPane: View {
     var cell: Int?
 
     @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
+    @AppStorage(HeaderPerformance.freezeKey) private var freezesHeaders = HeaderPerformance.defaultOn
     @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.initialVisibleBars
     @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.initialVisibleBars
     @State private var symbolText = ""
@@ -392,8 +393,14 @@ struct SecondaryChartPane: View {
         .simultaneousGesture(TapGesture().onEnded { workspace.selectedChartID = chart.id })
         // The header's buying and short selling power, kept current while selected (as every main chart's is;
         // a whole grid of them here would ask IB too often).
-        .task(id: workspace.selectedChartID == chart.id ? chart.symbol : "") {
-            guard workspace.selectedChartID == chart.id, !chart.symbol.isEmpty else { return }
+        .task(id: "\(workspace.selectedChartID == chart.id) \(chart.symbol)") {
+            guard workspace.selectedChartID == chart.id, !chart.symbol.isEmpty else {
+                // A frozen header asks once, as its stock loads (spread out, so a new list doesn't ask all at once).
+                guard freezesHeaders, !chart.symbol.isEmpty else { return }
+                try? await Task.sleep(for: .milliseconds(200 * (cell ?? 0)))
+                if !Task.isCancelled { broker.refreshMarginSize(symbol: chart.symbol) }
+                return
+            }
             while !Task.isCancelled {
                 broker.refreshMarginSize(symbol: chart.symbol)
                 try? await Task.sleep(for: .seconds(5))
@@ -428,7 +435,7 @@ struct SecondaryChartPane: View {
                 symbolFocused = false
             }
             .frame(width: 70)
-            ChartHeaderInfo(chart: chart, keepsSwitch: true)
+            ChartHeaderInfo(chart: chart, keepsSwitch: true, freezesUnlessLive: freezesHeaders)
         }
         .padding(.horizontal, 8)
         .frame(height: 26)

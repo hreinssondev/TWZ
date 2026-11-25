@@ -158,6 +158,19 @@ enum GridZoom {
     }
 }
 
+/// Settings › Appearance › Performance: three ways the chart headers do less work, each on by default; all
+/// three off is how the headers worked before (see `ChartHeaderInfo`).
+enum HeaderPerformance {
+    /// The Charts window's headers are drawn once (again a few seconds later, as their data comes in) and
+    /// then only while the chart is selected or has a position or what-if trade open.
+    static let freezeKey = "headersFrozenInChartsWindow"
+    /// A header measures its width once and builds the one layout that fits, rather than trying each.
+    static let layoutKey = "headerLayoutByWidth"
+    /// A header redraws only for changes in its own stock, not in any stock's fills, positions or margin.
+    static let perStockKey = "headerRedrawsPerStock"
+    static let defaultOn = true
+}
+
 /// Every stored Appearance setting. Add new keys here so Settings' "Reset to Defaults" covers them.
 enum AppearanceDefaults {
     static let keys = [
@@ -171,6 +184,7 @@ enum AppearanceDefaults {
         Indicators.vwapKey, Indicators.fastSMAKey, Indicators.slowSMAKey, Indicators.tradesKey, Indicators.lineWidthKey,
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
         TimeframeSwitch.keepViewKey, GridZoom.resetsAdjustedKey, NumberButtons.scalesKey,
+        HeaderPerformance.freezeKey, HeaderPerformance.layoutKey, HeaderPerformance.perStockKey,
     ] + LineDashes.keys + LineDashes.dotsKeys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.

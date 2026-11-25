@@ -735,6 +735,9 @@ private struct AppearanceSettings: View {
     @AppStorage(TimeframeSwitch.keepViewKey) private var keepViewOnTimeframeSwitch = TimeframeSwitch.defaultKeepView
     @AppStorage(GridZoom.resetsAdjustedKey) private var gridZoomResetsAdjusted = GridZoom.defaultResetsAdjusted
     @AppStorage(NumberButtons.scalesKey) private var numberButtonsAreScales = NumberButtons.defaultScales
+    @AppStorage(HeaderPerformance.freezeKey) private var headersFrozen = HeaderPerformance.defaultOn
+    @AppStorage(HeaderPerformance.layoutKey) private var headerLayoutByWidth = HeaderPerformance.defaultOn
+    @AppStorage(HeaderPerformance.perStockKey) private var headerPerStock = HeaderPerformance.defaultOn
 
     /// The selected chart's outline as it's drawn: the stored width is a third of it (see `SelectedOutline`).
     private var selectedOutline: Binding<Double> {
@@ -958,6 +961,26 @@ private struct AppearanceSettings: View {
                             .frame(width: 52, alignment: .trailing)
                     }
                 }
+            }
+            Section("Performance") {
+                Toggle("Charts window: headers update only while selected or with a position", isOn: $headersFrozen)
+                Text(headersFrozen
+                     ? "Each header there is drawn as its stock loads (and again a few seconds later), then only while its chart is selected or has a position or what-if trade open."
+                     : "Every header there updates as its stock's data changes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Chart headers lay out once for their width", isOn: $headerLayoutByWidth)
+                Text(headerLayoutByWidth
+                     ? "A header measures the room it has and builds the one layout that fits (again only when the chart is resized)."
+                     : "A header tries each of its layouts every time it's drawn, keeping the first that fits.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Chart headers redraw only for their own stock", isOn: $headerPerStock)
+                Text(headerPerStock
+                     ? "A fill, position or margin change redraws only the headers of that stock."
+                     : "Any stock's fill, position or margin change redraws every header.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             HStack {
                 Spacer()
