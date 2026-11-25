@@ -221,7 +221,7 @@ enum AppearanceDefaults {
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
         TimeframeSwitch.keepViewKey, GridZoom.resetsAdjustedKey, NumberButtons.scalesKey,
         HeaderPerformance.freezeKey, HeaderPerformance.layoutKey, HeaderPerformance.perStockKey,
-        Swiping.zoomsAllKey, ViewSync.key,
+        Swiping.zoomsAllKey, ViewSync.key, ZoomAnchor.keepsLatestKey,
     ] + LineDashes.keys + LineDashes.dotsKeys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.

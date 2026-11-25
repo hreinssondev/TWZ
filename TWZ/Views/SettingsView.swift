@@ -742,6 +742,7 @@ private struct AppearanceSettings: View {
     @AppStorage(HeaderPerformance.perStockKey) private var headerPerStock = HeaderPerformance.defaultOn
     @AppStorage(Swiping.zoomsAllKey) private var swipeZoomsAll = Swiping.defaultZoomsAll
     @AppStorage(ViewSync.key) private var viewSync = ViewSync.defaultOn
+    @AppStorage(ZoomAnchor.keepsLatestKey) private var zoomKeepsLatest = ZoomAnchor.defaultKeepsLatest
 
     /// The selected chart's outline as it's drawn: the stored width is a third of it (see `SelectedOutline`).
     private var selectedOutline: Binding<Double> {
@@ -994,6 +995,12 @@ private struct AppearanceSettings: View {
                 Text(swipeZoomsAll
                      ? "A trackpad swipe zooms every chart, as the Zoom slider; ⇧-, ⌘- or ⌥-swipe pans and zooms only the chart under the pointer."
                      : "A trackpad swipe pans and zooms the chart under the pointer; ⇧-, ⌘- or ⌥-swipe zooms every chart, as the Zoom slider.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Zoom keeps the latest candle in place", isOn: $zoomKeepsLatest)
+                Text(zoomKeepsLatest
+                     ? "Zooming (a swipe, pinch or wheel, the Zoom slider) leaves the latest candle where it is; the bars before it spread out or close up to its left."
+                     : "A chart zooms around the pointer, and zooming every chart keeps the Space slider's bars right of the latest candle, so the candles move sideways as they widen or narrow.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

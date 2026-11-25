@@ -112,15 +112,20 @@ extension Workspace {
     /// change it by as much (see `GridZoom`), or by `factor` when given (a swipe, see `zoomGrid`).
     func setZoom(_ zoom: Double, of charts: [ChartModel], broker: Broker, from oldZoom: Double? = nil, by factor: Double? = nil) {
         let relative = GridZoom.resetsAdjusted ? nil : factor ?? oldZoom.flatMap { old in old > 0 ? zoom / old : nil }
+        // With Settings › Appearance › Zoom keeps the latest candle in place, each chart's latest candle stays put.
+        let keepsLatest = ZoomAnchor.keepsLatest
+        func show(_ visible: Double, on chart: ChartModel) {
+            if keepsLatest, !chart.bars.isEmpty { chart.zoomKeepingLatestBar(to: visible) } else { chart.visibleBars = visible }
+        }
         for chart in charts {
             if let relative, chart.adjustedByHand {
                 chart.defaultVisibleBars = zoom
-                chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, chart.visibleBars * relative))
+                show(min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, chart.visibleBars * relative)), on: chart)
                 continue
             }
             if chart.defaultVisibleBars != zoom || chart.visibleBars != zoom {
                 chart.defaultVisibleBars = zoom
-                chart.visibleBars = zoom
+                show(zoom, on: chart)
             }
         }
     }

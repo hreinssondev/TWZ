@@ -78,6 +78,58 @@ struct PricePointer {
     var outline: Color?
 }
 
+extension ChartModel {
+    /// The rest of today's extended session after the last intraday bar (see `CandleChart.RestOfDay`); nil for
+    /// daily and forex charts.
+    var restOfDay: CandleChart.RestOfDay? {
+        guard let seconds = timeframe.barSeconds, let last = bars.last, !ForexPair.isForex(symbol) else { return nil }
+        let from = last.time.addingTimeInterval(seconds)
+        let sessions = MarketSession.restOfDay(from: from)
+        guard let end = sessions.last?.end else { return nil }
+        let todayBars = bars.reversed().prefix { $0.vwapDay == last.vwapDay }.count
+        return CandleChart.RestOfDay(from: from, barSeconds: seconds, sessions: sessions,
+                                     slots: Int((end.timeIntervalSince(from) / seconds).rounded(.up)), todayBars: todayBars)
+    }
+
+    /// Empty slots right of the last bar: the Space slider's count (`space`) normally; zooming out past today's bars (and the
+    /// default zoom) uses the room for the rest of the day, until all of it through after hours (20:00 ET) is on screen.
+    func rightPadding(_ rest: CandleChart.RestOfDay?, space: Double) -> Double {
+        guard let rest else { return space }
+        return min(max(space, Double(rest.slots)), max(space, visibleBars - max(Double(rest.todayBars), defaultVisibleBars)))
+    }
+
+    /// How far left of the price axis the latest candle's right edge is, as a share of the chart's width: 0 while it's
+    /// off the right (scrolled back), at most 1.
+    func latestBarShare(_ rest: CandleChart.RestOfDay?, space: Double) -> Double {
+        let padding = rightPadding(rest, space: space)
+        return min(1, max(0, (padding - scrollBack) / (visibleBars + padding)))
+    }
+
+    /// Zooms to `visible` bars, the latest candle staying where it is on screen (the chart's right edge while it's
+    /// off the right): Settings › Appearance › Zoom keeps the latest candle in place.
+    func zoomKeepingLatestBar(to visible: Double) {
+        let space = UserDefaults.standard.object(forKey: RightSpace.key) as? Double ?? RightSpace.defaultBars
+        let rest = restOfDay
+        let oldPadding = rightPadding(rest, space: space), oldSlots = visibleBars + oldPadding
+        let share = latestBarShare(rest, space: space)
+        visibleBars = visible
+        let newPadding = rightPadding(rest, space: space)
+        let back = scrollBack + (newPadding - oldPadding) - share * (visibleBars + newPadding - oldSlots)
+        scrollBack = min(max(0, Double(bars.count) - 10), max(-visibleBars / 2, back))
+    }
+}
+
+/// Settings › Appearance › Zoom keeps the latest candle in place: on (the default), zooming (a swipe, pinch or wheel on a
+/// chart, the grid's zoom, the Zoom slider) keeps the latest candle where it is on screen, the bars before it spreading
+/// or closing up to its left; off, a chart zooms around the pointer and the grid's zoom keeps the Space slider's bars
+/// right of the latest candle, so it moves as the bars widen or narrow.
+enum ZoomAnchor {
+    static let keepsLatestKey = "zoomKeepsLatestCandle"
+    static let defaultKeepsLatest = true
+
+    static var keepsLatest: Bool { UserDefaults.standard.object(forKey: keepsLatestKey) as? Bool ?? defaultKeepsLatest }
+}
+
 /// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
 enum RightSpace {
     static let key = "chartRightSpaceBars"
@@ -247,7 +299,7 @@ struct CandleChart: View {
     }
 
     /// The rest of today's extended session after the last intraday bar, as empty slots to its right.
-    private struct RestOfDay {
+    struct RestOfDay {
         var from: Date                // where the first empty slot starts
         var barSeconds: Double
         var sessions: [(start: Date, end: Date, phase: MarketSession.Phase)]
@@ -260,24 +312,9 @@ struct CandleChart: View {
         }
     }
 
-    private var restOfDay: RestOfDay? {
-        let bars = chart.bars
-        guard let seconds = chart.timeframe.barSeconds, let last = bars.last, !ForexPair.isForex(chart.symbol) else { return nil }
-        let from = last.time.addingTimeInterval(seconds)
-        let sessions = MarketSession.restOfDay(from: from)
-        guard let end = sessions.last?.end else { return nil }
-        let todayBars = bars.reversed().prefix { $0.vwapDay == last.vwapDay }.count
-        return RestOfDay(from: from, barSeconds: seconds, sessions: sessions,
-                         slots: Int((end.timeIntervalSince(from) / seconds).rounded(.up)), todayBars: todayBars)
-    }
+    private var restOfDay: RestOfDay? { chart.restOfDay }
 
-    /// Empty slots right of the last bar: the Space slider's count normally; zooming out past today's bars (and the default
-    /// zoom) uses the room for the rest of the day, until all of it through after hours (20:00 ET) is on screen.
-    private func rightPadding(_ rest: RestOfDay?) -> Double {
-        guard let rest else { return rightPaddingBars }
-        return min(max(rightPaddingBars, Double(rest.slots)),
-                   max(rightPaddingBars, chart.visibleBars - max(Double(rest.todayBars), chart.defaultVisibleBars)))
-    }
+    private func rightPadding(_ rest: RestOfDay?) -> Double { chart.rightPadding(rest, space: rightPaddingBars) }
 
     /// Clamped write: never past the oldest bars, and at most half a screen into the future.
     private func setScrollBack(_ value: Double, solo: Bool? = nil) {
@@ -301,9 +338,13 @@ struct CandleChart: View {
     }
 
     /// Scales the number of visible bars by `factor`, keeping the bar under `anchorX` in place.
+    /// With Settings › Appearance › Zoom keeps the latest candle in place, the latest candle stays where it is
+    /// instead (the chart's right edge while it's off the right), whatever the pointer's place.
     private func zoom(by factor: Double, at anchorX: CGFloat, plotWidth: CGFloat, solo: Bool? = nil) {
-        let x = min(plotWidth, max(0, anchorX))
         let rest = restOfDay
+        let x = ZoomAnchor.keepsLatest
+            ? plotWidth * CGFloat(1 - chart.latestBarShare(rest, space: rightPaddingBars))
+            : min(plotWidth, max(0, anchorX))
         let oldWidth = barWidth(plotWidth: plotWidth), oldPadding = rightPadding(rest)
         // Zooms out as far as all the loaded bars (at least `maxVisibleBars`).
         chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, chart.visibleBars * factor))
