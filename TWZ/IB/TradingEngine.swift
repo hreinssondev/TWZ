@@ -810,7 +810,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         // 236: shortable (stocks); 101: open interest (options, until IB refuses it, see `optionTicksRefused`).
         let ticks = forex ? "" : option ? (optionTicksRefused ? "" : "101") : "236"
         if option, !ticks.isEmpty { optionTickReqs.insert(reqId) }
+        // An option asks for real-time quotes, else IB's 15-minute delayed ones (free, without the options market data
+        // subscription); everything else real-time only.
+        if option { send(59, 1, 3) }                                               // reqMarketDataType: delayed if need be
         sendFields([1, 11, reqId] + contract(symbol) + [false, ticks, false, false, ""])   // reqMktData
+        if option { send(59, 1, 1) }
         if forex { requestContractDetails(symbol) }
         // No close from IB in a few seconds: yesterday's from the daily bars, for the % change.
         if !forex, !option { queue.asyncAfter(deadline: .now() + 5) { [weak self] in self?.fillPrevClose(symbol) } }
@@ -2977,6 +2981,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case 9, 75: if price > 0 { q.prevClose = price }
         default: return
         }
+        if (66...68).contains(f.int(3)), !q.isDelayed { q.isDelayed = true }
         if isOvernight { overnightQuotes[symbol] = q } else { smartQuotes[symbol] = q }
         if !isOvernight, ssr[symbol] == nil, !ForexPair.isForex(symbol), !OptionContract.isOption(symbol),
            let last = q.last, let close = q.prevClose, close > 0, last <= close * 0.9 {

@@ -244,6 +244,9 @@ struct OptionsTicket: View {
             notes.append(days == 0 ? "Expires today: prices swing hard and what's left of its time value goes by the close."
                                    : "Expires tomorrow: prices swing hard and its time value is nearly gone.")
         }
+        if desk.legs.contains(where: { broker.quote($0.contract.symbol)?.isDelayed == true }) {
+            notes.append("Prices delayed 15 minutes (no real-time options data at IB): the mid may be far from where it trades now.")
+        }
         for leg in desk.legs {
             if let q = broker.quote(leg.contract.symbol), let bid = q.bid, let ask = q.ask, ask > 0, let mid = q.mid, mid > 0,
                (ask - bid) / mid > 0.15, ask - bid > 0.05 {

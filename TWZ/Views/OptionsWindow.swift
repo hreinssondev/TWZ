@@ -8,6 +8,9 @@
 //  profit, said in plain words. Chain: the classic chain, calls left, puts right, a click on a bid sells, on an ask buys.
 //  Strategy: what you expect the stock to do, a strategy for it built around the price, its profit and loss chart and
 //  odds. Positions: the option positions with their P/L, Greeks and days left, a risk chart, and closing them.
+//  The underlying follows the chart selected in the main or Charts window while the top bar's 🔗 is on (forex pairs
+//  aside); typed in, it holds until the next chart is selected. Without real-time US options data at IB, the option
+//  quotes are IB's 15-minute delayed ones, said in the banner and the ticket.
 //  The expiries run along the top (the one nearest 30 days out picked at first); the chain shows the strikes around the
 //  price, as many each side as the top bar's Strikes says (each strike's call and put take two of IB's market data
 //  lines). The window streams nothing once closed.
@@ -24,6 +27,7 @@ enum OptionsWindow {
     static let windowID = "options"
     static let windowTitle = "Options"
     static let quoteOwner = "options-window"
+    static let followKey = "options.followChart"
 
     static func isWindow(_ window: NSWindow?) -> Bool {
         guard let window else { return false }
@@ -238,7 +242,7 @@ final class OptionsDesk {
         guard let first = missing.first else { return "Working it out…" }
         let names = missing.map(\.contract.short).joined(separator: ", ")
         if let reason = broker.unavailableQuotes[first.contract.symbol] {
-            return "IB sends no price for the \(names): \(reason)\n(option quotes need IB's US options market data, OPRA)"
+            return "IB sends no price for the \(names): \(OptionsBanner.firstSentence(reason))\n(option quotes need IB's US options market data, OPRA)"
         }
         return broker.state == .connected ? "No price from IB yet for the \(names)" : "Not connected to IB"
     }
@@ -269,7 +273,10 @@ final class OptionsDesk {
 
 struct OptionsView: View {
     @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
     @State private var desk = OptionsDesk()
+    /// The underlying follows the chart selected in the main or Charts window (see `OptionsHeader`'s link).
+    @AppStorage(OptionsWindow.followKey) private var follow = true
 
     var body: some View {
         let spot = desk.spot(broker)
@@ -280,7 +287,7 @@ struct OptionsView: View {
             Divider()
             ExpiryStrip(desk: desk, book: book, spot: spot)
             Divider()
-            OptionsBanner(desk: desk, book: book)
+            OptionsBanner(desk: desk, book: book, spot: spot)
             HStack(spacing: 0) {
                 Group {
                     switch desk.layout {
@@ -313,12 +320,21 @@ struct OptionsView: View {
         .onChange(of: "\(desk.underlying)|\(desk.expiry ?? "")|\(broker.state == .connected)", initial: true) {
             if let expiry = desk.expiry, broker.state == .connected { broker.loadOptionSeries(desk.underlying, expiry: expiry) }
         }
+        .onChange(of: workspace.targetSymbol, initial: true) { _, symbol in if follow { adopt(symbol) } }
+        .onChange(of: follow) { _, on in if on { adopt(workspace.targetSymbol) } }
         // On close only: nothing streams for the window any more.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
             guard OptionsWindow.isWindow(note.object as? NSWindow) else { return }
             broker.setQuoteSymbols([], owner: OptionsWindow.quoteOwner)
             broker.setVolUnderlying(nil)
         }
+    }
+
+    /// The selected chart's stock becomes the underlying (a forex pair, an option or no symbol leaves it be).
+    private func adopt(_ symbol: String) {
+        let s = symbol.trimmingCharacters(in: .whitespaces).uppercased()
+        guard !s.isEmpty, !ForexPair.isForex(s), !OptionContract.isOption(s), OptionCombo.underlying(of: s) == nil else { return }
+        desk.underlying = s
     }
 
     /// ⌘1–4: the layouts.
@@ -342,6 +358,7 @@ private struct OptionsHeader: View {
     @Environment(\.sideColors) private var sides
     @State private var text = ""
     @FocusState private var typing: Bool
+    @AppStorage(OptionsWindow.followKey) private var follow = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -358,7 +375,18 @@ private struct OptionsHeader: View {
                 }
                 .onAppear { text = desk.underlying }
                 .onChange(of: desk.underlying) { text = desk.underlying }
-                .help("The stock or ETF whose options to show (↩)")
+                .help("The stock or ETF whose options to show (↩)" + (follow ? "; the next chart selected takes over again while 🔗 is on" : ""))
+            Button { follow.toggle() } label: {
+                Image(systemName: "link")
+                    .font(.system(size: 12, weight: follow ? .bold : .regular))
+                    .foregroundStyle(follow ? Color.accentColor : Color.secondary.opacity(0.6))
+                    .padding(4)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(follow ? 0.12 : 0)))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(follow ? "Following the selected chart (main or Charts window): its stock's options show here. Click to stop"
+                         : "Click to follow the selected chart (main or Charts window): its stock's options show here")
             if let spot {
                 Text(Fmt.price(spot)).font(.system(size: 15, weight: .semibold).monospacedDigit())
                 if let change = broker.quote(desk.underlying)?.changePercent {
@@ -506,6 +534,7 @@ struct OptionsModeBadge: View {
 private struct OptionsBanner: View {
     let desk: OptionsDesk
     let book: OptionBook
+    let spot: Double?
     @Environment(Broker.self) private var broker
 
     var body: some View {
@@ -522,6 +551,14 @@ private struct OptionsBanner: View {
 
     private var isError: Bool { broker.state == .connected && (refused != nil || broker.optionErrors[desk.underlying] != nil) }
 
+    /// IB's 15-minute delayed prices for the options on screen or in the ticket.
+    private var delayed: Bool {
+        desk.legs.contains { broker.quote($0.contract.symbol)?.isDelayed == true }
+            || book.visible(spot: spot, each: desk.strikesEachSide).contains { k in
+                OptionRight.allCases.contains { r in book.contract(k, r).map { broker.quote($0.symbol)?.isDelayed == true } ?? false }
+            }
+    }
+
     private var refused: (symbol: String, reason: String)? {
         broker.unavailableQuotes.first { OptionContract($0.key)?.underlying == desk.underlying }.map { ($0.key, $0.value) }
     }
@@ -530,11 +567,21 @@ private struct OptionsBanner: View {
         if broker.state != .connected { return "Not connected to IB: connect in Settings › Connection" }
         if let error = broker.optionErrors[desk.underlying] { return "\(desk.underlying) options: \(error)" }
         if let refused {
-            return "IB sends no quotes for \(OptionContract(refused.symbol)?.display ?? refused.symbol): \(refused.reason) "
+            return "IB sends no quotes for \(OptionContract(refused.symbol)?.display ?? refused.symbol): \(Self.firstSentence(refused.reason)) "
                 + "(option quotes need IB's US options market data, OPRA)"
         }
         if broker.optionChains[desk.underlying] == nil { return "Loading \(desk.underlying)'s options…" }
         if let expiry = desk.expiry, !book.isLoaded { return "Loading the \(OptionContract.expiryLabel(expiry)) options…" }
+        if delayed {
+            return "Option prices are delayed 15 minutes: this IB account has no real-time US options data (OPRA, in Client Portal › "
+                + "Settings › Market Data Subscriptions). Fine for SIM and learning; subscribe before trading for real."
+        }
         return nil
+    }
+
+    /// IB's long refusals, to their first sentence.
+    static func firstSentence(_ text: String) -> String {
+        guard let end = text.firstIndex(of: ".") else { return text }
+        return String(text[...end])
     }
 }
