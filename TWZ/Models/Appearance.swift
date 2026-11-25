@@ -158,6 +158,16 @@ enum GridZoom {
     }
 }
 
+/// Settings › Appearance › Swiping: off (the default), a trackpad swipe pans and zooms the chart under the
+/// pointer and ⇧-, ⌘- or ⌥-swipe zooms every chart (the grid's zoom); on, the other way round (see
+/// `ScrollCatcher`). The mouse wheel and ⌃-swipe stay as they are.
+enum Swiping {
+    static let zoomsAllKey = "swipeZoomsAllCharts"
+    static let defaultZoomsAll = false
+
+    static var zoomsAll: Bool { UserDefaults.standard.object(forKey: zoomsAllKey) as? Bool ?? defaultZoomsAll }
+}
+
 /// Settings › Appearance › Performance: three ways the chart headers do less work, each on by default; all
 /// three off is how the headers worked before (see `ChartHeaderInfo`).
 enum HeaderPerformance {
@@ -185,6 +195,7 @@ enum AppearanceDefaults {
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
         TimeframeSwitch.keepViewKey, GridZoom.resetsAdjustedKey, NumberButtons.scalesKey,
         HeaderPerformance.freezeKey, HeaderPerformance.layoutKey, HeaderPerformance.perStockKey,
+        Swiping.zoomsAllKey,
     ] + LineDashes.keys + LineDashes.dotsKeys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.

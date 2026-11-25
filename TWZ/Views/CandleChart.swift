@@ -6,7 +6,8 @@
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
 //  around the cursor; a diagonal swipe does both; with ⇧, ⌘ or ⌥ held (any of them, together too), a
 //  swipe moves the grid's Zoom slider instead (see `onZoomAll`), and with ⌃ (others too) it squeezes or
-//  stretches the price axis.
+//  stretches the price axis. Settings › Appearance › Swiping swaps the two: a swipe the grid's zoom, a
+//  ⇧-, ⌘- or ⌥-swipe this chart.
 //  Mouse: wheel zooms, shift-wheel pans, ⌘- or ⌥-wheel the grid's zoom, ⌃-wheel the price axis.
 //  Drag pans freely, in time and price. Right-click resets the view, as does double-clicking
 //  anywhere but an order line (unless `onDoubleClick` takes it: with a ⌃-click what-if on the chart,
@@ -958,7 +959,7 @@ struct CandleChart: View {
 /// SwiftUI on macOS has no scroll-wheel or precise trackpad scroll gesture, so this background
 /// view watches the app's scroll and magnify events and forwards the ones over its own frame.
 /// ⌃ + scroll scales the price axis instead of zooming in time; ⌘, ⌥ or ⇧ (or several) + a swipe moves the
-/// grid's zoom.
+/// grid's zoom (on a trackpad, the other way round with Settings › Appearance › Swiping on, see `Swiping`).
 /// It also reports every left click, takes ⌥-clicks (before SwiftUI's tap and drag gestures see them)
 /// and ⌥ key changes.
 private struct ScrollCatcher: NSViewRepresentable {
@@ -1015,8 +1016,10 @@ private struct ScrollCatcher: NSViewRepresentable {
             let control = flags.contains(.control), shift = flags.contains(.shift)
             if control { return .priceScale }
             // A mouse's shift-wheel alone pans (it arrives sideways).
-            if command || option || (shift && precise) { return .gridZoom }
-            return .chart
+            let zoomKeys = command || option || (shift && precise)
+            // Settings › Appearance › Swiping on: a trackpad swipe zooms the grid, with the keys this chart.
+            if precise && Swiping.zoomsAll { return zoomKeys ? .chart : .gridZoom }
+            return zoomKeys ? .gridZoom : .chart
         }
         var onModifiedClick: ((CGPoint, NSEvent.ModifierFlags) -> Bool)?
         var onModifierKeys: ((NSEvent.ModifierFlags) -> Void)?
@@ -1085,7 +1088,7 @@ private struct ScrollCatcher: NSViewRepresentable {
             let keys = Self.gesture(for: event.modifierFlags, precise: event.hasPreciseScrollingDeltas)
             if !event.hasPreciseScrollingDeltas || event.phase.contains(.began) || event.phase.contains(.mayBegin) {
                 gesture = keys
-            } else if keys != .chart {
+            } else if !event.modifierFlags.intersection([.option, .command, .control, .shift]).isEmpty {
                 gesture = keys
             }
             // Whichever way it goes most (the system may turn a ⇧-swipe sideways).

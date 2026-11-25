@@ -738,6 +738,7 @@ private struct AppearanceSettings: View {
     @AppStorage(HeaderPerformance.freezeKey) private var headersFrozen = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.layoutKey) private var headerLayoutByWidth = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.perStockKey) private var headerPerStock = HeaderPerformance.defaultOn
+    @AppStorage(Swiping.zoomsAllKey) private var swipeZoomsAll = Swiping.defaultZoomsAll
 
     /// The selected chart's outline as it's drawn: the stored width is a third of it (see `SelectedOutline`).
     private var selectedOutline: Binding<Double> {
@@ -979,6 +980,14 @@ private struct AppearanceSettings: View {
                 Text(headerPerStock
                      ? "A fill, position or margin change redraws only the headers of that stock."
                      : "Any stock's fill, position or margin change redraws every header.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section("Swiping") {
+                Toggle("Swipe zooms every chart", isOn: $swipeZoomsAll)
+                Text(swipeZoomsAll
+                     ? "A trackpad swipe zooms every chart, as the Zoom slider; ⇧-, ⌘- or ⌥-swipe pans and zooms only the chart under the pointer."
+                     : "A trackpad swipe pans and zooms the chart under the pointer; ⇧-, ⌘- or ⌥-swipe zooms every chart, as the Zoom slider.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
