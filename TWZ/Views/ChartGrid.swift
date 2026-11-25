@@ -170,7 +170,7 @@ extension Workspace {
             manualChartIDs.remove(chart.id)
             handDisplaced[chart.id] = nil
         }
-        if !shown.contains(selectedChartID) {
+        if !ChartModel.isChartsWindow(selectedChartID), !shown.contains(selectedChartID) {
             selectedChartID = mainCells[0]
             isChartSelected = false
         }

@@ -14,10 +14,12 @@ extension Broker {
 }
 
 extension Workspace {
-    /// Loads a symbol into the selected chart (the last selected one while none is) and selects it.
+    /// Loads a symbol into the selected main-window chart (the last one selected while none is, or while a
+    /// Charts window chart is) and selects it.
     func loadIntoSelectedChart(_ symbol: String, broker: Broker) {
-        loadByHand(symbol, into: selectedChart, broker: broker)
-        isChartSelected = true
+        let target = chart(id: lastMainChartID) ?? mainCharts[0]
+        loadByHand(symbol, into: target, broker: broker)
+        selectedChartID = target.id
     }
 
     /// Double-clicking a position: selects its stock's chart (see `showChart`).
@@ -216,16 +218,10 @@ struct ChartPane: View {
     @Environment(\.sideColors) private var sideColors
     let chart: ChartModel
 
-    @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
-    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     @AppStorage(MainGrid.zoomKey) private var gridZoom: Double = ChartModel.initialVisibleBars
     @State private var symbolText = ""
     /// The symbol box is being edited: only a click on it starts that (see `SymbolField`).
     @State private var symbolFocused = false
-
-    private var isSelected: Bool { workspace.isChartSelected && workspace.selectedChartID == chart.id }
-    /// Shows the selected chart's stock (in another chart).
-    private var showsTarget: Bool { !chart.symbol.isEmpty && chart.symbol == workspace.targetSymbol }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -239,7 +235,7 @@ struct ChartPane: View {
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay { outline }
+        .overlay { ChartOutline(chart: chart) }
         .simultaneousGesture(TapGesture().onEnded { workspace.selectedChartID = chart.id })
         .onAppear {
             symbolText = chart.symbol
@@ -262,32 +258,6 @@ struct ChartPane: View {
         }
     }
 
-    /// The thick selection outline (fainter on another chart of the same stock), else the plain border.
-    /// A stock with a color is outlined in it instead: as thick while selected, a third of that otherwise.
-    private var outline: some View {
-        let selected = isSelected || showsTarget
-        let fade = isSelected || !showsTarget ? 1 : 0.6
-        let thick = outlineWidth * SelectedOutline.selectedMultiple
-        let color: Color, width: Double
-        if let mark = workspace.stockColors[chart.symbol]?.color {
-            (color, width) = (mark.opacity(fade), selected ? thick : outlineWidth)
-        } else if selected {
-            (color, width) = (Color.accentColor.opacity(fade), thick)
-        } else {
-            (color, width) = (Color.primary.opacity(0.12), 1)
-        }
-        return RoundedRectangle(cornerRadius: 4)
-            .strokeBorder(color, lineWidth: width)
-            .allowsHitTesting(false)
-    }
-
-    private var timeframe: Binding<Timeframe> {
-        Binding(
-            get: { chart.timeframe },
-            set: { chart.timeframe = $0; broker.loadChart(chart) }
-        )
-    }
-
     private var header: some View {
         HStack(spacing: 8) {
             SymbolField(text: $symbolText, isFocused: $symbolFocused) {
@@ -297,6 +267,27 @@ struct ChartPane: View {
             }
             .frame(width: 70)
 
+            ChartHeaderInfo(chart: chart)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
+        .background(broker.positionTint(chart.symbol, colors: sideColors))
+    }
+
+}
+
+/// What a chart's header shows after its symbol field, in the main window and the Charts window alike: the
+/// position and what-if trade, ⚡ tick-by-tick, S shortable, SSR, the buying and short selling power, and
+/// the chart's own timeframe switch.
+struct ChartHeaderInfo: View {
+    @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
+    @Environment(\.sideColors) private var sideColors
+    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
+    let chart: ChartModel
+
+    var body: some View {
+        HStack(spacing: 8) {
             // "2 LONG 23 322 +452": the orders that opened or added to the open round trip (an order in
             // several fills counts once), the market value in NOK (at cost until there's a quote), and the
             // P/L in NOK once there's a quote; without a USD.NOK rate, shares and the P/L in dollars. A
@@ -396,9 +387,13 @@ struct ChartPane: View {
                 timeframeMenu
             }
         }
-        .padding(.horizontal, 8)
-        .frame(height: 26)
-        .background(broker.positionTint(chart.symbol, colors: sideColors))
+    }
+
+    private var timeframe: Binding<Timeframe> {
+        Binding(
+            get: { chart.timeframe },
+            set: { chart.timeframe = $0; broker.loadChart(chart) }
+        )
     }
 
     /// The most a new long (buying power) or short (short selling power) in the stock can be worth
@@ -450,6 +445,39 @@ struct ChartPane: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+    }
+}
+
+/// A chart's outline, in the main window and the Charts window alike: thick while selected (fainter on
+/// another chart of the same stock), else the plain border; a stock with a color in it instead.
+struct ChartOutline: View {
+    @Environment(Workspace.self) private var workspace
+    @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
+    let chart: ChartModel
+
+    private var isSelected: Bool { workspace.isChartSelected && workspace.selectedChartID == chart.id }
+    /// Shows the selected chart's stock (in another chart).
+    private var showsTarget: Bool { !chart.symbol.isEmpty && chart.symbol == workspace.targetSymbol }
+
+    var body: some View { outline }
+
+    /// The thick selection outline (fainter on another chart of the same stock), else the plain border.
+    /// A stock with a color is outlined in it instead: as thick while selected, a third of that otherwise.
+    private var outline: some View {
+        let selected = isSelected || showsTarget
+        let fade = isSelected || !showsTarget ? 1 : 0.6
+        let thick = outlineWidth * SelectedOutline.selectedMultiple
+        let color: Color, width: Double
+        if let mark = workspace.stockColors[chart.symbol]?.color {
+            (color, width) = (mark.opacity(fade), selected ? thick : outlineWidth)
+        } else if selected {
+            (color, width) = (Color.accentColor.opacity(fade), thick)
+        } else {
+            (color, width) = (Color.primary.opacity(0.12), 1)
+        }
+        return RoundedRectangle(cornerRadius: 4)
+            .strokeBorder(color, lineWidth: width)
+            .allowsHitTesting(false)
     }
 }
 

@@ -39,7 +39,9 @@
 //  $ / % switch (see `SizeMode`) at the mid; a ⌘ number with neither an order key nor a hotkey beeps.
 //  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌃1–6, or ⇧1–6 outside a text field: one modifier alone; ⌥⇧ and a number is free
 //  for a hotkey's or order key's shortcut) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
-//  (number row or keypad), also while typing, and puts back a chart whose own switch was changed.
+//  (number row or keypad), also while typing, and puts back a chart whose own switch was changed; with the Charts
+//  window in front, every chart's there instead. A chart selected in the Charts window takes the trading
+//  shortcuts as a main one does.
 //  ´ (outside a text field) goes back to the grid shown before, its list and timeframe, and again comes back (see
 //  `Workspace.previousGrid`).
 //  ⌥0, or ⇧A outside a text field, gives every other chart in the grid the selected chart's view: zoom,
@@ -257,6 +259,12 @@ struct TradingShortcuts: ViewModifier {
                     if modifiers == .option || modifiers == .control || modifiers == .shift,
                        inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
                         if modifiers == .shift, event.window?.firstResponder is NSTextView { return event }
+                        // The Charts window in front: every chart there, as its header's switch.
+                        if SecondaryCharts.isWindow(event.window) {
+                            UserDefaults.standard.set(timeframe.rawValue, forKey: SecondaryCharts.timeframeKey)
+                            workspace.setTimeframe(timeframe, of: workspace.secondaryCharts, broker: broker)
+                            return nil
+                        }
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
                         workspace.setMainTimeframe(timeframe, broker: broker)
                         return nil

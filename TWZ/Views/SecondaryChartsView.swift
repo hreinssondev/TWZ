@@ -15,7 +15,9 @@
 //  the charts meanwhile (so nothing else moves) and the gainers filling the other cells around it, until the top bar's Reset, the field emptied, or a smaller grid without that cell.
 //  ⌘R (or another of the main window's Reset keys) with this window in front resets it alone: the top gainers,
 //  no charts kept by hand, every chart's view back to the Zoom slider's.
-//  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
+//  Clicking a chart selects it, as in the main window: hotkeys, order keys and the other trading shortcuts go to
+//  its stock, it streams tick by tick (⌘↩ keeps it fast), and its header shows the position, ⚡, S, SSR, buying
+//  power and its own timeframe switch. ⌥1–6 (⌃, ⇧ too) with this window in front sets every chart's timeframe here. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
 //
@@ -315,6 +317,11 @@ struct SecondaryChartsView: View {
 
     /// Stops the scanner and empties every chart, cancelling their data.
     private func stop() {
+        // A chart here was selected: the main window's last one is again.
+        if ChartModel.isChartsWindow(workspace.selectedChartID) {
+            workspace.selectedChartID = workspace.lastMainChartID
+            workspace.isChartSelected = false
+        }
         broker.setScanner(nil, owner: SecondaryCharts.scannerOwner)
         lastGainers = []
         workspace.secondaryPins = [:]
@@ -347,7 +354,7 @@ struct SecondaryChartsView: View {
     }
 }
 
-/// A Charts window chart pane: clicking it loads its symbol into the main window's selected chart.
+/// A Charts window chart pane: clicking it selects it, as a main-window chart (see `ChartPane`).
 /// ⌃-click, the what-if, its lines and hover P/L work as on the main charts.
 struct SecondaryChartPane: View {
     @Environment(Broker.self) private var broker
@@ -357,7 +364,6 @@ struct SecondaryChartPane: View {
     /// Its place in the grid, which a symbol typed into it keeps.
     var cell: Int?
 
-    @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
     @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.initialVisibleBars
     @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.initialVisibleBars
@@ -369,7 +375,7 @@ struct SecondaryChartPane: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            TradingChart(chart: chart) { factor in
+            TradingChart(chart: chart, onTrade: { workspace.selectedChartID = chart.id }) { factor in
                 // Every chart in this window, from the zoom on screen; the header's Zoom slider follows.
                 if layout == .all {
                     allZoom = workspace.zoomChartsWindow(by: factor, from: chart, sliderZoom: allZoom, broker: broker)
@@ -380,17 +386,17 @@ struct SecondaryChartPane: View {
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay {
-            // The stock's color (⌥⇧ and its letter in the main window), else the plain border.
-            if let mark = workspace.stockColors[chart.symbol]?.color {
-                RoundedRectangle(cornerRadius: 4).strokeBorder(mark, lineWidth: outlineWidth).allowsHitTesting(false)
-            } else {
-                RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12))
+        .overlay { ChartOutline(chart: chart) }
+        .simultaneousGesture(TapGesture().onEnded { workspace.selectedChartID = chart.id })
+        // The header's buying and short selling power, kept current while selected (as every main chart's is;
+        // a whole grid of them here would ask IB too often).
+        .task(id: workspace.selectedChartID == chart.id ? chart.symbol : "") {
+            guard workspace.selectedChartID == chart.id, !chart.symbol.isEmpty else { return }
+            while !Task.isCancelled {
+                broker.refreshMarginSize(symbol: chart.symbol)
+                try? await Task.sleep(for: .seconds(5))
             }
         }
-        .simultaneousGesture(TapGesture().onEnded {
-            if !chart.symbol.isEmpty { workspace.loadIntoSelectedChart(chart.symbol, broker: broker) }
-        })
         .onAppear { symbolText = chart.symbol }
         .onChange(of: chart.symbol) { _, new in
             if !symbolFocused { symbolText = new }
@@ -420,7 +426,7 @@ struct SecondaryChartPane: View {
                 symbolFocused = false
             }
             .frame(width: 70)
-            Spacer()
+            ChartHeaderInfo(chart: chart)
         }
         .padding(.horizontal, 8)
         .frame(height: 26)

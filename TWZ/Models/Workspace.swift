@@ -54,7 +54,8 @@ final class ChartModel: Identifiable {
     @ObservationIgnored var adjustedByHand = false
     /// The Charts window's charts (see `Workspace.secondaryCharts`) have ids from this on.
     static let chartsWindowFirstID = 100
-    var inChartsWindow: Bool { id >= Self.chartsWindowFirstID }
+    var inChartsWindow: Bool { Self.isChartsWindow(id) }
+    static func isChartsWindow(_ id: Int) -> Bool { id >= chartsWindowFirstID }
 
     /// The view's place: how far back from the latest bar, and moved and zoomed up or down.
     struct Place: Codable {
@@ -143,9 +144,16 @@ final class Workspace {
     /// The main-window chart in each cell, in reading order, laid out for `mainColumns` columns.
     var mainCells: [Int]
     var mainColumns: Int
-    /// The selected chart's id: a main-window chart; the last one selected while none is
-    /// (see `isChartSelected`).
-    var selectedChartID = 0 { didSet { isChartSelected = true } }
+    /// The selected chart's id: a main-window chart or a Charts window one; the last one selected while none
+    /// is (see `isChartSelected`). Hotkeys and order shortcuts go to its stock either way.
+    var selectedChartID = 0 {
+        didSet {
+            isChartSelected = true
+            if !ChartModel.isChartsWindow(selectedChartID) { lastMainChartID = selectedChartID }
+        }
+    }
+    /// The main-window chart selected last, which a list's rows load into (see `loadIntoSelectedChart`).
+    @ObservationIgnored private(set) var lastMainChartID = 0
     /// False after clicking empty space in the Orders or Positions column: no chart is selected, so
     /// hotkeys and order shortcuts have no symbol to act on until a chart is selected again.
     var isChartSelected = true
@@ -447,8 +455,9 @@ final class Workspace {
     var selectedChart: ChartModel { chart(id: selectedChartID) ?? mainCharts[0] }
 
     /// A main-window chart.
+    /// A main-window chart, or a Charts window one.
     func chart(id: Int) -> ChartModel? {
-        mainCharts.first { $0.id == id }
+        ChartModel.isChartsWindow(id) ? secondaryCharts.first { $0.id == id } : mainCharts.first { $0.id == id }
     }
     /// The symbol orders go to: the selected chart's, or "" with no chart selected (nothing is sent).
     var targetSymbol: String { isChartSelected ? selectedChart.symbol : "" }
