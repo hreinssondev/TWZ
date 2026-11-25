@@ -233,6 +233,8 @@ enum AppearancePresets {
 enum TimeframePickerStyle: String, CaseIterable, Identifiable {
     case segmented = "Segmented"
     case minimal = "Minimal"
+    /// Always the "15m ⌄" menu, however wide the chart (other styles turn into it only when there's no room).
+    case menu = "Menu"
     var id: String { rawValue }
 
     static let storageKey = "timeframePickerStyle"

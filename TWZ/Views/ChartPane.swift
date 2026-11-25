@@ -295,6 +295,8 @@ struct ChartHeaderInfo: View {
     let chart: ChartModel
     /// The Charts window's: the timeframe always as a menu ("15m ⌄"), as the main window's narrower charts show it.
     var alwaysMenu = false
+    /// Settings › Appearance › Chart header's Menu style does the same everywhere.
+    private var menuOnly: Bool { alwaysMenu || pickerStyle == .menu }
     /// The Charts window's headers with Settings' freezing on: drawn from `frozen` unless live.
     var freezesUnlessLive = false
 
@@ -413,7 +415,7 @@ struct ChartHeaderInfo: View {
                 // The short selling and buying power, then the timeframe switch. A chart too narrow for them
                 // (a big grid) gets a menu showing its timeframe instead of the switch, then drops the
                 // short selling power, then the buying power.
-                if alwaysMenu {
+                if menuOnly {
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeMenu }
                         HStack(spacing: 4) { power(info.longPower); timeframeMenu }
@@ -450,7 +452,7 @@ struct ChartHeaderInfo: View {
         let long = info.longPower.map { Self.powerWidth($0.text) }
         let switchWidth = pickerStyle == .segmented ? Self.segmentedWidth : Self.minimalSwitchWidth
         let menuWidth = Self.textWidth(chart.timeframe.rawValue, weight: .semibold) + 22
-        if alwaysMenu {
+        if menuOnly {
             if total([short, long, menuWidth]) <= width {
                 HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeMenu }
             } else if total([long, menuWidth]) <= width {
@@ -523,6 +525,8 @@ struct ChartHeaderInfo: View {
             .frame(width: Self.segmentedWidth)
         case .minimal:
             TimeframePicker(selection: timeframe)
+        case .menu:
+            timeframeMenu
         }
     }
 
