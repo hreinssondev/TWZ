@@ -318,8 +318,9 @@ enum Indicators {
     static let lineWidthRange = 0.5...4.0
 }
 
-/// What the chart's hover P/L sizes its pretend buy at the last price by, with no position or what-if
-/// open: a percent of the largest long IB's margin allows, or the shares a NOK amount buys.
+/// What the chart's hover P/L sizes its pretend trade at the last price by, with no position or what-if
+/// open: a percent of the largest long IB's margin allows (above the last price) or short (below it), or the
+/// shares a NOK amount buys.
 enum HoverPnLSize: String, CaseIterable, Identifiable {
     case buyingPower = "Buying power"
     case nok = "NOK amount"

@@ -139,6 +139,12 @@ struct ContentView: View {
                     .frame(width: sideWidth)
                 }
                 .padding(gap)
+                // An order held with ⇧: Send (↩) or Cancel (Esc), over the charts' top (see `HeldOrder`).
+                .overlay(alignment: .top) {
+                    SendOrderPopup()
+                        .padding(.top, gap + 40)
+                        .padding(.trailing, sideWidth)
+                }
                 // The hotkey row shows messages; collapsed, they float under the charts at the window's
                 // bottom edge, over the row's drag handle (not while the row peeks: it shows them).
                 .overlay(alignment: .bottomLeading) {

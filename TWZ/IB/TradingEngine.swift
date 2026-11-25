@@ -1432,10 +1432,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     // MARK: - Hotkeys
 
-    func run(_ hotkey: Hotkey, symbol rawSymbol: String) {
+    /// With `hold`, a buy or sell isn't sent: `hold` gets it as it would go in (see `HeldOrder`).
+    func run(_ hotkey: Hotkey, symbol rawSymbol: String, hold: (@Sendable (HeldOrder) -> Void)? = nil) {
         let symbol = rawSymbol.uppercased()
         guard apiReady else {
             lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        if hold != nil, hotkey.action != .buy, hotkey.action != .sell {
+            lastMessage = "⇧ holds buy and sell orders only"
             return
         }
         // No chart selected (or no symbol in it): only the account-wide actions have something to do.
@@ -1474,6 +1479,20 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                     lastMessage = "Size too small for \(symbol)"
                     return
                 }
+                if let hold {
+                    guard let shown = price.limit ?? quote(symbol, .cross, isBuy: isBuy)?.price else {
+                        lastMessage = "No price for \(symbol) yet"
+                        return
+                    }
+                    let overnight = price.exchange == "OVERNIGHT"
+                    hold(HeldOrder(symbol: symbol, action: action, quantity: quantity, limit: price.limit, stop: price.stop,
+                                   orderType: price.orderType,
+                                   tif: overnight || price.orderType == "MIDPRICE" ? .day : hotkey.tif,
+                                   outsideRth: price.outsideRth, exchange: price.exchange, fallback: price.fallback,
+                                   summary: summary, source: Self.source(hotkey, isBuy: isBuy, symbol: symbol), why: why,
+                                   price: shown, hotkey: hotkey))
+                    return
+                }
                 submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: hotkey.tif,
                        summary: summary, source: Self.source(hotkey, isBuy: isBuy, symbol: symbol), why: why)
             }
@@ -1508,6 +1527,18 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// A held order (see `HeldOrder`), sent as it was shown: same size, price and venue.
+    func submitHeld(_ h: HeldOrder) {
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        let price = HotkeyPrice(limit: h.limit, outsideRth: h.outsideRth, exchange: h.exchange, fallback: h.fallback,
+                                stop: h.stop, orderType: h.orderType)
+        submit(symbol: h.symbol, action: h.action, quantity: h.quantity, price: price, tif: h.tif, summary: h.summary,
+               source: h.source, why: h.why + ", held with ⇧ and sent with ↩")
     }
 
     /// Shares a close of `fraction` of the position takes; all of it when that's under one share.
