@@ -836,7 +836,7 @@ private struct AppearanceSettings: View {
                 lineColorRow("Closed trade (exit)", key: LineColors.closedTradeKey, hex: $closedTradeHex,
                              default: sideColors.down,
                              dashedKey: LineDashes.lastTradeKey, dashedDefault: LineDashes.defaultLastTrade)
-                lineColorRow("Trend lines (⌘-click)", key: LineColors.trendKey, hex: $trendHex,
+                lineColorRow("Trend lines (⌘⇧-click)", key: LineColors.trendKey, hex: $trendHex,
                              default: LineColors.defaultTrend,
                              dashedKey: LineDashes.trendKey, dashedDefault: LineDashes.defaultTrend)
                 LabeledContent("Trend line width") {
@@ -849,7 +849,7 @@ private struct AppearanceSettings: View {
                 }
                 Toggle("Show trend lines' price on the axis", isOn: $trendPriceBox)
                 HStack {
-                    Text("⌘-click a chart for a horizontal trend line at that price; double-click the line to remove it. Kept per stock.")
+                    Text("⌘⇧-click a chart for a horizontal trend line at that price; double-click the line to remove it. Kept per stock.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()

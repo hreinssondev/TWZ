@@ -147,9 +147,9 @@ struct CandleChart: View {
     var pointers: [PricePointer] = []
     /// ⌥-click in the price area: called with the price under the cursor.
     var onAltClick: ((Double) -> Void)?
-    /// ⌘-click in the price area: called with the price under the cursor.
+    /// ⌘⇧-click in the price area: called with the price under the cursor.
     var onCommandClick: ((Double) -> Void)?
-    /// Price tag color while ⌥ / ⌘ is held (with a handler for that click).
+    /// Price tag color while ⌥ / ⌘⇧ is held (with a handler for that click).
     var altClickTint: Color = .white
     var commandClickTint: Color = .red
     /// The hover line takes the ⌥ / ⌘ tint too, not just its price tag.
@@ -225,7 +225,7 @@ struct CandleChart: View {
                     onHover?()
                     optionHeld = NSEvent.modifierFlags.contains(.option)
                     controlHeld = NSEvent.modifierFlags.contains(.control)
-                    commandHeld = NSEvent.modifierFlags.contains(.command)
+                    commandHeld = NSEvent.modifierFlags.isSuperset(of: [.command, .shift])
                 } else {
                     hover = nil
                 }
@@ -260,7 +260,7 @@ struct CandleChart: View {
                        let id = orderLine(near: location, size: geo.size), onControlClickLine(id) {
                         return true
                     }
-                    guard let handler = flags == .control ? onControlClick : flags == .command ? onCommandClick : onAltClick,
+                    guard let handler = flags == .control ? onControlClick : flags == [.command, .shift] ? onCommandClick : onAltClick,
                           let price = price(at: location, size: geo.size) else { return false }
                     handler(price)
                     return true
@@ -268,7 +268,7 @@ struct CandleChart: View {
                 onModifierKeys: { flags in
                     optionHeld = flags.contains(.option)
                     controlHeld = flags.contains(.control)
-                    commandHeld = flags.contains(.command)
+                    commandHeld = flags.isSuperset(of: [.command, .shift])
                 },
                 onRightClick: resetView
             ))
@@ -679,7 +679,7 @@ struct CandleChart: View {
                 cross.move(to: CGPoint(x: hoverX, y: plot.minY)); cross.addLine(to: CGPoint(x: hoverX, y: plot.maxY))
             }
             let hoverColor = LineColors.resolve(hoverHex, default: LineColors.defaultHover)
-            // Holding ⌥ / ⌘ tints the price tag (and with `tintsHoverLine` the line): a click places there.
+            // Holding ⌥ / ⌘⇧ tints the price tag (and with `tintsHoverLine` the line): a click places there.
             let modifierTint: Color? = optionHeld && onAltClick != nil ? altClickTint
                 : commandHeld && onCommandClick != nil ? commandClickTint : nil
             let lineTint = tintsHoverLine ? modifierTint : nil
@@ -1124,7 +1124,7 @@ private struct ScrollCatcher: NSViewRepresentable {
                 case .leftMouseDown:
                     self.onClick?()
                     let flags = event.modifierFlags.intersection([.option, .command, .control, .shift])
-                    guard flags == .option || flags == .control || flags == .command, let onModifiedClick = self.onModifiedClick,
+                    guard flags == .option || flags == .control || flags == [.command, .shift], let onModifiedClick = self.onModifiedClick,
                           onModifiedClick(location, flags) else { return event }
                 default:
                     self.handleScroll(event, at: location)

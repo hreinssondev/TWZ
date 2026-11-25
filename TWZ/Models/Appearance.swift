@@ -393,7 +393,7 @@ enum LineColors {
     static let showLastTradeLinesKey = "showLastTradeLines"
     /// On shows the chart's grid lines (off by default; the price and time labels show either way).
     static let showGridKey = "showChartGridLines"
-    /// ⌘-click trend lines (see `TrendLines`).
+    /// ⌘⇧-click trend lines (see `TrendLines`).
     static let trendKey = "trendLineColor"
     static let defaultTrend = Color.gray
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
@@ -409,7 +409,7 @@ enum LineColors {
     }
 }
 
-/// Horizontal trend lines: ⌘-click a chart for one at that price, double-click it to remove it. Kept per
+/// Horizontal trend lines: ⌘⇧-click a chart for one at that price, double-click it to remove it. Kept per
 /// stock (see `Workspace.trendLines`), drawn across the chart in Settings' color, style and width.
 enum TrendLines {
     static let storageKey = "trendLines"

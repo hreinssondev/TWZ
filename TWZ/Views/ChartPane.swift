@@ -634,7 +634,7 @@ struct TradingChart: View {
             chart: chart, lines: priceLines, pointers: simPointers,
             // No ⌥-click orders for now (`TradingEngine.run(_:symbol:at:)` still places one at a price):
             // without a handler ⌥ neither tints the price tag nor places orders.
-            // ⌘-click: a horizontal trend line at the price (see `TrendLines`); holding ⌘ tints the price tag its color.
+            // ⌘⇧-click: a horizontal trend line at the price (see `TrendLines`); holding ⌘⇧ tints the price tag its color.
             onCommandClick: { price in
                 guard !chart.symbol.isEmpty else { return }
                 workspace.trendLines[chart.symbol, default: []].append(price)
@@ -845,7 +845,7 @@ struct TradingChart: View {
     /// Line colors and solid / dashes / dots come from Settings.
     private var priceLines: [PriceLine] {
         var lines: [PriceLine] = []
-        // Trend lines (⌘-click) first, under the rest; a double-click on one removes it.
+        // Trend lines (⌘⇧-click) first, under the rest; a double-click on one removes it.
         for (index, price) in (workspace.trendLines[chart.symbol] ?? []).enumerated() {
             lines.append(PriceLine(price: price, color: trendColor, label: "", dashed: trendDashed,
                                    dotted: trendDashed && trendDots, orderId: TrendLines.lineId(index),

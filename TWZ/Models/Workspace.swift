@@ -438,7 +438,7 @@ final class Workspace {
         didSet { defaults.set(stockColors.mapValues(\.rawValue), forKey: StockColor.storageKey) }
     }
 
-    /// Horizontal trend lines' prices by symbol, ⌘-clicked on its charts (see `TrendLines`). Saved.
+    /// Horizontal trend lines' prices by symbol, ⌘⇧-clicked on its charts (see `TrendLines`). Saved.
     var trendLines: [String: [Double]] {
         didSet { defaults.set(trendLines, forKey: TrendLines.storageKey) }
     }
