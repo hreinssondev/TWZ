@@ -23,8 +23,8 @@
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  ⌃⌥⇧1 / 2 / 3 / 4 sells (shorts) a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 /
-//  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 doesn't buy one: ⌥⇧ and a
-//  number is free for a shortcut of your own). Matched by key, number row or keypad, whatever the keyboard layout types there.
+//  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 doesn't buy one: ⌥⇧1–5 picks the
+//  top bar's view set or scale under that number, as a click on it, in the main window). Matched by key, number row or keypad, whatever the keyboard layout types there.
 //  ⌘R, ⇧R (outside a text field), ⌥R, ⌃R or ⌘⇧R does what the top bar's Reset does, and so does the extra Reset
 //  shortcut set in Settings › Order Keys (see `Workspace.resetShortcut`).
 //  ⌘⇧M switches the order numbers between dollars and a percent of the buying power (see `SizeMode`): KEYS $ or
@@ -266,6 +266,18 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
+                    // ⌥⇧1–5: the top bar's view set or scale under that number, as a click on it.
+                    if modifiers == [.option, .shift], inMainWindow, !SecondaryCharts.isWindow(event.window),
+                       let slot = OrderKeys.number(keyCode: event.keyCode), ChartScale.slots.contains(slot) {
+                        if !event.isARepeat {
+                            if NumberButtons.areScales {
+                                workspace.pickScale(slot, byClick: true, broker: broker)
+                            } else {
+                                workspace.pickViewSet(slot, broker: broker)
+                            }
+                        }
+                        return nil
+                    }
                     // ⌥1–6 or ⌃1–6, one modifier alone: the account bar's timeframe;
                     // ChartGrid follows it. Set again too, so a chart whose own switch was changed goes back to it.
                     if modifiers == .option || modifiers == .control,
@@ -377,6 +389,9 @@ extension KeyShortcut {
         let k = key.lowercased()
         if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
             return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
+        }
+        if option, shift, !command, !control, let n = OrderKeys.number(keyCode: keyCode), ChartScale.slots.contains(n) {
+            return "\(display) picks the top bar's view set or scale \(n)"
         }
         if command, shift, !option, !control, k == "m" {
             return "⌘⇧M switches the order numbers between $ and %"

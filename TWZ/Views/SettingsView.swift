@@ -256,12 +256,12 @@ private struct TradingSettings: View {
             + "a red circle once IB's limit leaves it out); the selected chart always gets trades and bid/ask"),
         ("⌘⇧S L H A F", "Show that list and load it into the chart grid: Most Active $, Top Losers, AH Gainers, "
             + "Top Gainers, Forex (S, H and L wait a moment for a second letter)"),
-        ("⌥ or ⌃ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D (one modifier alone: two together, ⌥⇧3 say, are free for a hotkey or order key)"),
+        ("⌥ or ⌃ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D (one modifier alone: two together, ⌃⇧3 say, are free for a hotkey or order key)"),
         ("⇧1 2 3 4 5", "The chart layout saved under that number in the top bar's layout numbers (▦ 1–5: ⇧-click saves the grid's columns, rows and lines there, a click loads it); with the Charts window in front, that window's own. Not while typing"),
         ("⌘R, ⇧R, ⌥R, ⌃R or ⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("´", "Back to the grid shown before (its list and timeframe: from 15m to 5m, from Forex to Most Active $), and pressed again back here; not while typing"),
         ("⌥0  /  ⇧A", "Every other chart takes the selected chart's view: zoom, place and price scale (the same time span and right edge on other timeframes); ⇧A not while typing"),
-        ("1 2 3 4 5 (top bar)", "View sets (by default): ⇧-click a number saves every chart's zoom and place on every timeframe; a click puts them back. With Appearance's \"Top bar numbers are scales\" on, scales: a click: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists change until it's clicked again or Reset (a timeframe switch keeps each chart's view). The Zoom slider or ⇧- / ⌘- / ⌥-swipe trumps its zoom until a scale is picked; a chart zoomed or panned by hand keeps its view (per stock and timeframe) through list switches, until a number is clicked (or a right-click on that chart). Each list keeps its own views and lit scale. ⇧-click: save the selected chart's view as it"),
+        ("1 2 3 4 5 (top bar)", "View sets (by default): ⇧-click a number saves every chart's zoom and place on every timeframe; a click (or ⌥⇧ and the number) puts them back. With Appearance's \"Top bar numbers are scales\" on, scales: a click: every chart takes that saved scale (zoom, place and price scale), and keeps taking it as lists change until it's clicked again or Reset (a timeframe switch keeps each chart's view). The Zoom slider or ⇧- / ⌘- / ⌥-swipe trumps its zoom until a scale is picked; a chart zoomed or panned by hand keeps its view (per stock and timeframe) through list switches, until a number is clicked (or a right-click on that chart). Each list keeps its own views and lit scale. ⇧-click: save the selected chart's view as it"),
     ]
 
     var body: some View {

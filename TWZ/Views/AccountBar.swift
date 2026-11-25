@@ -168,10 +168,10 @@ private struct ScaleButtons: View {
 
     private func help(_ slot: Int, saved: Bool) -> String {
         if !asScales {
-            return saved ? "Every chart's zoom and place on every timeframe go back to view set \(slot); click again to turn it off. ⇧-click saves them here instead"
+            return saved ? "Every chart's zoom and place on every timeframe go back to view set \(slot) (⌥⇧\(slot)); click again to turn it off. ⇧-click saves them here instead"
                          : "⇧-click saves every chart's zoom and place on every timeframe as view set \(slot)"
         }
-        return saved ? "Every chart takes scale \(slot), its zoom, place and price scale, also as lists change; click again to turn it off. ⇧-click saves the selected chart's view here instead"
+        return saved ? "Every chart takes scale \(slot) (⌥⇧\(slot)), its zoom, place and price scale, also as lists change; click again to turn it off. ⇧-click saves the selected chart's view here instead"
                      : "⇧-click saves the selected chart's view (zoom, place and price scale) as scale \(slot)"
     }
 
