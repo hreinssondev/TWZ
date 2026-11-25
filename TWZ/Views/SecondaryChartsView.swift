@@ -18,7 +18,7 @@
 //  timeframe picker lets those go too.
 //  Clicking a chart selects it, as in the main window: hotkeys, order keys and the other trading shortcuts go to
 //  its stock, it streams tick by tick (⌘↩ keeps it fast), and its header shows the position, ⚡, S, SSR, buying
-//  power and its own timeframe switch. ⌥1–6 (⌃, ⇧ too) with this window in front sets every chart's timeframe here. With P on, or the
+//  power and its own timeframe switch. ⌥1–6 (⌃ too) with this window in front sets every chart's timeframe here, and ⇧1–5 (or a click on the header's layout numbers) loads one of its own saved chart layouts (see `GridLayout`). With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
 //
@@ -230,6 +230,11 @@ struct SecondaryChartsView: View {
             workspace.resetViews(of: workspace.secondaryCharts, zoom: layout == .all ? allZoom : customZoom, broker: broker)
         }
         .onChange(of: layout) { applyZoom() }
+        // A chart layout loaded: its lines (see `GridLayout`).
+        .onChange(of: workspace.gridLayoutLoads) {
+            columnSplits = SplitStore(key: GridLayout.Window.chartsWindow.columnSplitsKey)
+            rowSplits = SplitStore(key: GridLayout.Window.chartsWindow.rowSplitsKey)
+        }
         .onChange(of: allZoom) { zoomMoved(to: $1) }
         .onChange(of: customZoom) { zoomMoved(to: $1) }
     }
@@ -260,7 +265,7 @@ struct SecondaryChartsView: View {
                 get: { masterTimeframe },
                 set: { masterTimeframe = $0 }
             ))
-            .help("Every chart's timeframe here (with this window in front: ⌥1–6, ⌃1–6 or ⇧1–6); a chart's own switch changes just that chart")
+            .help("Every chart's timeframe here (with this window in front: ⌥1–6 or ⌃1–6); a chart's own switch changes just that chart")
             Button {
                 workspace.resetChartsWindow(releasingHandSet: true)
             } label: {
@@ -274,6 +279,7 @@ struct SecondaryChartsView: View {
             }
             .buttonStyle(.plain)
             .help("Every chart here back to the Zoom slider's zoom, and the charts whose symbol you typed follow the list again. ⌘R does the first only, keeping those")
+            GridLayoutButtons(window: .chartsWindow)
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)

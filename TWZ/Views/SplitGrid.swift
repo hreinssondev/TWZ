@@ -277,3 +277,55 @@ struct MiniSlider: View {
         )
     }
 }
+
+/// A window's chart layout numbers (see `GridLayout`), styled like the view-set numbers beside them, after a
+/// grid sign: ⇧-click saves the window's grid there, a click (or ⇧1–5 with the window in front) puts it back.
+/// The number last saved or picked is lit while the grid keeps its size; those with nothing saved are dimmer.
+struct GridLayoutButtons: View {
+    @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
+    let window: GridLayout.Window
+    @AppStorage private var columns: Int
+    @AppStorage private var rows: Int
+    @AppStorage private var mode: String
+
+    init(window: GridLayout.Window) {
+        self.window = window
+        _columns = AppStorage(wrappedValue: window.defaultColumns, window.columnsKey)
+        _rows = AppStorage(wrappedValue: window.defaultRows, window.rowsKey)
+        _mode = AppStorage(wrappedValue: window.defaultMode ?? "", window.modeKey ?? "gridLayoutButtons.noMode")
+    }
+
+    var body: some View {
+        HStack(spacing: 1) {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 9))
+                .foregroundStyle(Color.secondary.opacity(0.6))
+                .padding(.trailing, 2)
+                .help("Chart layouts: ⇧-click a number saves this window's grid (columns, rows and lines) there; a click or ⇧1–5 puts it back")
+            ForEach(GridLayout.slots, id: \.self) { slot in
+                let saved = workspace.gridLayouts[window]?[slot]
+                let lit = workspace.activeGridLayout[window] == slot
+                    && saved?.sameSize(mode: window.modeKey == nil ? nil : mode, columns: columns, rows: rows) == true
+                Button {
+                    if NSEvent.modifierFlags.contains(.shift) {
+                        workspace.saveGridLayout(slot, in: window, broker: broker)
+                    } else {
+                        workspace.pickGridLayout(slot, in: window, broker: broker)
+                    }
+                } label: {
+                    Text("\(slot)")
+                        .font(.system(size: 10, weight: lit ? .semibold : .regular).monospacedDigit())
+                        .foregroundStyle(lit ? Color.primary : Color.secondary.opacity(saved != nil ? 0.7 : 0.35))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(lit ? 0.12 : 0)))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(saved.map { "Layout \(slot): \($0.label) and its lines (⇧\(slot)). ⇧-click saves this window's grid here instead" }
+                      ?? "⇧-click saves this window's grid (columns, rows and lines) as layout \(slot)")
+            }
+        }
+    }
+}

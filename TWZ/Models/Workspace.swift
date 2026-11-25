@@ -391,6 +391,15 @@ final class Workspace {
     }
     /// The view set last saved or picked, lit or not (`reapplyNumber` goes back to it).
     var lastViewSet: Int?
+    /// Each window's chart layouts by number (see `GridLayout`), and the one last saved or picked. Saved.
+    var gridLayouts: [GridLayout.Window: [Int: GridLayout]] = [:] {
+        didSet { defaults.set(try? JSONEncoder().encode(gridLayouts), forKey: GridLayout.storageKey) }
+    }
+    var activeGridLayout: [GridLayout.Window: Int] = [:] {
+        didSet { defaults.set(try? JSONEncoder().encode(activeGridLayout), forKey: GridLayout.activeKey) }
+    }
+    /// Counts chart layouts loaded, so the grids reload their lines (see `pickGridLayout`).
+    var gridLayoutLoads = 0
     /// The top bar's saved scales by number (see `ChartScale`). Saved.
     var chartScales: [Int: ChartScale] = [:] {
         didSet { defaults.set(try? JSONEncoder().encode(chartScales), forKey: ChartScale.storageKey) }
@@ -553,6 +562,10 @@ final class Workspace {
             .flatMap { try? JSONDecoder().decode([Int: ViewSet].self, from: $0) } ?? [:]
         activeViewSet = (defaults.object(forKey: ViewSet.activeKey) as? Int).flatMap { viewSets[$0] != nil ? $0 : nil }
         lastViewSet = activeViewSet
+        gridLayouts = defaults.data(forKey: GridLayout.storageKey)
+            .flatMap { try? JSONDecoder().decode([GridLayout.Window: [Int: GridLayout]].self, from: $0) } ?? [:]
+        activeGridLayout = defaults.data(forKey: GridLayout.activeKey)
+            .flatMap { try? JSONDecoder().decode([GridLayout.Window: Int].self, from: $0) } ?? [:]
         gridPlaces = defaults.data(forKey: GridPlace.storageKey)
             .flatMap { try? JSONDecoder().decode([String: GridPlace].self, from: $0) } ?? [:]
         placeKeeps = gridPlaces.values.map(\.kept).max() ?? 0

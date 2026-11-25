@@ -37,7 +37,9 @@
 //  press (a held key doesn't send another): by default ⌘1–9 buys and ⌥⌘1–9 sells short (modifiers set in Settings,
 //  see `Workspace.setNumberModifiers`) that many steps of the
 //  $ / % switch (see `SizeMode`) at the mid; a ⌘ number with neither an order key nor a hotkey beeps.
-//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌃1–6, or ⇧1–6 outside a text field: one modifier alone; ⌥⇧ and a number is free
+//  ⇧1–5 (outside a text field) loads the chart layout saved under that number in the top bar (see `GridLayout`): the
+//  main window's, or with the Charts window in front, that window's own.
+//  ⌥1 / 2 / 3 / 4 / 5 / 6 (or ⌃1–6: one modifier alone; ⌥⇧ and a number is free
 //  for a hotkey's or order key's shortcut) sets the account bar's timeframe, every main chart's, to 1m / 5m / 15m / 30m / 1h / D
 //  (number row or keypad), also while typing, and puts back a chart whose own switch was changed; with the Charts
 //  window in front, every chart's there instead. A chart selected in the Charts window takes the trading
@@ -254,11 +256,20 @@ struct TradingShortcuts: ViewModifier {
                         broker.say("\(KeyShortcut(event).display) has no order key or hotkey (Settings › Order Keys)")
                         return nil
                     }
-                    // ⌥1–6, ⌃1–6 or ⇧1–6 (outside a text field), one modifier alone: the account bar's timeframe;
+                    // ⇧1–5 (outside a text field): the chart layout saved under that number, in the window in front.
+                    if modifiers == .shift, inMainWindow,
+                       let slot = OrderKeys.number(keyCode: event.keyCode), GridLayout.slots.contains(slot) {
+                        if event.window?.firstResponder is NSTextView { return event }
+                        if !event.isARepeat {
+                            workspace.pickGridLayout(slot, in: SecondaryCharts.isWindow(event.window) ? .chartsWindow : .main,
+                                                     broker: broker)
+                        }
+                        return nil
+                    }
+                    // ⌥1–6 or ⌃1–6, one modifier alone: the account bar's timeframe;
                     // ChartGrid follows it. Set again too, so a chart whose own switch was changed goes back to it.
-                    if modifiers == .option || modifiers == .control || modifiers == .shift,
+                    if modifiers == .option || modifiers == .control,
                        inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
-                        if modifiers == .shift, event.window?.firstResponder is NSTextView { return event }
                         // The Charts window in front: every chart there, as its header's switch.
                         if SecondaryCharts.isWindow(event.window) {
                             UserDefaults.standard.set(timeframe.rawValue, forKey: SecondaryCharts.timeframeKey)
