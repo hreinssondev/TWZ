@@ -285,6 +285,9 @@ struct ChartHeaderInfo: View {
     @Environment(\.sideColors) private var sideColors
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
     let chart: ChartModel
+    /// Keeps the timeframe switch (as the main window's charts show it) for as long as it fits, dropping the
+    /// buying and short selling power first; else the switch turns into a menu first.
+    var keepsSwitch = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -380,11 +383,21 @@ struct ChartHeaderInfo: View {
             // The short selling and buying power, then the timeframe switch. A chart too narrow for them
             // (a big grid) gets a menu showing its timeframe instead of the switch, then drops the
             // short selling power, then the buying power.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeSwitch }
-                HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeMenu }
-                HStack(spacing: 4) { marginPower(.long); timeframeMenu }
-                timeframeMenu
+            if keepsSwitch {
+                // The Charts window's smaller charts drop the powers before the switch.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeSwitch }
+                    HStack(spacing: 4) { marginPower(.long); timeframeSwitch }
+                    timeframeSwitch
+                    timeframeMenu
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeSwitch }
+                    HStack(spacing: 4) { marginPower(.short); marginPower(.long); timeframeMenu }
+                    HStack(spacing: 4) { marginPower(.long); timeframeMenu }
+                    timeframeMenu
+                }
             }
         }
     }

@@ -254,15 +254,17 @@ struct SecondaryChartsView: View {
             GridSliders(columns: $customColumns, rows: $customRows, zoom: layout == .all ? $allZoom : $customZoom,
                         columnRange: 1...SecondaryCharts.maxColumns, rowRange: 1...SecondaryCharts.maxRows,
                         showsSize: layout == .custom)
+            // Every chart's timeframe here, right of the sliders as in the main window's top bar.
+            TimeframePicker(selection: Binding(
+                get: { masterTimeframe },
+                set: { masterTimeframe = $0 }
+            ))
+            .help("Every chart's timeframe here (with this window in front: ⌥1–6, ⌃1–6 or ⇧1–6); a chart's own switch changes just that chart")
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
             }
             Spacer()
-            TimeframePicker(selection: Binding(
-                get: { masterTimeframe },
-                set: { masterTimeframe = $0 }
-            ))
             Button {
                 isPaused.toggle()
             } label: {
@@ -426,7 +428,7 @@ struct SecondaryChartPane: View {
                 symbolFocused = false
             }
             .frame(width: 70)
-            ChartHeaderInfo(chart: chart)
+            ChartHeaderInfo(chart: chart, keepsSwitch: true)
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
