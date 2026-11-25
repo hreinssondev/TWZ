@@ -2,10 +2,13 @@
 //  SecondaryChartsView.swift
 //  TWZ
 //
-//  A grid of charts that follow the top gainers (their own scanner, 50 rows), laid out in rank order:
+//  A grid of charts that follow a list, the top gainers unless picked otherwise (their own scanner, 50 rows; the
+//  header's menu, or ⌘⇧ and a list's letter with this window in front, as in the main window, switches it
+//  here only), laid out in rank order:
 //  6×3 for the top 18, or a custom grid set by the Cols / Rows sliders (the "All Charts" / "Top N"
 //  title toggles them). A slider change applies once the sliders have been left alone for a moment.
-//  Each view also has its own Zoom slider: its charts' default zoom, applied as it moves.
+//  Each view also has its own Zoom slider: its charts' default zoom, applied as it moves; a ⇧-, ⌘- or ⌥-swipe
+//  on a chart moves it too, as in the main window (⌃-swipe: the price axis).
 //  A symbol keeps its chart while it stays in the top N (a reshuffle only moves the charts); only
 //  charts whose symbol dropped out load a new one.
 //  A symbol typed into a chart's field stays in that chart and cell, the stock it replaced leaving
@@ -29,10 +32,16 @@ enum SecondaryCharts {
     static let allZoomKey = "secondaryChartsAllZoom"
     static let customZoomKey = "secondaryChartsCustomZoom"
     static let scannerOwner = "secondary-charts"
+    static let listKey = "secondaryChartsList"
     static let windowID = "secondary-charts"
     static let windowTitle = "Charts"
     /// The scanner gainer charts follow, here and in the main window's grid: enough rows for 8×4.
     static let gainersScan = ScanSpec(kind: .gainers, filter: ScannerFilter(minPrice: 0.1), rows: ScannerKind.maxRowCount)
+
+    /// The Charts window's scan of `kind`: as many rows as the gainers'.
+    static func scan(_ kind: ScannerKind) -> ScanSpec {
+        kind == .gainers ? gainersScan : ScanSpec(kind: kind, filter: kind.defaultFilter, rows: ScannerKind.maxRowCount)
+    }
 
     static func isWindow(_ window: NSWindow?) -> Bool {
         guard let window else { return false }
@@ -74,6 +83,21 @@ extension Workspace {
                 clear(chart, broker: broker)
             }
         }
+    }
+
+    /// ⇧-, ⌘- or ⌥-swipe on Charts window chart `chart`: every chart there zooms by `factor` from the zoom on
+    /// screen, as `zoomGrid` does for the main charts. The new zoom, for the window's Zoom slider.
+    func zoomChartsWindow(by factor: Double, from chart: ChartModel, sliderZoom: Double, broker: Broker) -> Double {
+        let shown = secondaryCharts.filter { !$0.symbol.isEmpty }
+        let base = !GridZoom.resetsAdjusted && chart.adjustedByHand
+            ? shown.first { !$0.adjustedByHand }?.visibleBars ?? sliderZoom
+            : chart.visibleBars
+        guard base > 0 else { return sliderZoom }
+        let most = shown.map { Double($0.bars.count) }.max() ?? 0
+        let zoom = min(max(ChartModel.maxVisibleBars, most, base), max(15, base * factor))
+        setZoom(zoom, of: secondaryCharts, broker: broker, by: zoom / base)
+        if zoom != sliderZoom { swipedChartsWindowZoom = zoom }
+        return zoom
     }
 
     /// Sets the charts' default zoom and zooms them to it. The zooms they were left at on other stocks
@@ -193,9 +217,13 @@ struct SecondaryChartsView: View {
         .onChange(of: workspace.secondaryPins) {
             if !isPaused { lastGainers = []; syncWithGainers() }
         }
+        // Another list: the charts still in its top N stay, the rest load its stocks.
+        .onChange(of: workspace.chartsWindowList) {
+            if !isPaused { start() }
+        }
         .onChange(of: layout) { applyZoom() }
-        .onChange(of: allZoom) { applyZoom() }
-        .onChange(of: customZoom) { applyZoom() }
+        .onChange(of: allZoom) { zoomMoved(to: $1) }
+        .onChange(of: customZoom) { zoomMoved(to: $1) }
     }
 
     private var header: some View {
@@ -207,7 +235,15 @@ struct SecondaryChartsView: View {
                     .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help(layout == .all ? "Show the custom grid set by the sliders" : "Show the top 18 gainers, 6×3")
+            .help(layout == .all ? "Show the custom grid set by the sliders" : "Show the top 18, 6×3")
+            Picker("", selection: Binding(get: { workspace.chartsWindowList }, set: { workspace.chartsWindowList = $0 })) {
+                ForEach(ScannerKind.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+            .help("The list these charts follow (the main window's stay on theirs). With this window in front: "
+                  + ScannerKind.shortcutHelp.replacingOccurrences(of: "shows the list and loads it into the chart grid", with: "switches it"))
             GridSliders(columns: $customColumns, rows: $customRows, zoom: layout == .all ? $allZoom : $customZoom,
                         columnRange: 1...SecondaryCharts.maxColumns, rowRange: 1...SecondaryCharts.maxRows,
                         showsSize: layout == .custom)
@@ -252,6 +288,15 @@ struct SecondaryChartsView: View {
         )
     }
 
+    /// The Zoom slider moved, or a swipe moved it (that zoomed the charts already, see `zoomChartsWindow`).
+    private func zoomMoved(to zoom: Double) {
+        if workspace.swipedChartsWindowZoom == zoom {
+            workspace.swipedChartsWindowZoom = nil
+            return
+        }
+        applyZoom()
+    }
+
     /// Sets every chart's default zoom for the current view and zooms them to it.
     private func applyZoom() {
         workspace.setZoom(layout == .all ? allZoom : customZoom, of: workspace.secondaryCharts, broker: broker)
@@ -259,7 +304,7 @@ struct SecondaryChartsView: View {
 
     private func start() {
         lastGainers = []
-        broker.setScanner(SecondaryCharts.gainersScan, owner: SecondaryCharts.scannerOwner)
+        broker.setScanner(SecondaryCharts.scan(workspace.chartsWindowList), owner: SecondaryCharts.scannerOwner)
         syncWithGainers()
     }
 
@@ -308,6 +353,9 @@ struct SecondaryChartPane: View {
     var cell: Int?
 
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
+    @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
+    @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.initialVisibleBars
+    @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.initialVisibleBars
     @State private var symbolText = ""
     /// The symbol box is being edited: only a click on it starts that (see `SymbolField`).
     @State private var symbolFocused = false
@@ -316,7 +364,14 @@ struct SecondaryChartPane: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            TradingChart(chart: chart)
+            TradingChart(chart: chart) { factor in
+                // Every chart in this window, from the zoom on screen; the header's Zoom slider follows.
+                if layout == .all {
+                    allZoom = workspace.zoomChartsWindow(by: factor, from: chart, sliderZoom: allZoom, broker: broker)
+                } else {
+                    customZoom = workspace.zoomChartsWindow(by: factor, from: chart, sliderZoom: customZoom, broker: broker)
+                }
+            }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))

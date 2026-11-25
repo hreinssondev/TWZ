@@ -30,7 +30,8 @@
 //  ⌘⇧M switches the order numbers between dollars and a percent of the buying power (see `SizeMode`): KEYS $ or
 //  KEYS % in the top bar.
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
-//  shows that list and loads it into the chart grid (see `ListPanel.takeUp`).
+//  shows that list and loads it into the chart grid (see `ListPanel.takeUp`); with the Charts window in front,
+//  its charts follow that list instead, the main window's staying as they are.
 //  With the order shortcuts on, an order key (Settings › Order Keys, see `OrderKeys`) sends its order, once per
 //  press (a held key doesn't send another): by default ⌘1–9 buys and ⌥⌘1–9 sells short (modifiers set in Settings,
 //  see `Workspace.setNumberModifiers`) that many steps of the
@@ -168,6 +169,15 @@ struct TradingShortcuts: ViewModifier {
                             UserDefaults.standard.set(next.rawValue, forKey: SizeMode.storageKey)
                             broker.say(next == .dollars ? "KEYS $: the numbers are dollars, 1 is $1,000, 9 is $9,000"
                                                         : "KEYS %: the numbers are a share of the buying power, 1 is 20%, 4 is 80% (5–9 none)")
+                        }
+                        return nil
+                    }
+                    // In the Charts window, ⌘⇧ and a list's letter switches its charts to that list (only there).
+                    if modifiers == [.command, .shift], SecondaryCharts.isWindow(event.window), event.window?.attachedSheet == nil,
+                       let kind = ScannerKind.forShortcut(event.charactersIgnoringModifiers?.lowercased() ?? "") {
+                        if !event.isARepeat, workspace.chartsWindowList != kind {
+                            workspace.chartsWindowList = kind
+                            broker.say("Charts window: \(kind.rawValue)")
                         }
                         return nil
                     }

@@ -146,7 +146,7 @@ enum NumberButtons {
     static var areScales: Bool { UserDefaults.standard.object(forKey: scalesKey) as? Bool ?? defaultScales }
 }
 
-/// Settings › Appearance: on (the default), moving the grid's zoom (⇧-, ⌘-, ⌥- or ⌃-swipe, the Zoom slider) puts charts
+/// Settings › Appearance: on (the default), moving the grid's zoom (⇧-, ⌘- or ⌥-swipe, the Zoom slider) puts charts
 /// adjusted by hand at that zoom too, like the rest; off, they zoom in or out by as much, from their own
 /// zoom (see `Workspace.setZoom`).
 enum GridZoom {

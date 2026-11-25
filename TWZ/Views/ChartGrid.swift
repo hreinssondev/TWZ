@@ -319,7 +319,7 @@ extension Workspace {
                    + (spared > 0 ? "; \(spared) chart\(spared == 1 ? "" : "s") adjusted by hand kept as \(spared == 1 ? "it is" : "they are")" : ""))
     }
 
-    /// ⇧-, ⌘-, ⌥- or ⌃-swipe on main chart `chart`: every main chart zooms by `factor` from the zoom on screen,
+    /// ⇧-, ⌘- or ⌥-swipe on main chart `chart`: every main chart zooms by `factor` from the zoom on screen,
     /// the swiped chart's (or, with it keeping its own zoom, see `GridZoom`, that of a chart following the
     /// grid), not from the Zoom slider's: that can be another (a timeframe's own zoom, a view set's, a
     /// stock's kept view), and the charts jumped to it. As far as zooming one chart goes: in to 15 bars, out

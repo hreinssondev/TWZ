@@ -25,7 +25,7 @@ final class ChartModel: Identifiable {
     var scrollBack: Double = 0
     /// Vertical drag, as a fraction of the auto-fitted price range (positive = moved down).
     var priceShift: Double = 0
-    /// ⌃⌥-swipe vertical zoom: the auto-fitted price range times this (above 1 = zoomed out).
+    /// ⌃-swipe vertical zoom: the auto-fitted price range times this (above 1 = zoomed out).
     var priceScale: Double = 1
     /// When the chart last loaded a symbol, counted across charts: of two main-window charts showing
     /// the same stock, the lower one showed it first (see `Workspace.timeframe(showing:in:otherwise:)`).
@@ -395,7 +395,7 @@ final class Workspace {
     }
     /// The scale last saved or picked, lit or not (`reapplyNumber` goes back to it).
     var lastScale: Int?
-    /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧- / ⌘- / ⌥- / ⌃-swipe on a chart): it trumps the
+    /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧- / ⌘- / ⌥-swipe on a chart): it trumps the
     /// lit scale's zoom, on the charts now and on those loading another stock, until a scale is
     /// picked (its number clicked) or saved, or Reset. Saved.
     var manualZoom: Double? {
@@ -404,6 +404,14 @@ final class Workspace {
     /// The grid's zoom a swipe has just put the main charts at (see `zoomGrid`), so the Zoom slider
     /// following it doesn't zoom them again.
     @ObservationIgnored var swipedGridZoom: Double?
+    /// The same for the Charts window's charts and its Zoom slider (see `zoomChartsWindow`).
+    @ObservationIgnored var swipedChartsWindowZoom: Double?
+    /// The list the Charts window's charts follow (⌘⇧ and a list's letter there, or its header's menu);
+    /// the main window's stay on theirs. Saved.
+    var chartsWindowList: ScannerKind = UserDefaults.standard.string(forKey: SecondaryCharts.listKey)
+        .flatMap(ScannerKind.init(rawValue:)) ?? .gainers {
+        didSet { defaults.set(chartsWindowList.rawValue, forKey: SecondaryCharts.listKey) }
+    }
     /// Colors given to stocks with ⌥⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
     /// stock that leaves the charts has its color again when it comes back. Set with `setColor`.
     private(set) var stockColors: [String: StockColor] {
