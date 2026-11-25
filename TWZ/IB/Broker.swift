@@ -36,6 +36,8 @@ final class Broker {
 
     private(set) var netLiquidation: Double?
     private(set) var grossPositionValue: Double?
+    /// IB's margin figures, now and after the next margin change (the close), for the overnight check.
+    private(set) var margin = AccountMargin()
     private(set) var dailyPnL: Double?
     private(set) var unrealizedPnL: Double?
     private(set) var realizedPnL: Double?
@@ -529,6 +531,17 @@ final class Broker {
         order { $0.closePosition(symbol) }
     }
 
+    /// Asks IB for fresh margin figures (the account summary) now, for the overnight check.
+    func refreshAccountSummary() {
+        engine.perform { $0.refreshAccountSummary() }
+    }
+
+    /// The overnight check's Trim: sells (or buys back) that many shares of each position at IB,
+    /// KEYS ON or SIM alike (see `TradingEngine.trimForOvernight`).
+    func trimForOvernight(_ trims: [String: Double]) {
+        order { $0.trimForOvernight(trims) }
+    }
+
     /// Shows `message` in the status line and the message history, as the engine's own messages show.
     func say(_ message: String) {
         engine.perform { $0.say(message) }
@@ -789,6 +802,7 @@ final class Broker {
             update(\.account, st.account)
             update(\.netLiquidation, st.netLiquidation)
             update(\.grossPositionValue, st.grossPositionValue)
+            update(\.margin, st.margin)
             update(\.dailyPnL, st.dailyPnL)
             update(\.unrealizedPnL, st.unrealizedPnL)
             update(\.realizedPnL, st.realizedPnL)

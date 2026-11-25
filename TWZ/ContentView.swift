@@ -87,6 +87,9 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     VStack(spacing: 0) {
                         ChartGrid(gap: gap)
+                            .overlay(alignment: .top) {
+                                OvernightBanner().padding(.top, 8)
+                            }
                             // Collapsed, the hotkey row shows over the charts while peeking (its messages
                             // float at the window's bottom edge, below). It stays laid out while hidden,
                             // so an editor or popover opened from it stays open.

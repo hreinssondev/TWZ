@@ -249,6 +249,8 @@ private struct TradingSettings: View {
     @AppStorage(HoverPnLSize.amountKey) private var hoverAmount = HoverPnLSize.defaultAmount
     @AppStorage(ForexOrders.storageKey) private var forexOrders: ForexOrders = ForexOrders.defaultValue
     @AppStorage(Confetti.enabledKey) private var confetti = Confetti.defaultEnabled
+    @AppStorage(OvernightCheck.enabledKey) private var overnightCheck = OvernightCheck.defaultEnabled
+    @AppStorage(OvernightCheck.minutesKey) private var overnightMinutes = OvernightCheck.defaultMinutes
 
     private let shortcuts: [(String, String)] = [
         ("Order keys", "The shortcuts that send orders (⌘ / ⌥⌘ and numbers, hotkeys' own, ⌘⇧↩, ⌘⌫, …): Settings › Order Keys"),
@@ -310,6 +312,21 @@ private struct TradingSettings: View {
                      + " Quotes and charts come from IDEALPRO either way. Applies from the next Connect.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            Section("Overnight check") {
+                Toggle("Check the overnight margin before the close", isOn: $overnightCheck)
+                Stepper("Minutes before the close: \(overnightMinutes)", value: $overnightMinutes, in: 1...60)
+                    .disabled(!overnightCheck)
+                HStack {
+                    Text("With stock positions open, a banner over the charts from that many minutes before the close (16:00 ET, 13:00 ET on early closes; not on NYSE holidays) says whether they fit the margin IB asks for after the close (IB's look-ahead available funds and excess liquidity, asked again every 30 seconds), and if not, how many shares of each to sell or buy back: every stock cut by the same share, with 5% of the overnight margin to spare. Its Trim button sends those orders to IB (KEYS ON or SIM alike), limits a cent across the spread; the stop losses and take profits follow the smaller positions. Forex and options aren't trimmed.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Check now") {
+                        NotificationCenter.default.post(name: OvernightBanner.checkNow, object: nil)
+                    }
+                    .controlSize(.small)
+                }
             }
             Section("Confetti") {
                 Toggle("Confetti when a LIVE trade opens", isOn: $confetti)

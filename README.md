@@ -74,6 +74,10 @@ management in one window built for quick entries and exits.
   ⌥ / ⌃-click and ⌘⌫, sized in units of the first currency (hotkey offsets count a cent as a pip).
   Orders go as forex CFDs, leveraged the way IBKR's European accounts trade currencies, or as
   IDEALPRO spot (Settings › Trading).
+- **Overnight check** (Settings › Trading): 7 minutes before the close (13:00 ET on early closes, none on
+  NYSE holidays), with stock positions open, a banner over the charts says whether they fit the margin IB
+  asks for after the close (its look-ahead figures, asked again every 30 s), and if not, how many shares of
+  each to sell or buy back; its Trim button sends those orders, limits a cent across the spread.
 - **Short selling info**: shortable status and shares to lend, borrow fees, and the SEC Rule 201
   short sale restriction (from Nasdaq's daily list and IB's prices), with SSR-aware order pricing.
 - **Menu bar P/L**: the open positions' P/L in NOK as a bare number, green or red; with no position

@@ -32,6 +32,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     private var netLiquidation: Double? { didSet { changed(.status) } }
     private var grossPositionValue: Double? { didSet { changed(.status) } }
+    /// IB's margin figures from the account summary, for the overnight check (see `OvernightCheck`).
+    private var margin = AccountMargin() { didSet { changed(.status) } }
     private var dailyPnL: Double? { didSet { changed(.status) } }
     private var unrealizedPnL: Double? { didSet { changed(.status) } }
     private var realizedPnL: Double? { didSet { changed(.status) } }
@@ -328,7 +330,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if dirty.contains(.status) {
             s.status = EngineSnapshot.Status(
                 state: state, statusText: statusText, lastMessage: lastMessage, account: account,
-                netLiquidation: netLiquidation, grossPositionValue: grossPositionValue, dailyPnL: dailyPnL,
+                netLiquidation: netLiquidation, grossPositionValue: grossPositionValue, margin: margin, dailyPnL: dailyPnL,
                 unrealizedPnL: unrealizedPnL, realizedPnL: realizedPnL, usdNok: usdNok, usdNokIsLive: usdNokIsLive)
         }
         if dirty.contains(.positions) { s.positions = positions; s.positionsLoaded = positionsLoaded }
@@ -493,6 +495,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         usdNokIsLive = false
         netLiquidation = nil
         grossPositionValue = nil
+        margin = AccountMargin()
         dailyPnL = nil
         unrealizedPnL = nil
         realizedPnL = nil
@@ -546,7 +549,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
         send(59, 1, 1)                                                             // reqMarketDataType: real-time only
         send(61, 1)                                                                // reqPositions
-        send(62, 1, accountSummaryReq, "All", "NetLiquidation,GrossPositionValue")  // reqAccountSummary
+        send(62, 1, accountSummaryReq, "All", Self.summaryTags)                    // reqAccountSummary
         send(92, pnlReq, account, "")                                              // reqPnL
         send(16, 1)                                                                // reqAllOpenOrders
         send(7, 3, executionsReq, 0, "", "", "", "", "", "")                       // reqExecutions (today)
@@ -3476,9 +3479,53 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         switch f.str(4) {
         case "NetLiquidation": netLiquidation = value
         case "GrossPositionValue": grossPositionValue = value
-        default: break
+        case "AvailableFunds": margin.availableFunds = value
+        case "ExcessLiquidity": margin.excessLiquidity = value
+        case "LookAheadAvailableFunds": margin.lookAheadAvailableFunds = value
+        case "LookAheadExcessLiquidity": margin.lookAheadExcessLiquidity = value
+        case "LookAheadInitMarginReq": margin.lookAheadInitMargin = value
+        case "LookAheadMaintMarginReq": margin.lookAheadMaintMargin = value
+        default: return
         }
+        margin.updated = Date()
     }
+
+    /// The account summary's tags: equity and gross position value for the top bar, and the margin
+    /// figures, now and after the next margin change (the close), for the overnight check.
+    private static let summaryTags = "NetLiquidation,GrossPositionValue,AvailableFunds,ExcessLiquidity,"
+        + "LookAheadAvailableFunds,LookAheadExcessLiquidity,LookAheadInitMarginReq,LookAheadMaintMarginReq"
+
+    /// Asks IB for the account summary again now: on its own it sends changes only every 3 minutes.
+    func refreshAccountSummary() {
+        guard apiReady else { return }
+        send(63, 1, accountSummaryReq)                                             // cancelAccountSummary
+        send(62, 1, accountSummaryReq, "All", Self.summaryTags)                    // reqAccountSummary
+    }
+
+    /// The overnight check's Trim: sells (or buys back) that many shares of each position, a DAY limit
+    /// a cent across the spread (at the bid for a sell, the ask for a buy), so it fills before the close.
+    /// Its stop loss and take profit follow the smaller position, as they do any fill.
+    func trimForOvernight(_ trims: [String: Double]) {
+        guard apiReady else {
+            lastMessage = "Not connected to IB Gateway"
+            return
+        }
+        var sent: [String] = []
+        for (symbol, shares) in trims.sorted(by: { $0.key < $1.key }) {
+            guard let p = positions[symbol], p.quantity != 0, shares >= 1 else { continue }
+            let quantity = min(shares.rounded(.up), abs(p.quantity))
+            let action = p.quantity > 0 ? "SELL" : "BUY"
+            guard let price = orderPrice(symbol: symbol, action: action, hotkey: Self.overnightTrim) else { continue }
+            if submit(symbol: symbol, action: action, quantity: quantity, price: price, tif: .day, source: "ON",
+                      why: "overnight check: \(Fmt.shares(p.quantity)) held, trimming \(Fmt.shares(quantity))") != nil {
+                sent.append("\(action) \(Fmt.shares(quantity)) \(symbol)")
+            }
+        }
+        if !sent.isEmpty { lastMessage = "Overnight trim sent: " + sent.joined(separator: ", ") }
+    }
+
+    private static let overnightTrim = Hotkey(label: "Overnight trim", action: .closeAll, orderType: .limit,
+                                              priceReference: .cross, offset: 0.01)
 
     private func pnl(_ f: [String]) {
         func clean(_ v: Double) -> Double? { abs(v) >= Self.unsetDouble / 2 ? nil : v }
@@ -3651,6 +3698,7 @@ nonisolated struct EngineSnapshot: Sendable {
         var account: String
         var netLiquidation: Double?
         var grossPositionValue: Double?
+        var margin: AccountMargin
         var dailyPnL: Double?
         var unrealizedPnL: Double?
         var realizedPnL: Double?
