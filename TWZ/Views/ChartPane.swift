@@ -399,7 +399,7 @@ struct ChartHeaderInfo: View {
             // Short sale restriction (SEC Rule 201), from Nasdaq's list or IB's prices (rarely changes: live).
             if let reason = broker.ssrReason(chart.symbol) {
                 Text("SSR")
-                    .font(.system(size: 9, weight: .heavy))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(Color.red.opacity(0.55))
                     .help("Short sale restriction: short sales fill only above the best bid until the end of "
                           + "the next trading day. \(reason).")
