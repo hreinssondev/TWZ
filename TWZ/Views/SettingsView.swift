@@ -257,7 +257,7 @@ private struct TradingSettings: View {
         ("⌘⇧S L H A F", "Show that list and load it into the chart grid: Most Active $, Top Losers, AH Gainers, "
             + "Top Gainers, Forex (S, H and L wait a moment for a second letter)"),
         ("⌥ or ⌃ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D (one modifier alone: two together, ⌃⌥3 say, are free for a hotkey or order key)"),
-        ("⌃⇧1 … 9, 0", "Candle colors: the themes in Settings › Appearance › Candle colors, top first (⌃⇧0: the tenth, Custom)"),
+        ("⌃⇧1 … 9, 0", "Candle colors: the themes in Settings › Appearance › Candle colors, top first (⌃⇧0: the tenth)"),
         ("⇧1 2 3 4 5", "The chart layout saved under that number in the top bar's layout numbers (▦ 1–5: ⇧-click saves the grid's columns, rows and lines there, a click loads it); with the Charts window in front, that window's own. Not while typing"),
         ("⌘R, ⇧R, ⌥R, ⌃R or ⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("´", "Back to the grid shown before (its list and timeframe: from 15m to 5m, from Forex to Most Active $), and pressed again back here; not while typing"),
@@ -774,12 +774,6 @@ private struct AppearanceSettings: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                }
-                if theme == .custom {
-                    ColorWell(title: "Up candles", key: CandleTheme.customUpKey,
-                              color: Color(hex: customUp) ?? Color(hex: CandleTheme.defaultUpHex)!)
-                    ColorWell(title: "Down candles", key: CandleTheme.customDownKey,
-                              color: Color(hex: customDown) ?? Color(hex: CandleTheme.defaultDownHex)!)
                 }
             }
             Section("App colors") {
