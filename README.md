@@ -69,7 +69,7 @@ management in one window built for quick entries and exits.
   and the list's letter loads it, and its cell) instead of replacing a chart you're looking at; one it
   never showed goes to the list that has it now (the grid's own first), and a forex pair always to Forex.
 - **Forex**: the lists' Forex option shows the main currency pairs on IBKR's IDEALPRO (majors,
-  crosses and the NOK / SEK pairs), ranked by % change; a chart takes a pair typed as EUR.USD, EURUSD
+  crosses and the NOK / SEK pairs), in a fixed order; a chart takes a pair typed as EUR.USD, EURUSD
   or EUR/USD. Pairs chart as bid/ask midpoints around the clock and trade like stocks from hotkeys,
   ⌥ / ⌃-click and ⌘⌫, sized in units of the first currency (hotkey offsets count a cent as a pip).
   Orders go as forex CFDs, leveraged the way IBKR's European accounts trade currencies, or as

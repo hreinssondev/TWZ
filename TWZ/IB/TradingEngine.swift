@@ -203,7 +203,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// IB's smallest price step per forex pair, from its contract details (see `contractData`).
     private var minTicks: [String: Double] = [:]
     private var detailsSymbolByReq: [Int: String] = [:]
-    private var forexRankingScheduled = false
     /// Forex orders and positions are CFDs rather than IDEALPRO spot (`ForexOrders`, read on connecting).
     private var forexCFD = ForexOrders.defaultValue == .cfd
     /// Pairs IB has no CFD for, found from their contract details.
@@ -911,15 +910,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         scans[owner] = spec.flatMap { spec in
             lastScans[ScanKey(spec)].map { ScanResult(symbols: Array($0.symbols.prefix(spec.rows)), updated: $0.updated) }
         }
-        syncForexList()
         startScan(owner)
     }
 
     private func startScan(_ owner: String) {
         guard apiReady, let spec = scanSpecs[owner] else { return }
+        // IB has no forex scanner: the Forex list is `ForexPair.listed`, in its fixed order.
         if spec.kind == .forex {
-            scans[owner] = ScanResult(symbols: Array(rankedForex().prefix(spec.rows)), updated: Date())
-            scheduleForexRanking()
+            scans[owner] = ScanResult(symbols: Array(ForexPair.listed.prefix(spec.rows)), updated: Date())
             return
         }
         let reqId = makeReqId()
@@ -955,50 +953,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if apiReady { send(23, 1, reqId) }                                        // cancelScannerSubscription
     }
 
-    // MARK: - Forex list
-
-    /// IB has no forex scanner: the Forex list is `ForexPair.listed`, ranked here by % change since the
-    /// prior close (pairs without one yet last, in list order), again every few seconds.
-    private static let forexListOwner = "forex-list"
-    private static let forexRankingInterval = 5.0
-
-    /// While any list shows the Forex list, every pair in it is quoted, to rank them.
-    private func syncForexList() {
-        let shown = scanSpecs.values.contains { $0.kind == .forex }
-        guard shown != (quoteOwners[Self.forexListOwner] != nil) else { return }
-        quoteOwners[Self.forexListOwner] = shown ? Set(ForexPair.listed) : nil
-        syncQuoteSubscriptions()
-    }
-
-    private func rankedForex() -> [String] {
-        ForexPair.listed.enumerated().sorted { a, b in
-            switch (quotes[a.element]?.changePercent, quotes[b.element]?.changePercent) {
-            case let (x?, y?) where x != y: x > y
-            case (_?, nil): true
-            case (nil, _?): false
-            default: a.offset < b.offset
-            }
-        }.map(\.element)
-    }
-
-    private func scheduleForexRanking() {
-        guard !forexRankingScheduled else { return }
-        forexRankingScheduled = true
-        let current = session
-        queue.asyncAfter(deadline: .now() + Self.forexRankingInterval) { [weak self] in
-            guard let self else { return }
-            self.forexRankingScheduled = false
-            guard self.session == current, self.apiReady else { return }
-            let owners = self.scanSpecs.filter { $0.value.kind == .forex }
-            guard !owners.isEmpty else { return }
-            let ranked = self.rankedForex()
-            for (owner, spec) in owners {
-                let symbols = Array(ranked.prefix(spec.rows))
-                if self.scans[owner]?.symbols != symbols { self.scans[owner] = ScanResult(symbols: symbols, updated: Date()) }
-            }
-            self.scheduleForexRanking()
-        }
-    }
 
     private func requestSessionCloses(_ symbols: [String]) {
         guard MarketSession.phase() == .afterHours else { return }

@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  Live IB scanner list (gainers, losers, after-hours gainers, most active by
-//  dollar volume), or the Forex list (the main currency pairs, ranked by % change, see `ForexPair`),
+//  dollar volume), or the Forex list (the main currency pairs in a fixed order, see `ForexPair`),
 //  with each symbol's % change over the last 5 minutes and a green dot after the
 //  symbols traded today. The load button beside the filters makes the chart grid follow the list, in
 //  its order and as it changes, in place of the gainers until the account bar's Reset (see `ChartGrid`). The price columns' widths drag from their header's left edge (double-click
