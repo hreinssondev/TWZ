@@ -188,9 +188,11 @@ final class Broker {
     @ObservationIgnored private var chartViewsSave: Task<Void, Never>?
 
     /// Reset: these charts' window forgets where its charts were left (see `ChartViews`), on `timeframe`
-    /// only if given.
+    /// only if given; the main window only in the grid's list, the other lists keeping theirs.
     func forgetChartViews(of charts: [ChartModel], timeframe: Timeframe? = nil) {
-        for window in Set(charts.map(\.inChartsWindow)) { chartViews.forget(inChartsWindow: window, timeframe: timeframe) }
+        for window in Set(charts.map(\.inChartsWindow)) {
+            chartViews.forget(inChartsWindow: window, list: window ? nil : viewList, timeframe: timeframe)
+        }
         chartViewsChanged()
     }
 

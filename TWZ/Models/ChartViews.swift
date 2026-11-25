@@ -8,7 +8,7 @@
 //  stock and timeframe, whichever of its charts it is (switching lists and back, or after a relaunch),
 //  picks up as it was left (see `Broker.loadChart`); a stock it wasn't left on keeps the chart's view
 //  as it is (on another timeframe, the latest bars). Saved across relaunches; the top bar's Reset
-//  forgets the main window's on the top bar's timeframe, and right-click or double-click on a chart puts that one back to the
+//  forgets the main window's on the top bar's timeframe in the list on screen (the other lists keep theirs), and right-click or double-click on a chart puts that one back to the
 //  default zoom at the latest bars, which is what's kept for it from then on.
 //  In the main grid each list keeps its own (see `Key.list`): a stock with none kept in the list switched to starts at
 //  the default view (the Zoom slider's, at the latest bars, or the list's lit scale), not the view of the list left.
@@ -74,10 +74,12 @@ struct ChartViews: Codable {
         }
     }
 
-    /// Reset: the window's charts start over at the latest bars, on `timeframe` only if given.
-    mutating func forget(inChartsWindow: Bool, timeframe: Timeframe? = nil) {
+    /// Reset: the window's charts start over at the latest bars, on `timeframe` only if given, and in the main
+    /// grid in `list` only if given (the other lists keep theirs; views kept before lists kept their own go too).
+    mutating func forget(inChartsWindow: Bool, list: String? = nil, timeframe: Timeframe? = nil) {
         views = views.filter { key, _ in
             key.inChartsWindow != inChartsWindow || (timeframe.map { key.bars.timeframe != $0 } ?? false)
+                || (list != nil && key.list != nil && key.list != list)
         }
     }
 
