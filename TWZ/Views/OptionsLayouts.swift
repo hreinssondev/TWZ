@@ -516,20 +516,32 @@ struct OptionsPositionsLayout: View {
 
     static let widths: [CGFloat] = [190, 50, 64, 64, 96, 64, 48, 76, 76, 56, 120]
 
+    struct Item: Identifiable {
+        var contract: OptionContract
+        var position: Position
+        /// A what-if trade (SIM), not a real position.
+        var sim: Bool
+        var id: String { (sim ? "sim " : "") + position.symbol }
+    }
+
     var body: some View {
-        let positions = broker.optionPositions.values.compactMap { p in OptionContract(p.symbol).map { (contract: $0, position: p) } }
+        let real = broker.optionPositions.values.compactMap { p in OptionContract(p.symbol).map { Item(contract: $0, position: p, sim: false) } }
+        let sims = broker.simPositions.values.compactMap { s in
+            OptionContract(s.symbol).map { Item(contract: $0, position: Position(symbol: s.symbol, quantity: s.quantity, avgCost: s.avgCost), sim: true) }
+        }
+        let positions = (real + sims)
             .sorted { ($0.contract.underlying, $0.contract.expiry, $0.contract.strike) < ($1.contract.underlying, $1.contract.expiry, $1.contract.strike) }
         VStack(alignment: .leading, spacing: 8) {
             if positions.isEmpty {
-                Text("No option positions. Open one from Simple, Chain or Strategy; it shows here with its profit and loss, Greeks and a risk chart.")
+                Text("No option positions or what-if trades. Open one from Simple, Chain or Strategy; it shows here with its profit and loss, Greeks and a risk chart.")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             } else {
                 header
                 Divider()
                 ScrollView {
                     VStack(spacing: 0) {
-                        ForEach(positions, id: \.position.symbol) { item in
-                            PositionRow(desk: desk, contract: item.contract, position: item.position)
+                        ForEach(positions) { item in
+                            PositionRow(desk: desk, contract: item.contract, position: item.position, isSim: item.sim)
                         }
                     }
                 }
@@ -561,17 +573,17 @@ struct OptionsPositionsLayout: View {
     }
 
     @ViewBuilder
-    private func riskChart(_ positions: [(contract: OptionContract, position: Position)]) -> some View {
+    private func riskChart(_ positions: [Item]) -> some View {
         if !positions.isEmpty, let spot {
             let payoff = OptionPayoff(
                 legs: positions.map { .init(contract: $0.contract, contracts: $0.position.quantity, vol: OptionsDesk.vol($0.contract, broker: broker)) },
                 cost: positions.reduce(0) { $0 + $1.position.quantity * $1.position.avgCost * OptionContract.multiplier })
             let vol = positions.map { OptionsDesk.vol($0.contract, broker: broker) }.reduce(0, +) / Double(positions.count)
             VStack(alignment: .leading, spacing: 4) {
-                Text("\(desk.underlying) positions together, against its price").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                Text("\(desk.underlying) positions together\(positions.contains { $0.sim } ? ", what-if trades included" : ""), against its price").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                 PayoffChart(payoff: payoff, spot: spot, vol: vol).frame(minHeight: 200, maxHeight: 320)
             }
-        } else if !broker.optionPositions.isEmpty {
+        } else if !broker.optionPositions.isEmpty || broker.simPositions.keys.contains(where: OptionContract.isOption) {
             Text("No \(desk.underlying) option positions: click a position's Show for its risk chart.").font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
@@ -581,8 +593,12 @@ private struct PositionRow: View {
     let desk: OptionsDesk
     let contract: OptionContract
     let position: Position
+    var isSim = false
     @Environment(Broker.self) private var broker
     @Environment(\.sideColors) private var sides
+
+    /// The what-if trades' pink (as under Positions in the main window).
+    private static let simColor = Color(red: 1, green: 0.45, blue: 0.75)
 
     var body: some View {
         let w = OptionsPositionsLayout.widths
@@ -593,7 +609,8 @@ private struct PositionRow: View {
         let pnlPercent = mark.flatMap { m in position.avgCost > 0 ? (m - position.avgCost) / position.avgCost * 100 * (qty > 0 ? 1 : -1) : nil }
         let days = OptionContract.daysLeft(contract.expiry)
         HStack(spacing: 0) {
-            Cell(text: contract.display, width: w[0], alignment: .leading, weight: contract.underlying == desk.underlying ? .semibold : .regular)
+            Cell(text: (isSim ? "SIM " : "") + contract.display, width: w[0], alignment: .leading,
+                 color: isSim ? Self.simColor : .primary, weight: contract.underlying == desk.underlying ? .semibold : .regular)
             Cell(text: Fmt.shares(qty), width: w[1], color: sides.of(qty > 0))
             Cell(text: Fmt.price(position.avgCost), width: w[2])
             Cell(text: Fmt.price(mark), width: w[3])
@@ -609,13 +626,18 @@ private struct PositionRow: View {
                     desk.expiry = contract.expiry
                 }
                 .help("Show \(contract.underlying)'s options, at this expiry, and its positions' risk chart")
-                Button("Close…") {
-                    desk.underlying = contract.underlying
-                    desk.expiry = contract.expiry
-                    desk.legs = [OptionLeg(contract: contract, buy: qty < 0)]
-                    desk.quantity = Int(abs(qty))
+                if isSim {
+                    Button("Close") { broker.closeSimOption(contract.symbol) }
+                        .help("Closes the what-if trade at the mid, simulated")
+                } else {
+                    Button("Close…") {
+                        desk.underlying = contract.underlying
+                        desk.expiry = contract.expiry
+                        desk.legs = [OptionLeg(contract: contract, buy: qty < 0)]
+                        desk.quantity = Int(abs(qty))
+                    }
+                    .help("Puts the order closing it in the ticket (\(qty < 0 ? "buy" : "sell") \(Fmt.shares(abs(qty))) at the mid), to review and send")
                 }
-                .help("Puts the order closing it in the ticket (\(qty < 0 ? "buy" : "sell") \(Fmt.shares(abs(qty))) at the mid), to review and send")
             }
             .controlSize(.small)
             .frame(width: w[10], alignment: .trailing)

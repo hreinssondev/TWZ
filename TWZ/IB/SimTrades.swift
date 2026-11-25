@@ -189,6 +189,35 @@ extension Broker {
         }
     }
 
+    /// The Options window in SIM: `contracts` of an option bought or sold as a what-if trade, filled at once at
+    /// `price` (the order's limit), never sent to IB.
+    func fillSimOption(_ symbol: String, _ action: String, contracts: Double, at price: Double) {
+        guard state == .connected else { return say("Not connected to IB Gateway") }
+        guard price > 0 else { return say("\(symbol): no price, so no what-if trade") }
+        fillSim(symbol, action, shares: contracts, at: price, sizedBy: .shares(contracts))
+    }
+
+    /// The Options window in SIM: a combo's legs as what-if trades, `units` of each leg's ratio, filled so they
+    /// come to `limit` a unit (a credit negative): each at its mid, moved alike towards the limit.
+    func fillSimOptionCombo(_ legs: [(symbol: String, buy: Bool, ratio: Int)], units: Double, limit: Double) {
+        guard state == .connected else { return say("Not connected to IB Gateway") }
+        let mids = legs.map { quotes[$0.symbol]?.mid }
+        guard !mids.contains(where: { $0 == nil }) else { return say("No price yet for every leg, so no what-if trade") }
+        let net = zip(legs, mids).reduce(0.0) { $0 + ($1.0.buy ? 1 : -1) * Double($1.0.ratio) * $1.1! }
+        let shift = (limit - net) / Double(legs.map(\.ratio).reduce(0, +))
+        for (leg, mid) in zip(legs, mids) {
+            let price = max(0.01, ((mid! + (leg.buy ? shift : -shift)) * 100).rounded() / 100)
+            fillSim(leg.symbol, leg.buy ? "BUY" : "SELL", shares: units * Double(leg.ratio), at: price, sizedBy: .shares(units * Double(leg.ratio)))
+        }
+    }
+
+    /// Closes an option's what-if trade at its mid (the Options window's Close).
+    func closeSimOption(_ symbol: String) {
+        guard simPositions[symbol] != nil else { return }
+        guard let mid = quotes[symbol]?.mid, mid > 0 else { return say("\(symbol): no price yet, so the what-if trade can't close") }
+        closeSim(symbol, at: (mid * 100).rounded() / 100, why: "closed at the mid")
+    }
+
     /// ⌘⌫ with a what-if trade and no real position: closes it at market.
     func closeSimAtMarket(_ symbol: String) {
         guard let sim = simPositions[symbol] else { return }

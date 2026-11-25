@@ -66,6 +66,7 @@ struct OptionsTicket: View {
     let book: OptionBook
     let spot: Double?
     @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
     @Environment(\.sideColors) private var sides
 
     var body: some View {
@@ -73,6 +74,7 @@ struct OptionsTicket: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("ORDER TICKET").font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
+                    OptionsModeBadge()
                     Spacer()
                     if !desk.legs.isEmpty {
                         Button("Clear") { desk.legs = [] }.buttonStyle(.borderless).controlSize(.small)
@@ -91,7 +93,7 @@ struct OptionsTicket: View {
                     Button {
                         desk.reviewing = true
                     } label: {
-                        Text("Review order…").frame(maxWidth: .infinity)
+                        Text(workspace.optionOrdersReal ? "Review order…" : "Review what-if trade…").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
@@ -115,7 +117,8 @@ struct OptionsTicket: View {
     }
 
     private var canReview: Bool {
-        broker.state == .connected && desk.price(broker).map { $0 != 0 } == true && (!desk.isCombo || desk.comboLegs(broker) != nil)
+        broker.state == .connected && desk.price(broker).map { $0 != 0 } == true
+            && (!desk.isCombo || !workspace.optionOrdersReal || desk.comboLegs(broker) != nil)
     }
 
     private var quantity: some View {
@@ -256,6 +259,7 @@ struct OptionsReview: View {
     let desk: OptionsDesk
     let spot: Double?
     @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
     @Environment(\.dismiss) private var dismiss
     @Environment(\.sideColors) private var sides
     @State private var frozen: Double?
@@ -263,12 +267,9 @@ struct OptionsReview: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Send this order?").font(.system(size: 17, weight: .semibold))
+                Text(workspace.optionOrdersReal ? "Send this order?" : "Simulate this order?").font(.system(size: 17, weight: .semibold))
                 Spacer()
-                Text(broker.isLiveAccount ? "LIVE" : "PAPER")
-                    .font(.system(size: 11, weight: .heavy)).foregroundStyle(.white)
-                    .padding(.horizontal, 7).padding(.vertical, 2)
-                    .background(Capsule().fill(broker.isLiveAccount ? Color.red.opacity(0.85) : Color.blue.opacity(0.8)))
+                OptionsModeBadge()
             }
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(desk.reducedLegs) { leg in
@@ -313,14 +314,17 @@ struct OptionsReview: View {
                      + "Options trade 9:30–16:00 New York time. Commissions come on top.")
                     .font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            if broker.isLiveAccount {
+            if !workspace.optionOrdersReal {
+                Text("SIM: a what-if trade, filled at once at this price and never sent to IB. ⌘🌐 (KEYS ON) for real orders.")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            } else if broker.isLiveAccount {
                 Text("This goes to your LIVE account, with real money.").font(.system(size: 12, weight: .semibold)).foregroundStyle(.red)
             }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Send to IB") {
+                Button(workspace.optionOrdersReal ? "Send to IB" : "Simulate") {
                     send()
                     dismiss()
                 }
@@ -342,6 +346,16 @@ struct OptionsReview: View {
 
     private func send() {
         guard let price = frozen else { return }
+        guard workspace.optionOrdersReal else {
+            if desk.legs.count == 1 {
+                let leg = desk.legs[0]
+                broker.fillSimOption(leg.contract.symbol, leg.buy ? "BUY" : "SELL", contracts: Double(desk.quantity * leg.ratio), at: abs(price))
+            } else {
+                broker.fillSimOptionCombo(desk.reducedLegs.map { ($0.contract.symbol, $0.buy, $0.ratio) }, units: Double(desk.quantity), limit: price)
+            }
+            desk.limit = nil
+            return
+        }
         if desk.legs.count == 1 {
             let leg = desk.legs[0]
             broker.placeOption(leg.contract.symbol, action: leg.buy ? "BUY" : "SELL", contracts: Double(desk.quantity * leg.ratio), limit: abs(price))

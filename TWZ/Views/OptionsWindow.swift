@@ -11,7 +11,9 @@
 //  The expiries run along the top (the one nearest 30 days out picked at first); the chain shows the strikes around the
 //  price, as many each side as the top bar's Strikes says (each strike's call and put take two of IB's market data
 //  lines). The window streams nothing once closed.
-//  Orders go only from the ticket's Review, a limit for the day; several legs go as one combo order. The trading
+//  Orders go only from the ticket's Review, a limit for the day; several legs go as one combo order. In SIM, as at every
+//  launch, they're what-if trades, filled at once at their price and never sent to IB; they go to IB only once KEYS ON has
+//  been turned on by hand (⌘🌐 or the account badge), not when a live position turned it on at launch. The trading
 //  shortcuts (order keys, hotkeys, ⌘⌫ …) don't work with this window in front, so no key sends a stock order from here.
 //
 
@@ -360,12 +362,7 @@ private struct OptionsHeader: View {
             .controlSize(.small)
             .fixedSize()
             .help("Strikes shown each side of the price. Each strike's call and put take two of IB's market data lines (100 in all by default, shared with the charts and lists)")
-            Text(broker.isLiveAccount ? "LIVE" : "PAPER")
-                .font(.system(size: 10, weight: .heavy))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Capsule().fill(broker.isLiveAccount ? Color.red.opacity(0.85) : Color.blue.opacity(0.8)))
-                .help(broker.isLiveAccount ? "Orders from this window go to your live account" : "Orders from this window go to your paper account")
+            OptionsModeBadge()
         }
         .padding(.leading, 78)      // the window's buttons
         .padding(.trailing, 12)
@@ -454,6 +451,26 @@ private struct ExpiryStrip: View {
         let vols = OptionRight.allCases.compactMap { book.contract(book.strikes[i], $0) }
             .compactMap { broker.quote($0.symbol)?.greeks?.impliedVol }
         return vols.isEmpty ? broker.underlyingVols[desk.underlying]?.implied : vols.reduce(0, +) / Double(vols.count)
+    }
+}
+
+/// Where the window's orders go: SIM (what-if trades, dimmed) until KEYS ON is turned on by hand, then the account,
+/// LIVE in red or PAPER in blue.
+struct OptionsModeBadge: View {
+    @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
+
+    var body: some View {
+        let real = workspace.optionOrdersReal
+        Text(real ? (broker.isLiveAccount ? "LIVE" : "PAPER") : "SIM")
+            .font(.system(size: 10, weight: .heavy))
+            .foregroundStyle(real ? Color.white : Color.secondary)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(real ? (broker.isLiveAccount ? Color.red.opacity(0.85) : Color.blue.opacity(0.8)) : Color.primary.opacity(0.1)))
+            .help(real ? "KEYS ON: orders from this window go to your \(broker.isLiveAccount ? "live" : "paper") account, for real (⌘🌐: SIM)"
+                       : "SIM: orders from this window are what-if trades, filled at once at their price, never sent to IB. "
+                         + "⌘🌐 (or the main window's account badge) turns KEYS ON for real orders"
+                         + (workspace.orderShortcutsOn ? "; KEYS ON from a live position at launch doesn't count: ⌘🌐 twice" : ""))
     }
 }
 
