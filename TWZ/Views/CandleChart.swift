@@ -757,7 +757,7 @@ struct CandleChart: View {
     /// outlined dark, or with `outline`, ringed in that color: a rim with sharp corners, so the arrow keeps
     /// its shape, set off from the chart by a thin dark line.
     private static func drawPointer(at tip: CGPoint, color: Color, outline: Color? = nil, in ctx: inout GraphicsContext) {
-        let head: CGFloat = 7, halfWidth: CGFloat = 5, stem: CGFloat = 7, stemHalf: CGFloat = 1.25
+        let head: CGFloat = 5, halfWidth: CGFloat = 3.5, stem: CGFloat = 5, stemHalf: CGFloat = 1
         var arrow = Path()
         arrow.move(to: tip)
         arrow.addLine(to: CGPoint(x: tip.x - head, y: tip.y - halfWidth))
@@ -769,7 +769,7 @@ struct CandleChart: View {
         arrow.closeSubpath()
         // Half of each stroke shows: the fill covers its inner half.
         if let outline {
-            let rim: CGFloat = 1.5, line: CGFloat = 0.75
+            let rim: CGFloat = 1.25, line: CGFloat = 0.75
             ctx.stroke(arrow, with: .color(.black.opacity(0.7)), style: StrokeStyle(lineWidth: (rim + line) * 2, lineJoin: .miter))
             ctx.stroke(arrow, with: .color(outline), style: StrokeStyle(lineWidth: rim * 2, lineJoin: .miter))
         } else {
