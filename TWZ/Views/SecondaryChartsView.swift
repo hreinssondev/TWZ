@@ -13,8 +13,9 @@
 //  charts whose symbol dropped out load a new one.
 //  A symbol typed into a chart's field stays in that chart and cell, the stock it replaced leaving
 //  the charts meanwhile (so nothing else moves) and the gainers filling the other cells around it, until the top bar's Reset, the field emptied, or a smaller grid without that cell.
-//  ⌘R (or another of the main window's Reset keys) with this window in front resets it alone, on its list: no
-//  charts kept by hand, every chart's view back to the Zoom slider's.
+//  ⌘R (or another of the main window's Reset keys) with this window in front resets it alone, on its list: every
+//  chart's view back to the Zoom slider's, those set by hand keeping their stock; the Reset button beside the
+//  timeframe picker lets those go too.
 //  Clicking a chart selects it, as in the main window: hotkeys, order keys and the other trading shortcuts go to
 //  its stock, it streams tick by tick (⌘↩ keeps it fast), and its header shows the position, ⚡, S, SSR, buying
 //  power and its own timeframe switch. ⌥1–6 (⌃, ⇧ too) with this window in front sets every chart's timeframe here. With P on, or the
@@ -260,6 +261,19 @@ struct SecondaryChartsView: View {
                 set: { masterTimeframe = $0 }
             ))
             .help("Every chart's timeframe here (with this window in front: ⌥1–6, ⌃1–6 or ⇧1–6); a chart's own switch changes just that chart")
+            Button {
+                workspace.resetChartsWindow(releasingHandSet: true)
+            } label: {
+                Text("Reset")
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundStyle(Color.secondary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(0.08)))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Every chart here back to the Zoom slider's zoom, and the charts whose symbol you typed follow the list again. ⌘R does the first only, keeping those")
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
