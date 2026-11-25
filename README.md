@@ -78,7 +78,7 @@ management in one window built for quick entries and exits.
   short sale restriction (from Nasdaq's daily list and IB's prices), with SSR-aware order pricing.
 - **Menu bar P/L**: the open positions' P/L in NOK as a bare number, green or red; with no position
   open, the what-if trades'. A click brings TWZ to the front.
-- **Charts window**: a second grid of the top 18 gainers (or any size you set).
+- **Charts window**: a second grid of the top 18 gainers (or any size you set). On the Forex list, its 1/2 button shows the pairs the grid has no room for.
 - **Appearance**: candle and line colors, line styles, presets and saved window layouts.
 - **Confetti** over every screen when a LIVE trade opens (Settings › Trading).
 

@@ -20,7 +20,8 @@
 //  its stock, it streams tick by tick (⌘↩ keeps it fast), and its header shows the position, ⚡, S, SSR, buying
 //  power and its own timeframe switch. ⌥1–6 (⌃ too) with this window in front sets every chart's timeframe here, and ⇧1–5 (or a click on the header's layout numbers) loads one of its own saved chart layouts (see `GridLayout`).
 //  The header's 1–5 before them are this window's own view sets or scales, as the main window's top bar has (see
-//  `ScaleButtons`; ⌥⇧1–5 with this window in front). With P on, or the
+//  `ScaleButtons`; ⌥⇧1–5 with this window in front). On the Forex list, 1/2 after them shows the pairs past those
+//  the grid has room for (2/2), and back. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
 //
@@ -228,6 +229,8 @@ struct SecondaryChartsView: View {
     private static let gap: CGFloat = 4
 
     @State private var lastGainers: [String] = []
+    /// The Forex list's second page: the pairs past those the grid has room for, in its cells instead.
+    @State private var showsRest = false
     @AppStorage(SecondaryCharts.timeframeKey) private var masterTimeframe: Timeframe = .m1
     @AppStorage("secondaryHeaderHeight") private var headerHeight: Double = 28
     @AppStorage(SecondaryCharts.pausedKey) private var isPaused: Bool = false
@@ -356,6 +359,7 @@ struct SecondaryChartsView: View {
                 ScaleButtons(window: .chartsWindow)
                 GridLayoutButtons(window: .chartsWindow, showsIcon: false)
             }
+            if workspace.chartsWindowList == .forex { restButton }
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
@@ -391,6 +395,24 @@ struct SecondaryChartsView: View {
                         .onEnded { _ in dragStartHeight = nil }
                 )
         )
+    }
+
+    /// Forex only: flips between the pairs that fit the grid and the ones past them.
+    private var restButton: some View {
+        Button {
+            showsRest.toggle()
+            if !isPaused { lastGainers = []; syncWithGainers() }
+        } label: {
+            Text(showsRest ? "2/2" : "1/2")
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(showsRest ? Color.primary : Color.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(showsRest ? 0.16 : 0.08)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(showsRest ? "Back to the first pairs of the Forex list" : "The Forex list's pairs past those the grid has room for")
     }
 
     /// The Zoom slider moved, or a swipe moved it (that zoomed the charts already, see `zoomChartsWindow`).
@@ -433,11 +455,17 @@ struct SecondaryChartsView: View {
         let pins = workspace.secondaryPins
         // Less the stocks the charts set by hand replaced.
         let displaced = Set(pins.keys.compactMap { workspace.secondaryDisplaced[$0] })
-        let gainers = (broker.scans[SecondaryCharts.scannerOwner]?.symbols ?? []).filter { !displaced.contains($0) }
+        var gainers = (broker.scans[SecondaryCharts.scannerOwner]?.symbols ?? []).filter { !displaced.contains($0) }
+        let slots = count - pins.values.filter { $0 < count }.count
+        // The Forex list's second page: the pairs past the first `slots`, less those set by hand.
+        if showsRest, workspace.chartsWindowList == .forex {
+            let pinned = Set(workspace.secondaryCharts.filter { pins[$0.id] != nil }.map(\.symbol))
+            gainers = Array(gainers.filter { !pinned.contains($0) }.dropFirst(slots))
+        }
         guard !gainers.isEmpty, gainers != lastGainers else { return }
         lastGainers = gainers
         workspace.fill(workspace.secondaryCharts.filter { pins[$0.id] == nil },
-                       withTop: count - pins.values.filter { $0 < count }.count, of: gainers, broker: broker)
+                       withTop: slots, of: gainers, broker: broker)
     }
 
     /// The charts in grid order: one set by hand in its own cell, the others in gainer rank order around them.
