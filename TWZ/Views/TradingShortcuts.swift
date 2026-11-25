@@ -91,6 +91,8 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return event
                     }
+                    // The Options window takes no trading shortcut: no key there sends a stock order.
+                    if OptionsWindow.isWindow(event.window) { return event }
                     let modifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
                     let inMainWindow = event.window.map { $0 === NSApp.mainWindow && $0.attachedSheet == nil } ?? false
                     /// ⌘A (Hyper A, Hyper ⌫): every order in the selected chart's symbol, and its ⌃-click what-if; with no

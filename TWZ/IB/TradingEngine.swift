@@ -241,6 +241,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         static let restricted = Dirty(rawValue: 1 << 13)
         static let entries = Dirty(rawValue: 1 << 14)
         static let news = Dirty(rawValue: 1 << 15)
+        static let options = Dirty(rawValue: 1 << 16)
     }
 
     /// One display frame at 120 Hz (ProMotion): the UI never gets more snapshots than it can show.
@@ -286,7 +287,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// Everything the UI shows, for its initial state. Call on the engine queue.
     func fullSnapshot() -> EngineSnapshot {
-        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources, .tickStreams, .shortability, .restricted, .news]
+        dirty = [.status, .positions, .orders, .fills, .quotes, .unavailable, .scans, .closes, .chartOrders, .protective, .orderSources, .tickStreams, .shortability, .restricted, .news, .options]
         return takeSnapshot()
     }
 
@@ -354,6 +355,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if dirty.contains(.tickStreams) {
             s.tickTradeSymbols = Set(tickReqByStream.keys.filter { $0.kind != .bidAsk }.map(\.symbol))
             s.tickLimitedSymbols = tickLimitedSymbols
+        }
+        if dirty.contains(.options) {
+            s.optionChains = optionChains
+            s.optionSeries = optionSeries
+            s.optionPositions = optionPositions
+            s.optionErrors = optionErrors
+            s.underlyingVols = underlyingVols
         }
         if dirty.contains(.shortability) {
             s.shortability = shortability
@@ -493,6 +501,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         fills.removeAll()
         commissions.removeAll()
         protectiveSyncDue.removeAll()
+        resetOptions()
     }
 
     private func handle(_ event: IBSocket.Event) {
@@ -552,6 +561,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         scheduleRestrictionCheck()
         syncNews()
         watchListNews()
+        syncUnderlyingVol()
     }
 
     // MARK: - Forex by 5-day range
@@ -662,6 +672,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private func syncQuoteSubscriptions() {
         var wanted = quoteOwners.values.reduce(into: Set<String>()) { $0.formUnion($1) }
         wanted.formUnion(positions.keys)
+        wanted.formUnion(optionPositions.keys)
         // A forex pair's values turn into dollars at its quote currency's dollar pair (kroner at USD.NOK).
         wanted.formUnion(wanted.compactMap { symbol in
             ForexPair(symbol).flatMap { $0.quote == "NOK" ? nil : ForexPair.dollarPair(for: $0.quote) }
@@ -678,7 +689,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             subscribeQuote(symbol)
         }
 
-        let overnightWanted = phase == .overnight ? wanted.filter { !ForexPair.isForex($0) } : []
+        let overnightWanted = phase == .overnight ? wanted.filter { !ForexPair.isForex($0) && !OptionContract.isOption($0) } : []
         for (symbol, reqId) in overnightReqBySymbol where !overnightWanted.contains(symbol) {
             send(2, 2, reqId)                                                      // cancelMktData
             overnightReqBySymbol[symbol] = nil
@@ -790,15 +801,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     }
 
     private func subscribeQuote(_ symbol: String) {
-        guard apiReady, quoteReqBySymbol[symbol] == nil else { return }
+        guard apiReady, quoteReqBySymbol[symbol] == nil, OptionCombo.underlying(of: symbol) == nil else { return }
         let reqId = makeReqId()
         quoteReqBySymbol[symbol] = reqId
         quoteSymbolByReq[reqId] = symbol
         let forex = ForexPair.isForex(symbol)
-        sendFields([1, 11, reqId] + contract(symbol) + [false, forex ? "" : "236", false, false, ""])   // reqMktData, 236: shortable
+        let option = OptionContract.isOption(symbol)
+        // 236: shortable (stocks); 101: open interest (options, until IB refuses it, see `optionTicksRefused`).
+        let ticks = forex ? "" : option ? (optionTicksRefused ? "" : "101") : "236"
+        if option, !ticks.isEmpty { optionTickReqs.insert(reqId) }
+        sendFields([1, 11, reqId] + contract(symbol) + [false, ticks, false, false, ""])   // reqMktData
         if forex { requestContractDetails(symbol) }
         // No close from IB in a few seconds: yesterday's from the daily bars, for the % change.
-        if !forex { queue.asyncAfter(deadline: .now() + 5) { [weak self] in self?.fillPrevClose(symbol) } }
+        if !forex, !option { queue.asyncAfter(deadline: .now() + 5) { [weak self] in self?.fillPrevClose(symbol) } }
     }
 
     /// A stock quoted without yesterday's close: asks for its last few regular-session daily bars.
@@ -1271,7 +1286,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private func placeOrder(symbol: String, action: String, quantity: Double, limit: Double?, stop: Double? = nil,
                             tif: TimeInForce = .day, outsideRth: Bool = true, exchange: String = "SMART",
                             orderType typeOverride: String? = nil,
-                            ocaGroup: String = "", modifying: Int? = nil, whatIf: Bool = false, why: String) -> Int? {
+                            ocaGroup: String = "", modifying: Int? = nil, whatIf: Bool = false,
+                            comboLegs: [ComboLegSpec] = [], why: String) -> Int? {
         guard apiReady, let next = nextOrderId else {
             lastMessage = "Not connected"
             return nil
@@ -1309,13 +1325,20 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         // Forex trades round the clock on IDEALPRO, and its stops trigger on the mid: it has no trades.
         let forex = ForexPair.isForex(symbol)
         let triggerMethod = stop == nil ? 0 : forex ? 8 : 2               // 2 = last trade, 8 = midpoint
-        let fillsOutsideRth = outsideRth && limit != nil && !forex
+        let fillsOutsideRth = outsideRth && limit != nil && !forex && !OptionContract.isOption(symbol) && comboLegs.isEmpty
         var f: [Any] = [3, orderId]
         f += orderContract(symbol, exchange: exchange)
         f += ["", ""]                                                     // secIdType, secId
         f += [action, quantity, orderType, limit ?? Self.unsetDouble, stop ?? Self.unsetDouble,
               tif.rawValue, ocaGroup, account, "", 0, "TWZ"]
         f += [true, 0, false, false, 0, triggerMethod, fillsOutsideRth, false]  // transmit … hidden
+        if !comboLegs.isEmpty {
+            // A combo's legs (conId, ratio, action, exchange, openClose, shortSaleSlot, designatedLocation, exemptCode),
+            // then its per-leg prices and SMART combo routing parameters, none.
+            f += [comboLegs.count]
+            for leg in comboLegs { f += [leg.conId, leg.ratio, leg.action, "SMART", 0, 0, "", -1] }
+            f += [0, 0]
+        }
         f += ["", 0.0, "", "", "", "", ""]                                // sharesAlloc, discretionary, GAT, GTD, FA
         if serverVersion < 177 { f += [""] }                              // faProfile
         f += ["", 0, "", -1, ocaGroup.isEmpty ? 0 : 2, "", "", false, Int.unset, Self.unsetDouble, false, false, Self.unsetDouble]
@@ -2636,6 +2659,261 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return false
     }
 
+    // MARK: - Options
+
+    /// Underlyings' option chains (see `loadOptionChain`), loaded once a day: IB's listings don't change in between.
+    private var optionChains: [String: OptionChainInfo] = [:] { didSet { changed(.options) } }
+    private var optionChainDays: [String: Int] = [:]
+    /// The options listed for an underlying's expiry, by `seriesKey` (see `loadOptionSeries`).
+    private var optionSeries: [String: [ListedOption]] = [:] { didSet { changed(.options) } }
+    /// Option positions by option symbol, their average cost per share (IB's is per contract).
+    private var optionPositions: [String: Position] = [:] { didSet { changed(.options) } }
+    /// Why an underlying's chain or one of its expiries didn't load, by underlying.
+    private var optionErrors: [String: String] = [:] { didSet { changed(.options) } }
+    /// The Options window's underlying's volatility (see `setVolUnderlying`).
+    private var underlyingVols: [String: UnderlyingVol] = [:] { didSet { changed(.options) } }
+    private var optionConIdReqs: [Int: String] = [:]
+    private var optionParamReqs: [Int: (underlying: String, rows: [(tradingClass: String, expirations: [String], strikes: [Double])])] = [:]
+    private var optionSeriesReqs: [Int: (key: String, underlying: String, listed: [ListedOption])] = [:]
+    private var volUnderlying: String?
+    private var underlyingVolReq: (reqId: Int, symbol: String)?
+    /// Option quotes asked for with their open interest (generic tick 101). Should IB refuse it, they're asked for
+    /// again without it, and so are the rest from then on.
+    private var optionTickReqs: Set<Int> = []
+    private var optionTicksRefused = false
+
+    nonisolated static func seriesKey(_ underlying: String, _ expiry: String) -> String { "\(underlying)|\(expiry)" }
+
+    private func resetOptions() {
+        optionPositions.removeAll()
+        optionConIdReqs.removeAll()
+        optionParamReqs.removeAll()
+        optionSeriesReqs.removeAll()
+        underlyingVolReq = nil
+        optionTickReqs.removeAll()
+    }
+
+    /// Loads an underlying's option expiries and strikes (IB's security definition parameters, from the stock's
+    /// contract id), once a day.
+    func loadOptionChain(_ underlying: String) {
+        let symbol = underlying.uppercased()
+        let today = Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0
+        guard apiReady, !symbol.isEmpty, OptionContract(symbol) == nil, optionChains[symbol] == nil || optionChainDays[symbol] != today,
+              !optionConIdReqs.values.contains(symbol), !optionParamReqs.values.contains(where: { $0.underlying == symbol }) else { return }
+        optionErrors[symbol] = nil
+        if let conId = conIds[symbol] { return requestOptionParameters(symbol, conId: conId) }
+        let reqId = makeReqId()
+        optionConIdReqs[reqId] = symbol
+        // reqContractDetails: version 8, reqId, contract, includeExpired, secIdType, secId, issuerId (server ≥ 176)
+        var f: [Any] = [9, 8, reqId] + contract(symbol) + [false, "", ""]
+        if serverVersion >= 176 { f.append("") }
+        sendFields(f)
+    }
+
+    private func requestOptionParameters(_ underlying: String, conId: Int) {
+        let reqId = makeReqId()
+        optionParamReqs[reqId] = (underlying, [])
+        send(78, reqId, underlying, "", "STK", conId)                              // reqSecDefOptParams
+    }
+
+    /// One exchange's and trading class's expiries and strikes; SMART's are kept.
+    private func optionParameters(_ f: [String]) {
+        // reqId, exchange, underlyingConId, tradingClass, multiplier, expirations (count, …), strikes (count, …)
+        let reqId = f.int(1)
+        guard optionParamReqs[reqId] != nil, f.str(2) == "SMART", f.double(5) == OptionContract.multiplier else { return }
+        var i = 6
+        let expirations = (0..<max(0, f.int(i))).map { f.str(i + 1 + $0) }
+        i += 1 + expirations.count
+        let strikes = (0..<max(0, f.int(i))).map { f.double(i + 1 + $0) }
+        optionParamReqs[reqId]?.rows.append((f.str(4), expirations, strikes))
+    }
+
+    /// The trading class with the most expiries becomes the chain: the underlying's own, or its weeklies' where they're
+    /// a class of their own (SPXW).
+    private func optionParametersEnd(_ f: [String]) {
+        guard let req = optionParamReqs.removeValue(forKey: f.int(1)) else { return }
+        let best = req.rows.max { a, b in
+            a.expirations.count != b.expirations.count ? a.expirations.count < b.expirations.count
+                : b.tradingClass == req.underlying && a.tradingClass != req.underlying
+        }
+        guard let best else {
+            optionErrors[req.underlying] = "IB lists no options for \(req.underlying)"
+            return
+        }
+        optionChains[req.underlying] = OptionChainInfo(
+            tradingClass: best.tradingClass,
+            expirations: Set(best.expirations).filter { OptionContract.daysLeft($0) >= 0 }.sorted(),
+            strikes: Set(best.strikes).sorted())
+        optionChainDays[req.underlying] = Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0
+    }
+
+    /// Loads the options listed for one of an underlying's expiries (calls and puts), with their contract ids.
+    func loadOptionSeries(_ underlying: String, expiry: String) {
+        let key = Self.seriesKey(underlying, expiry)
+        guard apiReady, optionSeries[key] == nil, let chain = optionChains[underlying],
+              !optionSeriesReqs.values.contains(where: { $0.key == key }) else { return }
+        let reqId = makeReqId()
+        optionSeriesReqs[reqId] = (key, underlying, [])
+        var f: [Any] = [9, 8, reqId, 0, underlying, "OPT", expiry, 0.0, "", "100", "SMART", "", "USD", "", chain.tradingClass,
+                        false, "", ""]
+        if serverVersion >= 176 { f.append("") }
+        sendFields(f)
+    }
+
+    /// Contract details for the options' requests: an underlying's contract id, or one option of an expiry. False
+    /// when they're another request's.
+    private func optionContractData(_ f: [String], at i: Int) -> Bool {
+        let reqId = f.int(i)
+        if let symbol = optionConIdReqs.removeValue(forKey: reqId) {
+            let conId = f.int(i + 11)
+            if conId > 0 {
+                conIds[symbol] = conId
+                requestOptionParameters(symbol, conId: conId)
+            } else {
+                optionErrors[symbol] = "IB has no contract id for \(symbol)"
+            }
+            return true
+        }
+        guard optionSeriesReqs[reqId] != nil else { return false }
+        // symbol, secType, lastTradeDate, strike, right, exchange, currency, localSymbol, marketName, tradingClass, conId,
+        // minTick, [mdSizeMultiplier (server < 164)], multiplier
+        let multiplier = f.double(i + (serverVersion < 164 ? 14 : 13))
+        guard let right = OptionRight(ib: f.str(i + 5)), multiplier == OptionContract.multiplier else { return true }
+        let contract = OptionContract(underlying: f.str(i + 1), expiry: f.str(i + 3), strike: f.double(i + 4), right: right,
+                                      tradingClass: f.str(i + 10))
+        optionSeriesReqs[reqId]?.listed.append(ListedOption(contract: contract, conId: f.int(i + 11)))
+        return true
+    }
+
+    private func contractDataEnd(_ f: [String]) {
+        // version, reqId
+        guard let req = optionSeriesReqs.removeValue(forKey: f.int(2)) else { return }
+        if req.listed.isEmpty { optionErrors[req.underlying] = "IB lists no options for \(req.key.replacingOccurrences(of: "|", with: " "))" }
+        optionSeries[req.key] = req.listed.sorted { ($0.contract.strike, $0.contract.right.rawValue) < ($1.contract.strike, $1.contract.right.rawValue) }
+    }
+
+    /// IB's option model for a quoted option: its implied volatility and Greeks (from the model tick once there is
+    /// one, else from the bid, ask or last).
+    private func tickOptionComputation(_ f: [String]) {
+        // reqId, tickType, tickAttrib, impliedVol, delta, optPrice, pvDividend, gamma, vega, theta, undPrice
+        guard let symbol = quoteSymbolByReq[f.int(1)] else { return }
+        let type = f.int(2)
+        let isModel = type == 13 || type == 83
+        guard isModel || [10, 11, 12, 80, 81, 82].contains(type) else { return }
+        var q = smartQuotes[symbol] ?? Quote()
+        if !isModel, q.greeks?.fromModel == true { return }
+        func value(_ i: Int) -> Double? {
+            guard let v = Double(f.str(i)), v.isFinite, abs(v) < 1e100 else { return nil }
+            return v
+        }
+        var g = q.greeks ?? OptionGreeks()
+        if let v = value(4), v > 0 { g.impliedVol = v }
+        if let v = value(5), abs(v) <= 1 { g.delta = v }
+        if let v = value(6), v >= 0 { g.modelPrice = v }
+        if let v = value(8), v != -2 { g.gamma = v }
+        if let v = value(9), v != -2 { g.vega = v }
+        if let v = value(10), v != -2 { g.theta = v }
+        if let v = value(11), v > 0 { g.underlyingPrice = v }
+        g.fromModel = g.fromModel || isModel
+        guard g != q.greeks else { return }
+        q.greeks = g
+        smartQuotes[symbol] = q
+        updateQuote(symbol)
+    }
+
+    /// An option position: kept apart from the stock and forex ones (see `optionPositions`).
+    private func optionPosition(_ f: [String]) {
+        let symbol = Self.contractSymbol(f, at: 4)
+        guard OptionContract.isOption(symbol) else { return }
+        let qty = f.double(14)
+        let multiplier = f.double(9) > 0 ? f.double(9) : OptionContract.multiplier
+        let old = optionPositions[symbol]?.quantity ?? 0
+        if old != qty { log("POSITION \(symbol) \(Fmt.shares(old)) → \(Fmt.shares(qty)) avg \(Fmt.price(f.double(15) / multiplier))") }
+        let position = qty == 0 ? nil : Position(symbol: symbol, quantity: qty, avgCost: f.double(15) / multiplier)
+        if optionPositions[symbol] != position { optionPositions[symbol] = position }
+        syncQuoteSubscriptions()
+    }
+
+    /// The Options window's underlying, nil with the window closed: its options' implied volatility (30 days out) and
+    /// its own historical volatility are streamed.
+    func setVolUnderlying(_ symbol: String?) {
+        volUnderlying = symbol
+        syncUnderlyingVol()
+    }
+
+    private func syncUnderlyingVol() {
+        guard apiReady else { return }
+        if let req = underlyingVolReq, req.symbol != volUnderlying {
+            send(2, 2, req.reqId)                                                  // cancelMktData
+            underlyingVolReq = nil
+        }
+        guard let symbol = volUnderlying, underlyingVolReq == nil, OptionContract(symbol) == nil else { return }
+        let reqId = makeReqId()
+        underlyingVolReq = (reqId, symbol)
+        sendFields([1, 11, reqId] + contract(symbol) + [false, "104,106", false, false, ""])   // 104: historical, 106: implied
+    }
+
+    private func underlyingVolTick(type: Int, value: Double) {
+        guard let symbol = underlyingVolReq?.symbol, value > 0, value < 100 else { return }
+        var v = underlyingVols[symbol] ?? UnderlyingVol()
+        switch type {
+        case 24: v.implied = value
+        case 23: v.historical = value
+        default: return
+        }
+        if underlyingVols[symbol] != v { underlyingVols[symbol] = v }
+    }
+
+    /// Errors for the options' requests; true when it was one of theirs.
+    private func optionsError(reqId: Int, code: Int, text: String) -> Bool {
+        if let symbol = optionConIdReqs.removeValue(forKey: reqId) {
+            optionErrors[symbol] = text
+            return true
+        }
+        if let req = optionParamReqs.removeValue(forKey: reqId) {
+            optionErrors[req.underlying] = text
+            return true
+        }
+        if let req = optionSeriesReqs.removeValue(forKey: reqId) {
+            optionErrors[req.underlying] = text
+            return true
+        }
+        // The volatility is extra: without it the window uses the options' own.
+        if reqId == underlyingVolReq?.reqId { return true }
+        if code == 321, optionTickReqs.remove(reqId) != nil, let symbol = quoteSymbolByReq.removeValue(forKey: reqId) {
+            Self.log.notice("Option open interest refused: \(text, privacy: .public)")
+            optionTicksRefused = true
+            quoteReqBySymbol[symbol] = nil
+            subscribeQuote(symbol)
+            return true
+        }
+        return false
+    }
+
+    /// An order for one option from the Options window: a limit for the day, in regular hours (options trade then only).
+    func placeOption(_ symbol: String, action: String, contracts: Double, limit: Double) {
+        guard OptionContract.isOption(symbol) else { return }
+        let price = OptionContract.rounded(limit)
+        guard let id = placeOrder(symbol: symbol, action: action, quantity: contracts, limit: price, outsideRth: false,
+                                  why: "Options window") else { return }
+        recordSource("Options", for: id)
+        lastMessage = "\(symbol): \(action) \(Fmt.shares(contracts)) @ \(Fmt.price(price))"
+    }
+
+    /// Options as one combo order (IB's BAG): `units` of `legs` at `limit` a unit, a debit, or a credit as a
+    /// negative price. A limit for the day, in regular hours.
+    func placeOptionCombo(underlying: String, legs: [ComboLegSpec], units: Double, limit: Double) {
+        guard legs.count >= 2, legs.allSatisfy({ $0.conId > 0 && $0.ratio > 0 }) else {
+            lastMessage = "\(underlying) combo: its legs aren't all listed at IB yet"
+            return
+        }
+        let price = (limit * 100).rounded() / 100
+        guard let id = placeOrder(symbol: OptionCombo.symbol(underlying), action: "BUY", quantity: units, limit: price,
+                                  outsideRth: false, comboLegs: legs, why: "Options window combo") else { return }
+        recordSource("Options", for: id)
+        lastMessage = "\(underlying) combo: \(Fmt.shares(units)) @ \(Fmt.price(price))\(price < 0 ? " (credit)" : "")"
+    }
+
     // MARK: - Incoming messages
 
     private func dispatch(_ f: [String]) {
@@ -2647,6 +2925,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case 4: errorMessage(f)
         case 5: openOrder(f)
         case 10: contractData(f)
+        case 52: contractDataEnd(f)
+        case 21: tickOptionComputation(f)
+        case 75: optionParameters(f)
+        case 76: optionParametersEnd(f)
         case 9:
             nextOrderId = max(nextOrderId ?? 0, f.int(2))
             log("CONNECTED client \(clientId), next order id \(f.str(2))")
@@ -2696,7 +2978,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         default: return
         }
         if isOvernight { overnightQuotes[symbol] = q } else { smartQuotes[symbol] = q }
-        if !isOvernight, ssr[symbol] == nil, !ForexPair.isForex(symbol),
+        if !isOvernight, ssr[symbol] == nil, !ForexPair.isForex(symbol), !OptionContract.isOption(symbol),
            let last = q.last, let close = q.prevClose, close > 0, last <= close * 0.9 {
             ssr[symbol] = "Traded 10% below yesterday's close today (\(Fmt.price(last)) vs \(Fmt.price(close)))"
         }
@@ -2709,6 +2991,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         // [version (server < 164)], reqId, symbol, secType, lastTradeDate, strike, right, exchange,
         // currency, localSymbol, marketName, tradingClass, conId, minTick, …
         let i = serverVersion < 164 ? 2 : 1
+        if optionContractData(f, at: i) { return }
         if let symbol = conIdSymbolByReq.removeValue(forKey: f.int(i)) { return conIdArrived(symbol, f.int(i + 11)) }
         guard let symbol = detailsSymbolByReq.removeValue(forKey: f.int(i)) else { return }
         let tick = f.double(i + 12)
@@ -2723,6 +3006,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case 8, 74:
             smartQuotes[symbol, default: Quote()].volume = f.double(4)
             updateQuote(symbol)
+        case 27, 28:                                                       // an option's open interest
+            let open = f.double(4)
+            if smartQuotes[symbol]?.openInterest != open {
+                smartQuotes[symbol, default: Quote()].openInterest = open
+                updateQuote(symbol)
+            }
         case 89:
             let shares = f.double(4)
             if shortableShares[symbol] != shares { shortableShares[symbol] = shares }
@@ -2732,6 +3021,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// Tick 46, "Shortable" (generic tick 236 on the SMART quote).
     private func tickGeneric(_ f: [String]) {
+        if f.int(2) == underlyingVolReq?.reqId { return underlyingVolTick(type: f.int(3), value: f.double(4)) }
         guard f.int(3) == 46, let symbol = quoteSymbolByReq[f.int(2)] else { return }
         let value = f.double(4)
         if shortability[symbol] != value { shortability[symbol] = value }
@@ -2780,7 +3070,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let id = Self.orderKey(orderId: f.int(1), permId: f.int(25))
         let lmt = f.double(16)
         let aux = f.double(17)
-        let symbol = Self.symbol(f.str(3), secType: f.str(4), currency: f.str(10))
+        let symbol = Self.contractSymbol(f, at: 3)
         let before = orders[id]
         var o = orders[id] ?? OrderRow(
             id: id, symbol: symbol, action: f.str(13), quantity: 0,
@@ -2807,12 +3097,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     }
 
     private func execDetails(_ f: [String]) {
-        guard f.count > 20 else { return }
+        guard f.count > 20, f.str(5) != "BAG" else { return }   // a combo's fills come leg by leg too
         let id = f.str(14)
         let fill = Fill(
             id: id,
             orderId: f.int(2),
-            symbol: Self.symbol(f.str(4), secType: f.str(5), currency: f.str(11)),
+            symbol: Self.contractSymbol(f, at: 4),
             side: f.str(18),
             shares: f.double(19),
             price: f.double(20),
@@ -2856,6 +3146,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if (2100...2199).contains(code) || code == 10167 || code == 399 { return }
 
         if newsError(reqId: reqId, code: code, text: text) { return }
+        if optionsError(reqId: reqId, code: code, text: text) { return }
         if reqId == fxReq {
             fxReq = nil
             lastMessage = "USD.NOK rate: \(text)" + (usdNok.map { " (using saved \(Fmt.price($0)))" } ?? "")
@@ -3141,6 +3432,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         // version, account, conId, symbol, secType, ltd, strike, right, mult, exch, currency, localSym, tradingClass, pos, avgCost
         // Forex positions of the kind its orders go as: CFDs, or spot (where conversions show up too).
         let secType = f.str(5)
+        if secType == "OPT", f.str(2) == account { return optionPosition(f) }
         guard f.str(2) == account,
               secType == "STK" || (Self.isPair(f.str(4), secType: secType) && secType == (forexCFD ? "CFD" : "CASH")) else { return }
         let symbol = Self.symbol(f.str(4), secType: f.str(5), currency: f.str(11))
@@ -3200,6 +3492,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// A US stock on `exchange`; a forex pair ("EUR.USD") on IDEALPRO, whatever `exchange` says.
     private func contract(_ symbol: String, exchange: String = "SMART") -> [Any] {
         // conId, symbol, secType, lastTradeDate, strike, right, multiplier, exchange, primaryExch, currency, localSymbol, tradingClass
+        if let o = OptionContract(symbol) {
+            return [0, o.underlying, "OPT", o.expiry, o.strike, o.right.rawValue, "100", "SMART", "", "USD", "", o.tradingClass]
+        }
+        if let underlying = OptionCombo.underlying(of: symbol) { return [0, underlying, "BAG", "", 0.0, "", "", "SMART", "", "USD", "", ""] }
         if let pair = ForexPair(symbol) { return [0, pair.base, "CASH", "", 0.0, "", "", "IDEALPRO", "", pair.quote, "", ""] }
         return [0, symbol, "STK", "", 0.0, "", "", exchange, "", "USD", "", ""]
     }
@@ -3214,6 +3510,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// "CFD" on a currency) as "EUR.USD", its base currency then the currency it's priced in.
     private static func symbol(_ symbol: String, secType: String, currency: String) -> String {
         isPair(symbol, secType: secType) ? "\(symbol).\(currency)" : symbol
+    }
+
+    /// The app's symbol for the contract IB sent from field `b` on (symbol, secType, lastTradeDate, strike, right,
+    /// multiplier, exchange, currency, localSymbol, tradingClass): an option's (see `OptionContract`), a combo's, else
+    /// as `symbol(_:secType:currency:)`.
+    private static func contractSymbol(_ f: [String], at b: Int) -> String {
+        let secType = f.str(b + 1)
+        if secType == "OPT", let right = OptionRight(ib: f.str(b + 4)) {
+            return OptionContract(underlying: f.str(b), expiry: f.str(b + 2), strike: f.double(b + 3), right: right,
+                                  tradingClass: f.str(b + 9)).symbol
+        }
+        if secType == "BAG" { return OptionCombo.symbol(f.str(b)) }
+        return symbol(f.str(b), secType: secType, currency: f.str(b + 7))
     }
 
     private static func isPair(_ symbol: String, secType: String) -> Bool {
@@ -3386,6 +3695,12 @@ nonisolated struct EngineSnapshot: Sendable {
     var listNews: [String: NewsItem]?
     var newsArticles: [String: NewsArticle]?
     var newsError: String??
+    /// The options' chains, expiries' listings, positions, errors and underlyings' volatility (see `TradingEngine.optionChains`).
+    var optionChains: [String: OptionChainInfo]?
+    var optionSeries: [String: [ListedOption]]?
+    var optionPositions: [String: Position]?
+    var optionErrors: [String: String]?
+    var underlyingVols: [String: UnderlyingVol]?
     var charts: [ChartPatch] = []
 }
 

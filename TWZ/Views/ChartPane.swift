@@ -24,17 +24,27 @@ extension Workspace {
 
     /// Double-clicking a position: selects its stock's chart (see `showChart`).
     func focusPosition(_ symbol: String, broker: Broker) {
+        if isOptionSymbol(symbol, broker: broker) { return }
         showChart(symbol.uppercased(), broker: broker)
     }
 
     /// Double-clicking an order: selects its stock's chart (see `showChart`).
     func focusOrder(_ symbol: String, broker: Broker) {
+        if isOptionSymbol(symbol, broker: broker) { return }
         showChart(symbol.uppercased(), broker: broker)
+    }
+
+    /// An option or a combo has no chart here: the Options window (⌥⌘O) shows it.
+    private func isOptionSymbol(_ symbol: String, broker: Broker) -> Bool {
+        guard OptionContract.isOption(symbol) || OptionCombo.underlying(of: symbol) != nil else { return false }
+        broker.say("\(OptionContract(symbol)?.display ?? symbol): options show in the Options window (⌥⌘O)")
+        return true
     }
 
     /// Double-clicking a round trip: shows its arrows and entry / exit lines on its stock's chart (see
     /// `showChart`). Double-clicking it again, or the chart, hides them.
     func showTrip(_ trip: RoundTrip, broker: Broker) {
+        if isOptionSymbol(trip.symbol, broker: broker) { return }
         if shownTrips[trip.symbol] == trip.id {
             shownTrips[trip.symbol] = nil
             return

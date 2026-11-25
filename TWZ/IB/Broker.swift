@@ -59,6 +59,16 @@ final class Broker {
     private(set) var newsArticles: [String: NewsArticle] = [:]
     /// Why the News tab has nothing (IB refused the feed).
     private(set) var newsError: String?
+    /// Option chains by underlying: expiries and strikes (see `loadOptionChain`).
+    private(set) var optionChains: [String: OptionChainInfo] = [:]
+    /// The options listed for an underlying's expiry, by `TradingEngine.seriesKey` (see `loadOptionSeries`).
+    private(set) var optionSeries: [String: [ListedOption]] = [:]
+    /// Option positions by option symbol, their average cost per share. Apart from `positions`.
+    private(set) var optionPositions: [String: Position] = [:]
+    /// Why an underlying's options didn't load, by underlying.
+    private(set) var optionErrors: [String: String] = [:]
+    /// The Options window's underlying's implied and historical volatility.
+    private(set) var underlyingVols: [String: UnderlyingVol] = [:]
     /// Latest scanner results per list panel, as shown: with Hide restricted stocks on, without the
     /// stocks in `restricted` (see `filterScans`).
     private(set) var scans: [String: ScanResult] = [:]
@@ -648,6 +658,38 @@ final class Broker {
         return shares * size.price * usd * usdNok
     }
 
+    // MARK: - Options
+
+    /// Loads an underlying's option expiries and strikes, once a day (see `optionChains`).
+    func loadOptionChain(_ underlying: String) {
+        engine.perform { $0.loadOptionChain(underlying) }
+    }
+
+    /// Loads the options listed for one expiry (see `optionSeries`).
+    func loadOptionSeries(_ underlying: String, expiry: String) {
+        engine.perform { $0.loadOptionSeries(underlying, expiry: expiry) }
+    }
+
+    /// The options listed for an underlying's expiry; nil until loaded.
+    func listedOptions(_ underlying: String, expiry: String) -> [ListedOption]? {
+        optionSeries[TradingEngine.seriesKey(underlying, expiry)]
+    }
+
+    /// The Options window's underlying (nil: the window closed), whose volatility is streamed.
+    func setVolUnderlying(_ symbol: String?) {
+        engine.perform { $0.setVolUnderlying(symbol) }
+    }
+
+    /// Sends one option order: a limit for the day.
+    func placeOption(_ symbol: String, action: String, contracts: Double, limit: Double) {
+        order { $0.placeOption(symbol, action: action, contracts: contracts, limit: limit) }
+    }
+
+    /// Sends options as one combo order: `units` of `legs` at `limit` a unit (a credit negative).
+    func placeOptionCombo(underlying: String, legs: [ComboLegSpec], units: Double, limit: Double) {
+        order { $0.placeOptionCombo(underlying: underlying, legs: legs, units: units, limit: limit) }
+    }
+
     /// Order commands are timed from here until they reach the socket.
     private func order(_ work: @escaping @Sendable (TradingEngine) -> Void) {
         engine.perform(start: DispatchTime.now().uptimeNanoseconds, work)
@@ -670,6 +712,7 @@ final class Broker {
     /// quote currency's rate from the live quotes, nil until that's quoted. Prices times shares times
     /// this are dollars.
     func usdPerPriceUnit(_ symbol: String) -> Double? {
+        if OptionContract.isOption(symbol) || OptionCombo.underlying(of: symbol) != nil { return OptionContract.multiplier }
         guard let pair = ForexPair(symbol) else { return 1 }
         return ForexPair.usdPerUnit(of: pair.quote, usdNok: usdNok) { quotes[$0]?.mid }
     }
@@ -770,6 +813,11 @@ final class Broker {
         if let v = s.listNews { update(\.listNews, v) }
         if let v = s.newsArticles { update(\.newsArticles, v) }
         if let v = s.newsError { update(\.newsError, v) }
+        if let v = s.optionChains { update(\.optionChains, v) }
+        if let v = s.optionSeries { update(\.optionSeries, v) }
+        if let v = s.optionPositions { update(\.optionPositions, v) }
+        if let v = s.optionErrors { update(\.optionErrors, v) }
+        if let v = s.underlyingVols { update(\.underlyingVols, v) }
         if let v = s.scans { rawScans = v }
         if let v = s.restricted { update(\.restricted, v) }
         if s.scans != nil || s.restricted != nil || s.positions != nil || s.orders != nil { filterScans() }

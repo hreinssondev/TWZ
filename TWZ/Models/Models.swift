@@ -35,6 +35,9 @@ nonisolated struct Quote: Equatable {
     var last: Double?
     var prevClose: Double?
     var volume: Double?
+    /// An option's: what IB's option model works out from its price, and how many contracts are open.
+    var greeks: OptionGreeks?
+    var openInterest: Double?
 
     var changePercent: Double? {
         guard let last, let prevClose, prevClose > 0 else { return nil }

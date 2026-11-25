@@ -78,6 +78,16 @@ management in one window built for quick entries and exits.
   short sale restriction (from Nasdaq's daily list and IB's prices), with SSR-aware order pricing.
 - **Menu bar P/L**: the open positions' P/L in NOK as a bare number, green or red; with no position
   open, the what-if trades'. A click brings TWZ to the front.
+- **Options window** (⌥⌘O, or Window › Options): options on one stock or ETF, in four layouts (⌘1–4) beside an
+  order ticket. *Simple* lists one call or put to buy or sell per strike with its cost, breakeven, the move it needs and
+  its chance of profit, explained in plain words; *Chain* is the classic chain (calls left, puts right; a click on an ask
+  buys, on a bid sells); *Strategy* builds a strategy for what you expect (bullish, bearish, sideways, a big move:
+  spreads, iron condors, straddles …) around the price, with its profit and loss chart today and at expiry; *Positions*
+  shows the option positions with their P/L, Greeks, days left and a risk chart, and closes them. Expiries along the top
+  (the one nearest 30 days out picked first), implied and historical volatility and the expected move in the top bar.
+  The ticket shows max profit and loss, breakevens, chance of profit, delta and theta, and sends a limit order after a
+  Review; several legs go as one combo order. Option quotes need IB's US options market data (OPRA); order keys and
+  hotkeys don't work with this window in front.
 - **Charts window**: a second grid of the top 18 gainers (or any size you set). On the Forex list, its 1/2 button shows the pairs the grid has no room for, and 5D orders them by their range over the last 5 finished days (set once a day).
 - **Appearance**: candle and line colors, line styles, presets and saved window layouts.
 - **Confetti** over every screen when a LIVE trade opens (Settings › Trading).

@@ -61,6 +61,18 @@ struct TWZApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowBackgroundDragBehavior(.enabled)
         .defaultSize(width: 1400, height: 900)
+
+        Window(OptionsWindow.windowTitle, id: OptionsWindow.windowID) {
+            OptionsView()
+                .modifier(SideColorsFromSettings())
+                .environment(broker)
+                .environment(workspace)
+                .preferredColorScheme(.dark)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowBackgroundDragBehavior(.enabled)
+        .defaultSize(width: 1380, height: 860)
+        .keyboardShortcut("o", modifiers: [.command, .option])
     }
 }
 
