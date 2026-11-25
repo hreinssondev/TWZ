@@ -285,12 +285,15 @@ struct GridLayoutButtons: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     let window: GridLayout.Window
+    /// The grid sign before the numbers (off in the main window's top bar, where they sit by the view-set numbers).
+    var showsIcon = true
     @AppStorage private var columns: Int
     @AppStorage private var rows: Int
     @AppStorage private var mode: String
 
-    init(window: GridLayout.Window) {
+    init(window: GridLayout.Window, showsIcon: Bool = true) {
         self.window = window
+        self.showsIcon = showsIcon
         _columns = AppStorage(wrappedValue: window.defaultColumns, window.columnsKey)
         _rows = AppStorage(wrappedValue: window.defaultRows, window.rowsKey)
         _mode = AppStorage(wrappedValue: window.defaultMode ?? "", window.modeKey ?? "gridLayoutButtons.noMode")
@@ -298,11 +301,13 @@ struct GridLayoutButtons: View {
 
     var body: some View {
         HStack(spacing: 1) {
-            Image(systemName: "square.grid.2x2")
-                .font(.system(size: 9))
-                .foregroundStyle(Color.secondary.opacity(0.6))
-                .padding(.trailing, 2)
-                .help("Chart layouts: ⇧-click a number saves this window's grid (columns, rows and lines) there; a click or ⇧1–5 puts it back")
+            if showsIcon {
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.secondary.opacity(0.6))
+                    .padding(.trailing, 2)
+                    .help("Chart layouts: ⇧-click a number saves this window's grid (columns, rows and lines) there; a click or ⇧1–5 puts it back")
+            }
             ForEach(GridLayout.slots, id: \.self) { slot in
                 let saved = workspace.gridLayouts[window]?[slot]
                 let lit = workspace.activeGridLayout[window] == slot
