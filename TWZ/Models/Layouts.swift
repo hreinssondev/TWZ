@@ -4,7 +4,7 @@
 //
 //  Saved layouts (Settings › Layouts): the main window as it is, kept under a name and brought back
 //  with Load. A layout holds the panels' sizes (charts ↕ hotkeys, the right column, the lists, Orders /
-//  Positions / Round trips), one list or two and their column widths, the chart grid's size, column and
+//  Positions / Round trips), the lists' column widths, the chart grid's size, column and
 //  row lines, zoom and space, and every Appearance setting (colors, line styles, indicators, price
 //  axis), as an Appearance preset does. What's shown stays as it is on Load: the charts' stocks and
 //  timeframes, the list the grid follows and each list's scanner.
@@ -27,7 +27,7 @@ enum Layouts {
     /// as it is on Load.
     static let keys: [String] = {
         var keys = [
-            "bottomRowHeight", "sideWidth", "listSplit", ListPanel.singleKey, "ordersHeight",
+            "bottomRowHeight", "sideWidth", "listSplit", "ordersHeight",
             "ordersWidth", "ordersStacked", "positionsRow", "roundTripsSplit",
             MainGrid.columnsKey, MainGrid.rowsKey, MainGrid.zoomKey,
             "mainChartColumnSplits", "mainChartRowSplits", RightSpace.key,
@@ -79,11 +79,6 @@ extension Workspace {
         guard let values = Layouts.decode(layout.values) else { return }
         let defaults = UserDefaults.standard
 
-        // The one-list button would otherwise move the right column as it changes (see `ContentView`).
-        let singleKey = ListPanel.singleKey
-        if (values[singleKey] as? Bool ?? false) != defaults.bool(forKey: singleKey) {
-            layoutSkips.insert(singleKey)
-        }
         for k in Layouts.keys(loading: values) {
             if let v = values[k] { defaults.set(v, forKey: k) } else { defaults.removeObject(forKey: k) }
         }

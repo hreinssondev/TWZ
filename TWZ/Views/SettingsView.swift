@@ -636,7 +636,7 @@ private struct LayoutSettings: View {
             } header: {
                 Text("Save the current layout")
             } footer: {
-                Text("Panel sizes, one list or two and their columns, the chart grid's size, lines, zoom and space, and every Appearance setting (colors, line styles, indicators). Loading one leaves the charts' stocks and timeframes and the lists' scanners as they are.")
+                Text("Panel sizes, the lists' columns, the chart grid's size, lines, zoom and space, and every Appearance setting (colors, line styles, indicators). Loading one leaves the charts' stocks and timeframes and the lists' scanners as they are.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

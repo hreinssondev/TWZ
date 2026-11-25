@@ -28,9 +28,6 @@ struct ListPanel: View {
     @AppStorage private var scanner: ScannerKind
     @AppStorage private var tab: ListTab
     @AppStorage private var newsScope: NewsScope
-    /// One list across the lists' space instead of two (see `ContentView`); the button beside the
-    /// filters switches.
-    @AppStorage(ListPanel.singleKey) private var isSingle = false
     @AppStorage(MainGrid.timeframeKey) private var gridTimeframe: Timeframe = .m1
     @State private var showFilter = false
     @AppStorage private var lastWidth: Double
@@ -106,7 +103,6 @@ struct ListPanel: View {
                         }
                     }
 
-                    singleListButton
                     Button {
                         workspace.loadList(symbols, scan: scanSpec, timeframe: gridTimeframe, broker: broker)
                     } label: {
@@ -126,7 +122,6 @@ struct ListPanel: View {
                     .help("The selected chart's news")
                     tabLabel("All", isOpen: newsScope == .all) { newsScope = .all }
                         .help("Every headline, as it comes")
-                    singleListButton
                 }
             }
             .frame(height: 20)
@@ -208,22 +203,6 @@ struct ListPanel: View {
     private func syncNews() {
         guard tab == .news else { return broker.setNews(owner: panelId, symbol: nil, all: false) }
         broker.setNews(owner: panelId, symbol: newsScope == .stock ? workspace.targetSymbol : nil, all: newsScope == .all)
-    }
-
-    /// Merges the two lists into one, or splits them again.
-    private var singleListButton: some View {
-        Button {
-            isSingle.toggle()
-        } label: {
-            // A small dot, brighter while the lists are one.
-            Circle()
-                .fill(isSingle ? Color.primary.opacity(0.8) : Color.secondary.opacity(0.6))
-                .frame(width: 6, height: 6)
-                .frame(width: 16, height: 16)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(isSingle ? "Split into two lists" : "One list across both")
     }
 
     /// One of the top bar's tabs, bold while open.

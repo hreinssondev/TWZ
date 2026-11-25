@@ -15,9 +15,9 @@
 //  charts ↕ hotkeys, left column ↔ right column, list A ↔ list B, lists ↕ orders, and
 //  the Orders / Positions columns ↕ round trips. The account bar's Cols / Rows sliders size
 //  the chart grid, whose charts follow the top gainers (see `ChartGrid`); a ● where four charts meet
-//  drags that column and row line together. The button beside a list's filters makes lists A and B
-//  one list across their space (Top Gainers by default; it keeps its own scanner choice), or splits
-//  them again, and moves the right column as far right as their columns fit in full (dragged further,
+//  drags that column and row line together. Lists A and B can be one list across their space
+//  (Top Gainers by default; it keeps its own scanner choice; the `singleList` setting, which nothing
+//  switches any more), which moves the right column as far right as their columns fit in full (dragged further,
 //  lists clip their price columns, and each list's column header edges drag those widths). The hotkey buttons keep a
 //  fixed size while there's
 //  room (the free space around them changes); dragged shorter, they and the amount box shrink,
