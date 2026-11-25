@@ -342,6 +342,8 @@ final class Workspace {
     /// Counts the account bar's Resets: every main-window chart follows the grid's list again, on the
     /// top bar's timeframe.
     var gainerResets = 0
+    /// Counts the Charts window's Resets (⌘R there, see `resetChartsWindow`).
+    var chartsWindowResets = 0
     /// The list the main-window charts follow in place of the top gainers, from a list's load button
     /// or ⌘⇧ shortcut, until another list loads; Reset keeps it (nil: the gainers). Saved.
     var gridScan: ScanSpec? {

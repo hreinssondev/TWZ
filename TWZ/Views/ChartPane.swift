@@ -176,6 +176,15 @@ extension Workspace {
         gainerResets += 1
     }
 
+    /// ⌘R (or another Reset key) in the Charts window: its charts follow the top gainers again, none kept by
+    /// hand, at its Zoom slider's zoom. The main window's charts stay as they are.
+    func resetChartsWindow() {
+        secondaryPins = [:]
+        secondaryDisplaced = [:]
+        chartsWindowList = .gainers
+        chartsWindowResets += 1
+    }
+
     /// Loads a symbol into a chart, on `timeframe` if given, and (re)subscribes its data.
     func load(_ symbol: String, timeframe: Timeframe? = nil, into chart: ChartModel, broker: Broker) {
         let s = ForexPair.normalize(symbol)

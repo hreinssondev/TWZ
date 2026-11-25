@@ -31,7 +31,8 @@
 //  KEYS % in the top bar.
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`); with the Charts window in front,
-//  its charts follow that list instead, the main window's staying as they are.
+//  its charts follow that list instead, the main window's staying as they are; there the Reset keys reset that
+//  window alone.
 //  With the order shortcuts on, an order key (Settings › Order Keys, see `OrderKeys`) sends its order, once per
 //  press (a held key doesn't send another): by default ⌘1–9 buys and ⌥⌘1–9 sells short (modifiers set in Settings,
 //  see `Workspace.setNumberModifiers`) that many steps of the
@@ -169,6 +170,19 @@ struct TradingShortcuts: ViewModifier {
                             UserDefaults.standard.set(next.rawValue, forKey: SizeMode.storageKey)
                             broker.say(next == .dollars ? "KEYS $: the numbers are dollars, 1 is $1,000, 9 is $9,000"
                                                         : "KEYS %: the numbers are a share of the buying power, 1 is 20%, 4 is 80% (5–9 none)")
+                        }
+                        return nil
+                    }
+                    // In the Charts window, the Reset keys (⌘R, ⇧R outside a text field, ⌥R, ⌃R, ⌘⇧R, Settings' extra one)
+                    // reset that window alone (see `Workspace.resetChartsWindow`).
+                    if SecondaryCharts.isWindow(event.window), event.window?.attachedSheet == nil,
+                       (modifiers == .command || modifiers == .shift || modifiers == .option || modifiers == .control || modifiers == [.command, .shift])
+                        && event.charactersIgnoringModifiers?.lowercased() == "r"
+                        || workspace.resetShortcut.map({ KeyShortcut(event) == $0 }) == true {
+                        if event.window?.firstResponder is NSTextView, modifiers == .shift || KeyShortcut(event).isPlain { return event }
+                        if !event.isARepeat {
+                            workspace.resetChartsWindow()
+                            broker.say("Charts window reset: top gainers, every chart at the Zoom slider's zoom")
                         }
                         return nil
                     }

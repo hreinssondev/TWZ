@@ -13,6 +13,8 @@
 //  charts whose symbol dropped out load a new one.
 //  A symbol typed into a chart's field stays in that chart and cell, the stock it replaced leaving
 //  the charts meanwhile (so nothing else moves) and the gainers filling the other cells around it, until the top bar's Reset, the field emptied, or a smaller grid without that cell.
+//  ⌘R (or another of the main window's Reset keys) with this window in front resets it alone: the top gainers,
+//  no charts kept by hand, every chart's view back to the Zoom slider's.
 //  Clicking a chart loads its symbol into the main window's selected chart. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
@@ -220,6 +222,9 @@ struct SecondaryChartsView: View {
         // Another list: the charts still in its top N stay, the rest load its stocks.
         .onChange(of: workspace.chartsWindowList) {
             if !isPaused { start() }
+        }
+        .onChange(of: workspace.chartsWindowResets) {
+            workspace.resetViews(of: workspace.secondaryCharts, zoom: layout == .all ? allZoom : customZoom, broker: broker)
         }
         .onChange(of: layout) { applyZoom() }
         .onChange(of: allZoom) { zoomMoved(to: $1) }
