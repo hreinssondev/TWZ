@@ -30,7 +30,7 @@ enum OvernightCheck {
     static let defaultMinutes = 7
     /// Room kept on top of the shortfall when trimming, as a share of the overnight margin, so a move
     /// or a margin change overnight doesn't tip it over again.
-    static let reserve = 0.05
+    static let reserve = 0.10
 
     struct Trim: Identifiable, Equatable {
         var symbol: String

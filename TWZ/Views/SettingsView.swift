@@ -318,7 +318,7 @@ private struct TradingSettings: View {
                 Stepper("Minutes before the close: \(overnightMinutes)", value: $overnightMinutes, in: 1...60)
                     .disabled(!overnightCheck)
                 HStack {
-                    Text("With stock positions open, a banner over the charts from that many minutes before the close (16:00 ET, 13:00 ET on early closes; not on NYSE holidays) says whether they fit the margin IB asks for after the close (IB's look-ahead available funds and excess liquidity, asked again every 30 seconds), and if not, how many shares of each to sell or buy back: every stock cut by the same share, with 5% of the overnight margin to spare. Its Trim button sends those orders to IB (KEYS ON or SIM alike), limits a cent across the spread; the stop losses and take profits follow the smaller positions. Forex and options aren't trimmed.")
+                    Text("With stock positions open, a banner over the charts from that many minutes before the close (16:00 ET, 13:00 ET on early closes; not on NYSE holidays) says whether they fit the margin IB asks for after the close (IB's look-ahead available funds and excess liquidity, asked again every 30 seconds), and if not, how many shares of each to sell or buy back: every stock cut by the same share, with 10% of the overnight margin to spare. Its Trim button sends those orders to IB (KEYS ON or SIM alike), limits a cent across the spread; the stop losses and take profits follow the smaller positions. Forex and options aren't trimmed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
