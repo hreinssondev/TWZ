@@ -85,7 +85,6 @@ struct TradingShortcuts: ViewModifier {
                             : (event.keyCode == 54 || event.keyCode == 55) && flags.contains(.command)
                         if wentDown, flags == [.command, .function], event.window?.attachedSheet == nil {
                             workspace.orderShortcutsOn.toggle()
-                            workspace.keysOnByHand = workspace.orderShortcutsOn
                             workspace.launchModeChosen = true
                             broker.say(workspace.orderShortcutsOn ? "KEYS ON: order shortcuts go to IB, for real (⌘🌐: SIM)"
                                                                   : "SIM: order shortcuts trade what-if positions, nothing goes to IB (⌘🌐: KEYS ON)")

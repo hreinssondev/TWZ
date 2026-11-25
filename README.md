@@ -86,9 +86,8 @@ management in one window built for quick entries and exits.
   shows the option positions with their P/L, Greeks, days left and a risk chart, and closes them. Expiries along the top
   (the one nearest 30 days out picked first), implied and historical volatility and the expected move in the top bar.
   The ticket shows max profit and loss, breakevens, chance of profit, delta and theta, and sends a limit order after a
-  Review; several legs go as one combo order. In SIM, as at every launch, its orders are what-if trades (filled at once at
-  their price, never sent to IB, shown pink under Positions); they go to IB only once KEYS ON is turned on by hand (⌘🌐 or
-  the account badge), not when a live position turns it on at launch. Option quotes need IB's US options market data (OPRA); order keys and
+  Review; several legs go as one combo order. Its orders follow the main window's KEYS ON / SIM: in SIM they're what-if
+  trades (filled at once at their price, never sent to IB, shown pink under Positions). Option quotes need IB's US options market data (OPRA); order keys and
   hotkeys don't work with this window in front.
 - **Charts window**: a second grid of the top 18 gainers (or any size you set). On the Forex list, its 1/2 button shows the pairs the grid has no room for, and 5D orders them by their range over the last 5 finished days (set once a day).
 - **Appearance**: candle and line colors, line styles, presets and saved window layouts.

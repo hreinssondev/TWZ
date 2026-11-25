@@ -28,7 +28,6 @@ struct AccountBar: View {
                 // A click switches KEYS ON and SIM, as ⌘🌐 does.
                 AccountBadge(isLive: broker.isLivePort, isLit: workspace.orderShortcutsOn) {
                     workspace.orderShortcutsOn.toggle()
-                    workspace.keysOnByHand = workspace.orderShortcutsOn
                     workspace.launchModeChosen = true
                     broker.say(workspace.orderShortcutsOn ? "KEYS ON: order shortcuts go to IB, for real (⌘🌐: SIM)"
                                                           : "SIM: order shortcuts trade what-if positions, nothing goes to IB (⌘🌐: KEYS ON)")

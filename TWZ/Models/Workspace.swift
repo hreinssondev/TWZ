@@ -239,11 +239,9 @@ final class Workspace {
     var orderShortcutsOn = false
     /// KEYS ON or SIM has been settled since launch, by IB's positions coming in or by ⌘🌐. Not saved.
     var launchModeChosen = false
-    /// KEYS ON turned on by hand (⌘🌐 or the account badge), not by a live position at launch. Not saved.
-    var keysOnByHand = false
-    /// The Options window's orders go to IB: only with KEYS ON turned on by hand since launch; else they're
-    /// what-if trades (see `Broker.fillSimOption`).
-    var optionOrdersReal: Bool { orderShortcutsOn && keysOnByHand }
+    /// The Options window's orders go to IB with KEYS ON, as the order shortcuts do; in SIM they're what-if trades
+    /// (see `Broker.fillSimOption`).
+    var optionOrdersReal: Bool { orderShortcutsOn }
     /// The hotkey ⌘A sends; picked by clicking a hotkey button.
     var selectedHotkeyID: UUID? {
         didSet { defaults.set(selectedHotkeyID?.uuidString, forKey: "selectedHotkey") }
