@@ -9,9 +9,6 @@
 //  (simulated, never sent to IB, see `Broker.runSim`; ⌘⌫ closes the what-if trade). Positions and the charts show
 //  the real positions and orders and the what-if trades together either way.
 //  Cancelling (⌘A, ⌘Z, ⌥Z, ⌥<) works on real orders either way.
-//  ⇧ with a buy or sell order key or hotkey shortcut (⌥⌘⇧2, say) holds the order instead: shown on its chart and under
-//  Positions as if it had filled, in the Send order popup; ↩ sends it as shown (in SIM, as a what-if trade), Esc drops it
-//  (see `HeldOrder`). ⌘⇧3, 4 and 5 are macOS's screenshots unless turned off in System Settings › Keyboard Shortcuts.
 //  ⌥Z cancels the last order placed; ⌥< cancels every order in the selected chart's symbol,
 //  stop loss and take profit included. Matched by character, so ⌥< is the < key on Nordic
 //  keyboards (⌥⇧, on US ones).
@@ -96,18 +93,6 @@ struct TradingShortcuts: ViewModifier {
                     }
                     let modifiers = event.modifierFlags.intersection([.option, .command, .control, .shift])
                     let inMainWindow = event.window.map { $0 === NSApp.mainWindow && $0.attachedSheet == nil } ?? false
-                    // The Send order popup (an order held with ⇧, see `HeldOrder`): ↩ sends it, Esc drops it, also
-                    // while typing in a field.
-                    if broker.heldOrder != nil, event.window?.attachedSheet == nil {
-                        if event.keyCode == 36 || event.keyCode == 76, modifiers.isEmpty {
-                            if !event.isARepeat { broker.sendHeld() }
-                            return nil
-                        }
-                        if event.keyCode == 53 {
-                            broker.dropHeld()
-                            return nil
-                        }
-                    }
                     /// ⌘A (Hyper A, Hyper ⌫): every order in the selected chart's symbol, and its ⌃-click what-if; with no
                     /// chart selected, the last order placed, as ⌘Z and ⌥Z.
                     func cancelSymbolOrders() {
@@ -148,21 +133,6 @@ struct TradingShortcuts: ViewModifier {
                         if event.window?.firstResponder is NSTextView, KeyShortcut(event).isPlain { return event }
                         if !event.isARepeat { place(orderKey) }
                         return nil
-                    }
-                    // ⇧ with a buy or sell order key's or hotkey's shortcut (one ⇧ isn't part of, nor one the app uses):
-                    // the order, held in the Send order popup instead of sent (see `HeldOrder`).
-                    let pressed = KeyShortcut(event)
-                    if inMainWindow, pressed.shift, pressed.reservedFor == nil {
-                        var unshifted = pressed
-                        unshifted.shift = false
-                        if let hotkey = workspace.hotkeyOverriding(unshifted) ?? workspace.orderKey(for: unshifted),
-                           hotkey.action == .buy || hotkey.action == .sell {
-                            if event.window?.firstResponder is NSTextView, unshifted.isPlain { return event }
-                            if !event.isARepeat {
-                                broker.hold(hotkey, symbol: workspace.targetSymbol, sim: !workspace.orderShortcutsOn)
-                            }
-                            return nil
-                        }
                     }
                     let isReturn = event.keyCode == 36 || event.keyCode == 76      // Return or keypad Enter
                     // ⌘⇧↩: the selected hotkey button's order, or with none the order pad's, bought; ⌥⌘⇧↩ sells the pad's

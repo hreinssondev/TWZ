@@ -109,8 +109,6 @@ final class Broker {
     private(set) var protectiveOrders: [Int: Protective] = [:]
     /// What placed each order this app sent ("Mid", "Mkt", "⌥-click", "SL", …), by order id.
     private(set) var orderSources: [Int: String] = [:]
-    /// ⇧ with a buy or sell shortcut: the order waiting in the Send order popup (see `HeldOrder`).
-    private(set) var heldOrder: HeldOrder?
     /// What-if trades: simulated positions by symbol, never sent to IB (see `SimTrades.swift`). Saved.
     var simPositions: [String: SimPosition] = SimPosition.saved() {
         didSet {
@@ -523,39 +521,6 @@ final class Broker {
 
     func cancelAllOrders() {
         order { $0.cancelAllOrders() }
-    }
-
-    /// ⇧ with a buy or sell shortcut: `hotkey`'s order, held for the Send order popup instead of sent (see `HeldOrder`);
-    /// `sim` (KEYS off): ↩ makes it a what-if trade. Replaces one held before.
-    func hold(_ hotkey: Hotkey, symbol: String, sim: Bool) {
-        guard let hotkey = resolved(hotkey) else { return }
-        engine.perform { engine in
-            engine.run(hotkey, symbol: symbol, hold: { order in
-                Task { @MainActor [weak self] in
-                    var order = order
-                    order.sim = sim
-                    self?.heldOrder = order
-                }
-            })
-        }
-    }
-
-    /// ↩ in the Send order popup: the held order, as shown (in SIM a what-if trade of its size, at its hotkey's price).
-    func sendHeld() {
-        guard let h = heldOrder else { return }
-        heldOrder = nil
-        if h.sim {
-            placeSim(h.action, .shares(h.quantity), symbol: h.symbol, pricedAs: h.hotkey)
-        } else {
-            order { $0.submitHeld(h) }
-        }
-    }
-
-    /// Esc in the Send order popup (or its ✕, or a click on its line): drops the held order.
-    func dropHeld() {
-        guard let h = heldOrder else { return }
-        heldOrder = nil
-        say("\(h.symbol): held \(h.action) \(Fmt.shares(h.quantity)) not sent")
     }
 
     /// A hotkey's or order key's order, with KEYS ON (SIM, KEYS off, trades it as a what-if trade: see `runSim`).

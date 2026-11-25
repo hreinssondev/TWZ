@@ -57,10 +57,6 @@ management in one window built for quick entries and exits.
   regular hours too. Once per press, for real with KEYS ON, as what-if trades in SIM. A hotkey button given an
   order key's shortcut overrides that order key while it has it; deleted, or its shortcut changed, the order
   key works again.
-- **Hold with ⇧**: ⇧ added to a buy or sell order key or hotkey shortcut (⌥⌘⇧2, say) builds the order, size and
-  price as it would go in, but holds it: its chart shows a line at its price with hover P/L as if it had filled,
-  Positions lists it on top, and a Send order popup shows it. ↩ sends it as shown (in SIM, a what-if trade of that
-  size), Esc, its ✕ or a click on its line drops it. (⌘⇧3/4/5 are macOS's screenshots unless turned off.)
 - **What-if trades**: ⌃⌥⇧1–4 shorts $1,000 / $2,000 / $3,000 / 85% of the buying power
   of the selected chart's stock, simulated and never sent to IB; on the chart, an arrow, green for a long
   and red for a short, ringed in pink, points at each of its fills. It shows like a position, its symbol in pink,

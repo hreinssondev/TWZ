@@ -686,8 +686,6 @@ struct TradingChart: View {
                 // room to short shows less there) or a NOK amount. In dollars (a forex pair's at its currency's
                 // dollar rate).
                 guard let usd = broker.usdPerPriceUnit(chart.symbol) else { return nil }
-                // An order held with ⇧ first: what it would make or lose had it filled (see `HeldOrder`).
-                if let held = broker.heldOrder, held.symbol == chart.symbol { return held.pnl(at: price) * usd }
                 let sim = broker.simPositions[chart.symbol]
                 if simFirst, let sim { return sim.pnl(at: price) * usd }
                 if let p = broker.positions[chart.symbol], p.quantity != 0 { return (price - p.avgCost) * p.quantity * usd }
@@ -706,8 +704,6 @@ struct TradingChart: View {
             onCancelOrder: { id in
                 if id == WhatIf.lineId {
                     workspace.whatIfs[chart.symbol] = nil
-                } else if id == HeldOrder.lineId {
-                    broker.dropHeld()
                 } else if let index = TrendLines.index(ofLineId: id) {
                     // Double-clicking a trend line removes it.
                     var prices = workspace.trendLines[chart.symbol] ?? []
@@ -827,8 +823,6 @@ struct TradingChart: View {
 
     /// Hot pink: the system pink reads as red next to the stop loss line.
     static let whatIfColor = Color(red: 1.0, green: 0.25, blue: 0.8)
-    /// An order held with ⇧ for the Send order popup (see `HeldOrder`).
-    static let heldColor = Color(red: 0.2, green: 0.75, blue: 1.0)
 
     private var hasPosition: Bool { broker.positions[chart.symbol].map { $0.quantity != 0 } ?? false }
     private var hasSim: Bool { broker.simPositions[chart.symbol] != nil }
@@ -914,14 +908,6 @@ struct TradingChart: View {
             let valueNOK = broker.usdPerPriceUnit(chart.symbol).flatMap { usd in broker.usdNok.map { whatIf.shares * whatIf.price * usd * $0 } }
             lines.append(PriceLine(price: whatIf.price, color: Self.whatIfColor, label: "", orderId: WhatIf.lineId,
                                    movesAsideForLastPrice: true, chartText: valueNOK.map(OrderAmount.format) ?? "W",
-                                   cancelsOnClick: true))
-        }
-        if let held = broker.heldOrder, held.symbol == chart.symbol {
-            // Held with ⇧ (see `HeldOrder`): a line at its price as a position's, its side and size beside the
-            // price box; a click on it drops it.
-            lines.append(PriceLine(price: held.price, color: Self.heldColor, label: "", orderId: HeldOrder.lineId,
-                                   movesAsideForLastPrice: true,
-                                   chartText: "\(held.isBuy ? "B" : "S") \(Fmt.shares(held.quantity)) ↩?",
                                    cancelsOnClick: true))
         }
         for o in broker.orders.values where o.isActive && o.symbol == chart.symbol {

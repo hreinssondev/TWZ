@@ -509,8 +509,7 @@ struct OrdersPanel: View {
         let real = items.filter { !$0.isSim }, sim = items.filter(\.isSim)
         // Real positions over what-if trades: a row's height of space between them.
         let gap: Position? = sim.isEmpty ? nil : real.lazy.compactMap { if case .real(let p) = $0 { p } else { nil } }.first
-        if let held = broker.heldOrder { heldRow(held) }
-        if items.isEmpty, broker.heldOrder == nil { empty("No positions") }
+        if items.isEmpty { empty("No positions") }
         ForEach(real + sim) { item in
             switch item {
             case .real(let p): positionRow(p, tripOrders: openTripOrders[p.symbol])
@@ -597,44 +596,6 @@ struct OrdersPanel: View {
         .onTapGesture(count: 2) { workspace.focusPosition(symbol, broker: broker) }
         .help("What-if trade in \(symbol), simulated and never sent to IB; fees are IB's estimate in and out. "
               + "Double-click to show its chart.")
-        .rowStyle()
-    }
-
-    /// An order held with ⇧ for the Send order popup (see `HeldOrder`), laid out like a position as if it had filled,
-    /// its symbol in the held color: its P/L and value in NOK, shares and price, its order type. ✕ drops it.
-    private func heldRow(_ held: HeldOrder) -> some View {
-        let symbol = held.symbol
-        let last = broker.quote(symbol)?.last
-        let usd = broker.usdPerPriceUnit(symbol)
-        let pnl = last.flatMap { last in usd.flatMap { usd in broker.usdNok.map { held.pnl(at: last) * usd * $0 } } }
-        let valueNOK = usd.flatMap { usd in broker.usdNok.map { held.quantity * (last ?? held.price) * usd * $0 } }
-        return VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 4) {
-                symbolButton(symbol, color: TradingChart.heldColor, onDoubleClick: { workspace.focusPosition(symbol, broker: broker) })
-                Text(held.sim ? "held · SIM" : "held").foregroundStyle(TradingChart.heldColor)
-                Spacer(minLength: 2)
-                Text(pnl.map { Fmt.nok($0, signed: true, groupedFrom: Self.groupedFrom) } ?? "—")
-                    .foregroundStyle(sideColors.of((pnl ?? 0) >= 0))
-                Button {
-                    broker.dropHeld()
-                } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Drop the held order (Esc)")
-            }
-            HStack(spacing: 4) {
-                if let valueNOK { Text(Fmt.nok(valueNOK, groupedFrom: Self.groupedFrom)).foregroundStyle(sideColor(held.isBuy)) }
-                Text("\(Fmt.shares(held.signedQuantity, groupedFrom: Self.groupedFrom)) - \(Fmt.price(held.price, for: symbol))")
-                Text(held.typeLabel).foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-            }
-            .font(.system(size: 10).monospacedDigit())
-        }
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) { workspace.focusPosition(symbol, broker: broker) }
-        .help("Held with ⇧, not sent: ↩ sends it as shown\(held.sim ? " as a what-if trade (SIM)" : " to IB"), Esc drops it. "
-              + "P/L as if it had filled at \(Fmt.price(held.price, for: symbol)).")
         .rowStyle()
     }
 
