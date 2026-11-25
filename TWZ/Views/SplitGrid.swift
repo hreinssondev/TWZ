@@ -14,6 +14,9 @@ import SwiftUI
 struct SplitGrid<Item: Identifiable, Cell: View>: View {
     let columns: Int
     let rows: Int
+    /// Cells in each row, top first; nil: `columns` in each. A row with another count spreads its cells evenly across
+    /// the width, its own column lines not draggable.
+    let rowColumns: [Int]?
     let items: [Item]
     let gap: CGFloat
     /// Space around the grid, outside the outer cells.
@@ -25,11 +28,12 @@ struct SplitGrid<Item: Identifiable, Cell: View>: View {
     private static var minCellWidth: CGFloat { 80 }
     private static var minCellHeight: CGFloat { 60 }
 
-    init(columns: Int, rows: Int, items: [Item], gap: CGFloat, inset: CGFloat = 0,
+    init(columns: Int, rows: Int, rowColumns: [Int]? = nil, items: [Item], gap: CGFloat, inset: CGFloat = 0,
          columnSplits: Binding<SplitStore>, rowSplits: Binding<SplitStore>,
          @ViewBuilder cell: @escaping (Item) -> Cell) {
         self.columns = columns
         self.rows = rows
+        self.rowColumns = rowColumns
         self.items = items
         self.gap = gap
         self.inset = inset
@@ -47,12 +51,16 @@ struct SplitGrid<Item: Identifiable, Cell: View>: View {
             let xs = offsets(widths)
             let ys = offsets(heights)
 
+            let places = cellPlaces
             ZStack(alignment: .topLeading) {
-                ForEach(Array(items.prefix(columns * rows).enumerated()), id: \.element.id) { index, item in
-                    let column = index % columns, row = index / columns
+                ForEach(Array(items.prefix(places.count).enumerated()), id: \.element.id) { index, item in
+                    let place = places[index]
+                    let own = place.count == columns
+                    // A row of its own count: even widths across the grid's.
+                    let even = (geo.size.width - inset * 2 - gap * CGFloat(place.count - 1)) / CGFloat(place.count)
                     cell(item)
-                        .frame(width: widths[column], height: heights[row])
-                        .offset(x: xs[column], y: ys[row])
+                        .frame(width: own ? widths[place.column] : even, height: heights[place.row])
+                        .offset(x: own ? xs[place.column] : inset + CGFloat(place.column) * (even + gap), y: ys[place.row])
                 }
                 ForEach(0..<max(0, rows - 1), id: \.self) { row in
                     ForEach(0..<max(0, columns - 1), id: \.self) { column in
@@ -70,6 +78,14 @@ struct SplitGrid<Item: Identifiable, Cell: View>: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+        }
+    }
+
+    /// Each cell's column and row, and how many cells its row has, in reading order.
+    private var cellPlaces: [(column: Int, row: Int, count: Int)] {
+        let counts = rowColumns ?? Array(repeating: columns, count: rows)
+        return counts.prefix(rows).enumerated().flatMap { row, count in
+            (0..<count).map { (column: $0, row: row, count: count) }
         }
     }
 

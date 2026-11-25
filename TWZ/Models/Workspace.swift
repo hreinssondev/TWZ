@@ -141,9 +141,10 @@ final class Workspace {
     /// The main window's charts, one for each cell of the largest grid (see `ChartGrid`).
     let mainCharts: [ChartModel]
     let secondaryCharts: [ChartModel]
-    /// The main-window chart in each cell, in reading order, laid out for `mainColumns` columns.
+    /// The main-window chart in each cell, in reading order, laid out for `mainColumns` × `mainRows` (see `MainGrid.rowColumns`).
     var mainCells: [Int]
     var mainColumns: Int
+    var mainRows: Int
     /// The selected chart's id: a main-window chart or a Charts window one; the last one selected while none
     /// is (see `isChartSelected`). Hotkeys and order shortcuts go to its stock either way.
     var selectedChartID = 0 {
@@ -486,7 +487,8 @@ final class Workspace {
         let columns = MainGrid.columns(defaults.object(forKey: MainGrid.columnsKey) as? Int ?? 2)
         let rows = MainGrid.rows(defaults.object(forKey: MainGrid.rowsKey) as? Int ?? 2)
         mainColumns = columns
-        mainCells = Array(0..<columns * rows)
+        mainRows = rows
+        mainCells = Array(0..<MainGrid.cellCount(columns: columns, rows: rows))
 
         // Secondary charts start empty: the window fills them from the gainers scanner while it's
         // open and not paused, so nothing loads for them at launch.
@@ -583,8 +585,9 @@ final class Workspace {
 
         let pins = defaults.data(forKey: MainGrid.pinsKey)
             .flatMap { try? JSONDecoder().decode([MainGridPin].self, from: $0) } ?? []
-        for pin in pins where pin.column < columns && pin.row < rows {
-            let chart = mainCharts[mainCells[pin.row * columns + pin.column]]
+        for pin in pins {
+            guard let index = MainGrid.index(column: pin.column, row: pin.row, columns: columns, rows: rows) else { continue }
+            let chart = mainCharts[mainCells[index]]
             chart.symbol = pin.symbol
             chart.timeframe = pin.timeframe
             countLoad(of: chart)
@@ -610,8 +613,9 @@ final class Workspace {
     /// The charts set by hand, with their cell and stock.
     var mainGridPins: [MainGridPin] {
         mainCells.enumerated().compactMap { index, id in
-            guard manualChartIDs.contains(id), let chart = chart(id: id), !chart.symbol.isEmpty else { return nil }
-            return MainGridPin(column: index % mainColumns, row: index / mainColumns,
+            guard manualChartIDs.contains(id), let chart = chart(id: id), !chart.symbol.isEmpty,
+                  let place = MainGrid.place(of: index, columns: mainColumns, rows: mainRows) else { return nil }
+            return MainGridPin(column: place.column, row: place.row,
                                symbol: chart.symbol, timeframe: chart.timeframe, displaced: handDisplaced[id])
         }
     }

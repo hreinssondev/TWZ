@@ -2,7 +2,8 @@
 //  ChartGrid.swift
 //  TWZ
 //
-//  The main window's chart grid, 2×2 up to 8×4, sized by the Cols / Rows sliders in the account bar.
+//  The main window's chart grid, 2×2 up to 8×4, sized by the Cols / Rows sliders in the account bar; with 3 rows the
+//  bottom row holds 7 charts whatever the Cols slider says (see `MainGrid.rowColumns`).
 //  Like the Charts window, every chart follows the top gainers (its own scanner) in reading order:
 //  the first cell shows the top gainer, the next cell the second, and so on. When the ranking
 //  reshuffles, a chart whose stock is still in the top N moves to its new cell and nothing reloads;
@@ -44,6 +45,33 @@ enum MainGrid {
     static let scanKey = "mainGridScan"
     static let scannerOwner = "main-gainers"
 
+    /// With 3 rows the bottom row holds this many charts, whatever the Cols slider says.
+    static let threeRowBottomColumns = 7
+
+    /// Charts in each row, top first: `columns` in each, but the bottom row of 3 (see `threeRowBottomColumns`).
+    static func rowColumns(columns: Int, rows: Int) -> [Int] {
+        (0..<rows).map { rows == 3 && $0 == rows - 1 ? threeRowBottomColumns : columns }
+    }
+
+    static func cellCount(columns: Int, rows: Int) -> Int { rowColumns(columns: columns, rows: rows).reduce(0, +) }
+
+    /// The column and row of the cell at `index` in reading order.
+    static func place(of index: Int, columns: Int, rows: Int) -> (column: Int, row: Int)? {
+        var start = 0
+        for (row, count) in rowColumns(columns: columns, rows: rows).enumerated() {
+            if index < start + count { return (index - start, row) }
+            start += count
+        }
+        return nil
+    }
+
+    /// The reading-order index of the cell at `column`, `row`; nil when the grid has no such cell.
+    static func index(column: Int, row: Int, columns: Int, rows: Int) -> Int? {
+        let counts = rowColumns(columns: columns, rows: rows)
+        guard row >= 0, row < counts.count, column >= 0, column < counts[row] else { return nil }
+        return counts[..<row].reduce(0, +) + column
+    }
+
     /// The sliders' values, kept to the grid's range.
     static func columns(_ stored: Int) -> Int { min(max(stored, 2), maxColumns) }
     static func rows(_ stored: Int) -> Int { min(max(stored, 2), maxRows) }
@@ -68,7 +96,8 @@ struct ChartGrid: View {
     private var scan: ScanSpec { workspace.gridScan ?? SecondaryCharts.gainersScan }
 
     var body: some View {
-        SplitGrid(columns: columns, rows: rows, items: cells.compactMap(workspace.chart(id:)), gap: gap,
+        SplitGrid(columns: columns, rows: rows, rowColumns: MainGrid.rowColumns(columns: columns, rows: rows),
+                  items: cells.compactMap(workspace.chart(id:)), gap: gap,
                   columnSplits: $columnSplits, rowSplits: $rowSplits) { chart in
             ChartPane(chart: chart)
         }
@@ -124,7 +153,8 @@ struct ChartGrid: View {
 
     /// The workspace's cells, or while those are still laid out for the old size, the new size's.
     private var cells: [Int] {
-        workspace.mainColumns == columns && workspace.mainCells.count == columns * rows
+        workspace.mainColumns == columns && workspace.mainRows == rows
+            && workspace.mainCells.count == MainGrid.cellCount(columns: columns, rows: rows)
             ? workspace.mainCells : workspace.arrangedMainCells(columns: columns, rows: rows, gainers: gainers)
     }
 
@@ -144,14 +174,17 @@ struct ChartGrid: View {
 
 /// The main window's grid (see `ChartGrid`).
 extension Workspace {
-    /// The cells for a `columns` × `rows` grid. A chart set by hand keeps its column and row while
+    /// The cells for a `columns` × `rows` grid (the bottom row of 3 holding 7, see `MainGrid.rowColumns`). A chart set by
+    /// hand keeps its column and row while
     /// that cell's still there; the other charts fill the free cells best-ranked first, so those whose
     /// stock is still in the new top N stay; any cells left take charts that weren't shown.
     func arrangedMainCells(columns: Int, rows: Int, gainers: [String]) -> [Int] {
-        var cells = [Int?](repeating: nil, count: columns * rows)
+        var cells = [Int?](repeating: nil, count: MainGrid.cellCount(columns: columns, rows: rows))
         for (index, id) in mainCells.enumerated() where manualChartIDs.contains(id) {
-            let column = index % mainColumns, row = index / mainColumns
-            if column < columns, row < rows { cells[row * columns + column] = id }
+            if let old = MainGrid.place(of: index, columns: mainColumns, rows: mainRows),
+               let new = MainGrid.index(column: old.column, row: old.row, columns: columns, rows: rows) {
+                cells[new] = id
+            }
         }
         let following = ranked(mainCells.filter { !manualChartIDs.contains($0) }.compactMap(chart(id:)), by: gainers)
         let unshown = mainCharts.filter { !mainCells.contains($0.id) }
@@ -164,6 +197,7 @@ extension Workspace {
     func arrangeMainGrid(columns: Int, rows: Int, gainers: [String], broker: Broker) {
         mainCells = arrangedMainCells(columns: columns, rows: rows, gainers: gainers)
         mainColumns = columns
+        mainRows = rows
         let shown = Set(mainCells)
         for chart in mainCharts where !shown.contains(chart.id) {
             clear(chart, broker: broker)
