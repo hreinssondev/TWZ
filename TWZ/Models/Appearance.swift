@@ -11,13 +11,29 @@ import AppKit
 enum CandleTheme: String, CaseIterable, Identifiable {
     case teal = "Teal / Coral"
     case classic = "Green / Red"
-    case blueOrange = "Blue / Orange"
-    case cyanPink = "Cyan / Pink"
-    case mono = "Monochrome"
     /// TWZ-iOS's candle colors.
     case ios = "iOS Colors"
+    case emerald = "Emerald / Crimson"
+    case lime = "Lime / Scarlet"
+    case mint = "Mint / Rose"
+    case forest = "Forest / Brick"
+    case neon = "Neon Green / Neon Red"
+    case sage = "Sage / Terracotta"
     case custom = "Custom"
     var id: String { rawValue }
+
+    /// ⌃⇧1–9 picks the themes in Settings' order, ⌃⇧0 the tenth (Custom).
+    static func forShortcut(keyCode: UInt16) -> CandleTheme? {
+        let n = keyCode == 29 || keyCode == 82 ? 10 : OrderKeys.number(keyCode: keyCode)
+        guard let n, n <= allCases.count else { return nil }
+        return allCases[n - 1]
+    }
+
+    /// "⌃⇧1" … "⌃⇧9", "⌃⇧0".
+    var shortcut: String {
+        let n = (Self.allCases.firstIndex(of: self) ?? 0) + 1
+        return "⌃⇧\(n == 10 ? 0 : n)"
+    }
 
     static let storageKey = "candleTheme"
     static let customUpKey = "candleUpColor"
@@ -30,10 +46,13 @@ enum CandleTheme: String, CaseIterable, Identifiable {
         switch self {
         case .teal: (Color(red: 0.15, green: 0.65, blue: 0.60), Color(red: 0.94, green: 0.33, blue: 0.31))
         case .classic: (Color(red: 0.20, green: 0.75, blue: 0.35), Color(red: 0.90, green: 0.22, blue: 0.22))
-        case .blueOrange: (Color(red: 0.25, green: 0.55, blue: 0.95), Color(red: 0.98, green: 0.55, blue: 0.15))
-        case .cyanPink: (Color(red: 0.20, green: 0.80, blue: 0.90), Color(red: 0.95, green: 0.35, blue: 0.65))
-        case .mono: (Color(white: 0.90), Color(white: 0.45))
         case .ios: (Color(red: 0.15, green: 0.75, blue: 0.60), Color(red: 0.95, green: 0.30, blue: 0.35))
+        case .emerald: (Color(red: 0.00, green: 0.62, blue: 0.40), Color(red: 0.82, green: 0.10, blue: 0.22))
+        case .lime: (Color(red: 0.55, green: 0.86, blue: 0.20), Color(red: 1.00, green: 0.22, blue: 0.14))
+        case .mint: (Color(red: 0.45, green: 0.86, blue: 0.66), Color(red: 0.96, green: 0.46, blue: 0.52))
+        case .forest: (Color(red: 0.14, green: 0.52, blue: 0.27), Color(red: 0.72, green: 0.24, blue: 0.18))
+        case .neon: (Color(red: 0.00, green: 1.00, blue: 0.45), Color(red: 1.00, green: 0.10, blue: 0.32))
+        case .sage: (Color(red: 0.52, green: 0.70, blue: 0.52), Color(red: 0.82, green: 0.44, blue: 0.34))
         case .custom: (Color(hex: customUp) ?? Color(hex: Self.defaultUpHex)!,
                        Color(hex: customDown) ?? Color(hex: Self.defaultDownHex)!)
         }

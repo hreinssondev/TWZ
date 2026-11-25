@@ -266,6 +266,14 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
+                    // ⌃⇧1–9, 0: the candle colors, Settings' themes from the top (see `CandleTheme.forShortcut`).
+                    if modifiers == [.control, .shift], inMainWindow, let theme = CandleTheme.forShortcut(keyCode: event.keyCode) {
+                        if !event.isARepeat {
+                            UserDefaults.standard.set(theme.rawValue, forKey: CandleTheme.storageKey)
+                            broker.say("Candle colors: \(theme.rawValue) (\(theme.shortcut))")
+                        }
+                        return nil
+                    }
                     // ⌥⇧1–5: the top bar's view set or scale under that number, as a click on it.
                     if modifiers == [.option, .shift], inMainWindow, !SecondaryCharts.isWindow(event.window),
                        let slot = OrderKeys.number(keyCode: event.keyCode), ChartScale.slots.contains(slot) {
@@ -389,6 +397,9 @@ extension KeyShortcut {
         let k = key.lowercased()
         if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
             return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
+        }
+        if control, shift, !command, !option, let theme = CandleTheme.forShortcut(keyCode: keyCode) {
+            return "\(display) picks the candle colors \(theme.rawValue)"
         }
         if option, shift, !command, !control, let n = OrderKeys.number(keyCode: keyCode), ChartScale.slots.contains(n) {
             return "\(display) picks the top bar's view set or scale \(n)"
