@@ -451,7 +451,7 @@ struct ChartHeaderInfo: View {
     @ViewBuilder private func trailing(_ info: HeaderInfo, width: CGFloat) -> some View {
         let short = info.shortPower.map { Self.powerWidth($0.text) }
         let long = info.longPower.map { Self.powerWidth($0.text) }
-        let switchWidth = pickerStyle == .segmented ? 204 : Self.minimalSwitchWidth
+        let switchWidth = pickerStyle == .segmented ? (keepsSwitch ? Self.compactSegmentedWidth : Self.segmentedWidth) : Self.minimalSwitchWidth
         let menuWidth = Self.textWidth(chart.timeframe.rawValue, weight: .semibold) + 22
         if keepsSwitch {
             if total([short, long, switchWidth]) <= width {
@@ -486,6 +486,10 @@ struct ChartHeaderInfo: View {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: weight)
         return ceil((text as NSString).size(withAttributes: [.font: font]).width)
     }
+
+    /// The segmented switch's width, and the least it narrows to in the Charts window.
+    private static let segmentedWidth: CGFloat = 204
+    private static let compactSegmentedWidth: CGFloat = 150
 
     /// A power's text with its padding.
     private static func powerWidth(_ text: String) -> CGFloat { textWidth(text) + 10 }
@@ -522,7 +526,8 @@ struct ChartHeaderInfo: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .controlSize(.mini)
-            .frame(width: 204)
+            // The Charts window's narrower charts: it narrows down to `compactSegmentedWidth` before the menu.
+            .frame(minWidth: keepsSwitch ? Self.compactSegmentedWidth : Self.segmentedWidth, maxWidth: Self.segmentedWidth)
         case .minimal:
             TimeframePicker(selection: timeframe)
         }
