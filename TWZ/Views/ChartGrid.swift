@@ -410,12 +410,15 @@ extension Workspace {
     /// its timeframe), its right edge at the same time (or as far past the latest bar, while `source`'s
     /// is there), and its prices moved and squeezed alike. A stock with fewer bars ends up as far back as
     /// it goes, and loads older ones.
-    func matchViews(to source: ChartModel) {
+    /// `sameWindow`: the other charts in `source`'s own window instead, those adjusted by hand as `source` is (see
+    /// `ViewSync`).
+    func matchViews(to source: ChartModel, sameWindow: Bool = false) {
         let bars = source.bars
         // The time of the last bar on screen, while scrolled back.
         let edge: Date? = source.scrollBack > 0 && !bars.isEmpty
             ? bars[min(bars.count - 1, max(0, Int((Double(bars.count) - source.scrollBack).rounded()) - 1))].time : nil
-        for chart in mainCells.compactMap(chart(id:)) where chart !== source && !chart.symbol.isEmpty {
+        let charts = sameWindow && source.inChartsWindow ? secondaryCharts : mainCells.compactMap(chart(id:))
+        for chart in charts where chart !== source && !chart.symbol.isEmpty {
             let ratio = ChartScale.barRatio(from: source.timeframe, to: chart.timeframe)
             chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, source.visibleBars * ratio))
             if let edge, let first = chart.bars.first {
@@ -427,7 +430,7 @@ extension Workspace {
             }
             chart.priceShift = source.priceShift
             chart.priceScale = source.priceScale
-            chart.adjustedByHand = false
+            chart.adjustedByHand = sameWindow && source.adjustedByHand
         }
     }
 

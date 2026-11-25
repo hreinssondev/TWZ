@@ -158,6 +158,14 @@ enum GridZoom {
     }
 }
 
+/// Settings › Appearance › Chart views: on (the default), a chart's view moved by hand (dragged, swiped, pinched,
+/// ⌃-scaled or reset) moves every other chart in its window alike, as ⌥0 does (see `Workspace.matchViews`);
+/// the other window's charts stay as they are. Off, only that chart moves.
+enum ViewSync {
+    static let key = "viewSyncInWindow"
+    static let defaultOn = true
+}
+
 /// Settings › Appearance › Swiping: off (the default), a trackpad swipe pans and zooms the chart under the
 /// pointer and ⇧-, ⌘- or ⌥-swipe zooms every chart (the grid's zoom); on, the other way round (see
 /// `ScrollCatcher`). The mouse wheel and ⌃-swipe stay as they are.
@@ -195,7 +203,7 @@ enum AppearanceDefaults {
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
         TimeframeSwitch.keepViewKey, GridZoom.resetsAdjustedKey, NumberButtons.scalesKey,
         HeaderPerformance.freezeKey, HeaderPerformance.layoutKey, HeaderPerformance.perStockKey,
-        Swiping.zoomsAllKey,
+        Swiping.zoomsAllKey, ViewSync.key,
     ] + LineDashes.keys + LineDashes.dotsKeys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.

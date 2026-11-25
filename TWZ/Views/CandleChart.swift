@@ -6,7 +6,9 @@
 //  Trackpad: two-finger swipe left/right to pan (with momentum), up/down or pinch to zoom
 //  around the cursor; a diagonal swipe does both; with ⇧, ⌘ or ⌥ held (any of them, together too), a
 //  swipe moves the grid's Zoom slider instead (see `onZoomAll`), and with ⌃ (others too) it squeezes or
-//  stretches the price axis. Settings › Appearance › Swiping swaps the two: a swipe the grid's zoom, a
+//  stretches the price axis. With Settings › Appearance's view sync on, any view moved by hand (dragged, swiped,
+//  pinched, ⌃-scaled, reset) moves every other chart in the same window alike (see `ViewSync`).
+//  Settings › Appearance › Swiping swaps the two: a swipe the grid's zoom, a
 //  ⇧-, ⌘- or ⌥-swipe this chart.
 //  Mouse: wheel zooms, shift-wheel pans, ⌘- or ⌥-wheel the grid's zoom, ⌃-wheel the price axis.
 //  Drag pans freely, in time and price. Right-click resets the view, as does double-clicking
@@ -83,6 +85,8 @@ enum RightSpace {
 
 struct CandleChart: View {
     @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
+    @AppStorage(ViewSync.key) private var viewSync = ViewSync.defaultOn
     @Environment(\.sideColors) private var sideColors
     let chart: ChartModel
     var lines: [PriceLine] = []
@@ -276,6 +280,13 @@ struct CandleChart: View {
         chart.scrollBack = min(maxBack, max(-chart.visibleBars / 2, value))
         chart.adjustedByHand = true
         chart.pendingEdge = nil
+        viewChanged()
+    }
+
+    /// The view was moved by hand: with Settings › Appearance's view sync on, every other chart in this
+    /// window takes it (see `ViewSync`).
+    private func viewChanged() {
+        if viewSync { workspace.matchViews(to: chart, sameWindow: true) }
     }
 
     /// Positive points move the content right (revealing older bars).
@@ -299,6 +310,7 @@ struct CandleChart: View {
     private func scalePrices(by factor: Double) {
         chart.priceScale = min(20, max(0.05, chart.priceScale * factor))
         chart.adjustedByHand = true
+        viewChanged()
     }
 
     /// Latest bars at the right edge, default zoom, price range fitted to the bars again; no longer
@@ -309,6 +321,7 @@ struct CandleChart: View {
         chart.visibleBars = chart.defaultVisibleBars
         chart.priceShift = 0
         chart.priceScale = 1
+        viewChanged()
     }
 
     // MARK: Gestures
@@ -319,9 +332,9 @@ struct CandleChart: View {
             .onChanged { value in
                 let start = dragStart ?? (chart.scrollBack, chart.priceShift)
                 dragStart = start
-                setScrollBack(start.scroll + Double(value.translation.width / barWidth(plotWidth: plotWidth)))
                 // The shift is a fraction of the unscaled range; scaled, the content still follows the pointer.
                 chart.priceShift = start.shift + Double(value.translation.height / max(1, plotHeight)) * chart.priceScale
+                setScrollBack(start.scroll + Double(value.translation.width / barWidth(plotWidth: plotWidth)))
             }
             .onEnded { _ in dragStart = nil }
     }

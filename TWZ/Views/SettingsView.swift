@@ -740,6 +740,7 @@ private struct AppearanceSettings: View {
     @AppStorage(HeaderPerformance.layoutKey) private var headerLayoutByWidth = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.perStockKey) private var headerPerStock = HeaderPerformance.defaultOn
     @AppStorage(Swiping.zoomsAllKey) private var swipeZoomsAll = Swiping.defaultZoomsAll
+    @AppStorage(ViewSync.key) private var viewSync = ViewSync.defaultOn
 
     /// The selected chart's outline as it's drawn: the stored width is a third of it (see `SelectedOutline`).
     private var selectedOutline: Binding<Double> {
@@ -934,6 +935,12 @@ private struct AppearanceSettings: View {
                 .pickerStyle(.segmented)
             }
             Section("Chart views") {
+                Toggle("Moving one chart's view moves every chart in its window", isOn: $viewSync)
+                Text(viewSync
+                     ? "Dragging, swiping, pinching, ⌃-scaling or resetting a chart does the same to every other chart in that window (the same time on screen, prices moved alike); the other window's charts stay."
+                     : "Only the chart you move changes; ⌥0 or ⇧A gives the others its view.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Keep the view when switching timeframe", isOn: $keepViewOnTimeframeSwitch)
                 Text(keepViewOnTimeframeSwitch
                      ? "The same time stays on screen, the right edge where it was; only the candles change."
