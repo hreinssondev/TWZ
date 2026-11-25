@@ -241,8 +241,8 @@ final class Broker {
     }
 
     /// After the grid switched lists: a chart that kept its stock (in both lists) keeps its view under the
-    /// list it was in, and takes the one it was left at in this list, if any (else it stays as it is); one
-    /// not adjusted by hand then takes the lit scale. Charts that loaded a stock have done so already.
+    /// list it was in, and takes the one it was left at in this list, if any (else the default view: a list
+    /// doesn't take another's); one not adjusted by hand then takes the lit scale. Charts that loaded a stock have done so already.
     func adoptList(_ charts: [ChartModel]) {
         guard let list = viewList else { return }
         var changed = false
@@ -256,6 +256,9 @@ final class Broker {
             if let view {
                 if let zoom = view.zoom { chart.visibleBars = zoom }
                 chart.place = view.place
+            } else {
+                chart.visibleBars = chart.defaultVisibleBars
+                chart.place = ChartModel.Place()
             }
             chart.adjustedByHand = view?.manual == true
             if !chart.adjustedByHand, let gridScale {
@@ -428,12 +431,16 @@ final class Broker {
         } else if previous != key {
             // Another stock, or with Keep the view off another timeframe: where a chart of its window was
             // left on it, if anywhere (else the view stays as it is, at the latest bars on another
-            // timeframe); then a lit scale, but not over a view adjusted by hand.
+            // timeframe; in the main grid, coming from another list, the default view: a list doesn't take
+            // another's); then a lit scale, but not over a view adjusted by hand.
             let view = chartViews.view(for: .init(bars: key, inChartsWindow: window, list: list))
             chart.adjustedByHand = view?.manual == true
             if let view {
                 if let zoom = view.zoom { chart.visibleBars = zoom }
                 chart.place = view.place
+            } else if !window, previousList != list {
+                chart.visibleBars = chart.defaultVisibleBars
+                chart.place = ChartModel.Place()
             } else if previous.timeframe != key.timeframe {
                 chart.place = ChartModel.Place()
             }

@@ -10,7 +10,8 @@
 //  as it is (on another timeframe, the latest bars). Saved across relaunches; the top bar's Reset
 //  forgets the main window's on the top bar's timeframe, and right-click or double-click on a chart puts that one back to the
 //  default zoom at the latest bars, which is what's kept for it from then on.
-//  In the main grid each list keeps its own (see `Key.list`).
+//  In the main grid each list keeps its own (see `Key.list`): a stock with none kept in the list switched to starts at
+//  the default view (the Zoom slider's, at the latest bars, or the list's lit scale), not the view of the list left.
 //
 
 import Foundation
