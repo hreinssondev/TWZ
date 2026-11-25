@@ -293,9 +293,8 @@ struct ChartHeaderInfo: View {
     @AppStorage(HeaderPerformance.layoutKey) private var layoutByWidth = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.perStockKey) private var perStock = HeaderPerformance.defaultOn
     let chart: ChartModel
-    /// Keeps the timeframe switch (as the main window's charts show it) for as long as it fits, dropping the
-    /// buying and short selling power first; else the switch turns into a menu first.
-    var keepsSwitch = false
+    /// The Charts window's: the timeframe always as a menu ("15m ⌄"), as the main window's narrower charts show it.
+    var alwaysMenu = false
     /// The Charts window's headers with Settings' freezing on: drawn from `frozen` unless live.
     var freezesUnlessLive = false
 
@@ -414,12 +413,10 @@ struct ChartHeaderInfo: View {
                 // The short selling and buying power, then the timeframe switch. A chart too narrow for them
                 // (a big grid) gets a menu showing its timeframe instead of the switch, then drops the
                 // short selling power, then the buying power.
-                if keepsSwitch {
-                    // The Charts window's smaller charts drop the powers before the switch.
+                if alwaysMenu {
                     ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeSwitch }
-                        HStack(spacing: 4) { power(info.longPower); timeframeSwitch }
-                        timeframeSwitch
+                        HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeMenu }
+                        HStack(spacing: 4) { power(info.longPower); timeframeMenu }
                         timeframeMenu
                     }
                 } else {
@@ -451,15 +448,13 @@ struct ChartHeaderInfo: View {
     @ViewBuilder private func trailing(_ info: HeaderInfo, width: CGFloat) -> some View {
         let short = info.shortPower.map { Self.powerWidth($0.text) }
         let long = info.longPower.map { Self.powerWidth($0.text) }
-        let switchWidth = pickerStyle == .segmented ? (keepsSwitch ? Self.compactSegmentedWidth : Self.segmentedWidth) : Self.minimalSwitchWidth
+        let switchWidth = pickerStyle == .segmented ? Self.segmentedWidth : Self.minimalSwitchWidth
         let menuWidth = Self.textWidth(chart.timeframe.rawValue, weight: .semibold) + 22
-        if keepsSwitch {
-            if total([short, long, switchWidth]) <= width {
-                HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeSwitch }
-            } else if total([long, switchWidth]) <= width {
-                HStack(spacing: 4) { power(info.longPower); timeframeSwitch }
-            } else if switchWidth <= width {
-                timeframeSwitch
+        if alwaysMenu {
+            if total([short, long, menuWidth]) <= width {
+                HStack(spacing: 4) { power(info.shortPower); power(info.longPower); timeframeMenu }
+            } else if total([long, menuWidth]) <= width {
+                HStack(spacing: 4) { power(info.longPower); timeframeMenu }
             } else {
                 timeframeMenu
             }
@@ -487,9 +482,8 @@ struct ChartHeaderInfo: View {
         return ceil((text as NSString).size(withAttributes: [.font: font]).width)
     }
 
-    /// The segmented switch's width, and the least it narrows to in the Charts window.
+    /// The segmented switch's width.
     private static let segmentedWidth: CGFloat = 204
-    private static let compactSegmentedWidth: CGFloat = 150
 
     /// A power's text with its padding.
     private static func powerWidth(_ text: String) -> CGFloat { textWidth(text) + 10 }
@@ -526,8 +520,7 @@ struct ChartHeaderInfo: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .controlSize(.mini)
-            // The Charts window's narrower charts: it narrows down to `compactSegmentedWidth` before the menu.
-            .frame(minWidth: keepsSwitch ? Self.compactSegmentedWidth : Self.segmentedWidth, maxWidth: Self.segmentedWidth)
+            .frame(width: Self.segmentedWidth)
         case .minimal:
             TimeframePicker(selection: timeframe)
         }

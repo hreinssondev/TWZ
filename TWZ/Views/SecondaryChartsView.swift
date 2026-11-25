@@ -435,7 +435,7 @@ struct SecondaryChartPane: View {
                 symbolFocused = false
             }
             .frame(width: 70)
-            ChartHeaderInfo(chart: chart, keepsSwitch: true, freezesUnlessLive: freezesHeaders)
+            ChartHeaderInfo(chart: chart, alwaysMenu: true, freezesUnlessLive: freezesHeaders)
         }
         .padding(.horizontal, 8)
         .frame(height: 26)
