@@ -178,12 +178,11 @@ extension Workspace {
         gainerResets += 1
     }
 
-    /// ⌘R (or another Reset key) in the Charts window: its charts follow the top gainers again, none kept by
-    /// hand, at its Zoom slider's zoom. The main window's charts stay as they are.
+    /// ⌘R (or another Reset key) in the Charts window: its charts follow its list again, none kept by hand,
+    /// at its Zoom slider's zoom. Its list stays; the main window's charts stay as they are.
     func resetChartsWindow() {
         secondaryPins = [:]
         secondaryDisplaced = [:]
-        chartsWindowList = .gainers
         chartsWindowResets += 1
     }
 

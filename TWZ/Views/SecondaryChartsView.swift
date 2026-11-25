@@ -13,8 +13,8 @@
 //  charts whose symbol dropped out load a new one.
 //  A symbol typed into a chart's field stays in that chart and cell, the stock it replaced leaving
 //  the charts meanwhile (so nothing else moves) and the gainers filling the other cells around it, until the top bar's Reset, the field emptied, or a smaller grid without that cell.
-//  ⌘R (or another of the main window's Reset keys) with this window in front resets it alone: the top gainers,
-//  no charts kept by hand, every chart's view back to the Zoom slider's.
+//  ⌘R (or another of the main window's Reset keys) with this window in front resets it alone, on its list: no
+//  charts kept by hand, every chart's view back to the Zoom slider's.
 //  Clicking a chart selects it, as in the main window: hotkeys, order keys and the other trading shortcuts go to
 //  its stock, it streams tick by tick (⌘↩ keeps it fast), and its header shows the position, ⚡, S, SSR, buying
 //  power and its own timeframe switch. ⌥1–6 (⌃, ⇧ too) with this window in front sets every chart's timeframe here. With P on, or the

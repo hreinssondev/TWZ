@@ -184,7 +184,7 @@ struct TradingShortcuts: ViewModifier {
                         if event.window?.firstResponder is NSTextView, modifiers == .shift || KeyShortcut(event).isPlain { return event }
                         if !event.isARepeat {
                             workspace.resetChartsWindow()
-                            broker.say("Charts window reset: top gainers, every chart at the Zoom slider's zoom")
+                            broker.say("Charts window reset: every chart at the Zoom slider's zoom, on \(workspace.chartsWindowList.rawValue)")
                         }
                         return nil
                     }
