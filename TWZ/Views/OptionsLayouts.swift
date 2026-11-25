@@ -182,7 +182,7 @@ private struct SimpleRow: View {
 
     var body: some View {
         let q = broker.quote(contract.symbol)
-        let mid = q?.mid
+        let mid = q?.optionMark
         let buy = desk.simpleBuy
         let isCall = contract.right == .call
         let vol = OptionsDesk.vol(contract, broker: broker)
@@ -391,8 +391,9 @@ struct OptionsStrategyLayout: View {
                     PayoffChart(payoff: payoff, spot: spot, vol: desk.averageVol(broker))
                         .frame(minHeight: 240, maxHeight: .infinity)
                 } else {
-                    Text(book.isLoaded ? "Waiting for the legs' prices…" : "Loading the options…")
+                    Text(book.isLoaded ? desk.whyNoPayoff(broker, spot: spot) : "Loading the options…")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, minHeight: 240, maxHeight: .infinity)
                 }
                 OptionLegList(desk: desk, book: book)
@@ -485,7 +486,7 @@ struct OptionLegList: View {
                         Button { move(&leg, by: 1) } label: { Image(systemName: "chevron.right") }.buttonStyle(.borderless)
                     }
                     Spacer()
-                    Text(Fmt.price(broker.quote(leg.contract.symbol)?.mid)).font(.system(size: 12).monospacedDigit()).foregroundStyle(.secondary)
+                    Text(Fmt.price(broker.quote(leg.contract.symbol)?.optionMark)).font(.system(size: 12).monospacedDigit()).foregroundStyle(.secondary)
                     Button { desk.legs.removeAll { $0.id == leg.id } } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless)
                         .help("Take this leg out")
@@ -603,7 +604,7 @@ private struct PositionRow: View {
     var body: some View {
         let w = OptionsPositionsLayout.widths
         let q = broker.quote(contract.symbol)
-        let mark = q?.mid
+        let mark = q?.optionMark
         let qty = position.quantity
         let pnl = mark.map { ($0 - position.avgCost) * qty * OptionContract.multiplier }
         let pnlPercent = mark.flatMap { m in position.avgCost > 0 ? (m - position.avgCost) / position.avgCost * 100 * (qty > 0 ? 1 : -1) : nil }

@@ -125,6 +125,8 @@ final class OptionsDesk {
     var width = 1
     var shift = 0
     var reviewing = false
+    /// Why the strategy's legs couldn't all be built, if they couldn't.
+    var buildNote: String?
 
     static let strikeChoices = [4, 6, 8, 10, 12, 16, 20]
 
@@ -157,9 +159,15 @@ final class OptionsDesk {
     func buildStrategy(book: OptionBook, spot: Double?) {
         guard let center = book.centerIndex(spot: spot) else { return }
         var built: [OptionLeg] = []
+        buildNote = nil
         for leg in strategy.shape(width: width) {
             let i = min(max(center + shift + leg.offset, 0), book.strikes.count - 1)
-            guard let contract = book.contract(book.strikes[i], leg.right) else { return }
+            // That strike's call or put, else the nearest strike that has one.
+            let order = book.strikes.indices.sorted { abs($0 - i) < abs($1 - i) }
+            guard let contract = order.lazy.compactMap({ book.contract(book.strikes[$0], leg.right) }).first else {
+                buildNote = "IB lists no \(leg.right.name.lowercased())s for this expiry"
+                return
+            }
             if built.contains(where: { $0.contract == contract }) { continue }
             built.append(OptionLeg(contract: contract, buy: leg.buy))
         }
@@ -169,7 +177,7 @@ final class OptionsDesk {
 
     func spot(_ broker: Broker) -> Double? {
         guard let q = broker.quote(underlying) else { return nil }
-        return q.last ?? q.mid
+        return q.last ?? q.mid ?? q.prevClose
     }
 
     /// Option quotes to stream: the visible strikes' calls and puts (not in Positions), and the ticket's legs.
@@ -203,7 +211,7 @@ final class OptionsDesk {
     func netMid(_ broker: Broker) -> Double? {
         var sum = 0.0
         for leg in reducedLegs {
-            guard let mid = broker.quote(leg.contract.symbol)?.mid else { return nil }
+            guard let mid = broker.quote(leg.contract.symbol)?.optionMark else { return nil }
             sum += (leg.buy ? 1 : -1) * Double(leg.ratio) * mid
         }
         return sum
@@ -221,6 +229,19 @@ final class OptionsDesk {
     }
 
     var isCombo: Bool { legs.count > 1 }
+
+    /// What the P/L chart waits for, said: legs, the underlying's price, or a leg's (with IB's reason, if it refused it).
+    func whyNoPayoff(_ broker: Broker, spot: Double?) -> String {
+        if legs.isEmpty { return buildNote.map { "No legs: \($0)" } ?? "No legs yet: pick a strategy on the left" }
+        if spot == nil { return "No price for \(underlying) yet" }
+        let missing = legs.filter { broker.quote($0.contract.symbol)?.optionMark == nil }
+        guard let first = missing.first else { return "Working it out…" }
+        let names = missing.map(\.contract.short).joined(separator: ", ")
+        if let reason = broker.unavailableQuotes[first.contract.symbol] {
+            return "IB sends no price for the \(names): \(reason)\n(option quotes need IB's US options market data, OPRA)"
+        }
+        return broker.state == .connected ? "No price from IB yet for the \(names)" : "Not connected to IB"
+    }
 
     /// The order's limit a unit: as set by hand, else the mid, rounded to a price step.
     func price(_ broker: Broker) -> Double? {

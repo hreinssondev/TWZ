@@ -49,6 +49,13 @@ nonisolated struct Quote: Equatable {
         if let bid, let ask, bid > 0, ask > 0 { return (bid + ask) / 2 }
         return last
     }
+
+    /// An option's price for the math: the bid/ask mid, else its last trade, IB's model price or yesterday's close
+    /// (outside the session an option may have no bid or ask, nor a trade today).
+    var optionMark: Double? {
+        if let m = mid, m > 0 { return m }
+        return [greeks?.modelPrice, prevClose].compactMap { $0 }.first { $0 > 0 }
+    }
 }
 
 nonisolated struct Position: Identifiable, Equatable {

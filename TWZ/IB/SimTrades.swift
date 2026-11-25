@@ -201,7 +201,7 @@ extension Broker {
     /// come to `limit` a unit (a credit negative): each at its mid, moved alike towards the limit.
     func fillSimOptionCombo(_ legs: [(symbol: String, buy: Bool, ratio: Int)], units: Double, limit: Double) {
         guard state == .connected else { return say("Not connected to IB Gateway") }
-        let mids = legs.map { quotes[$0.symbol]?.mid }
+        let mids = legs.map { quotes[$0.symbol]?.optionMark }
         guard !mids.contains(where: { $0 == nil }) else { return say("No price yet for every leg, so no what-if trade") }
         let net = zip(legs, mids).reduce(0.0) { $0 + ($1.0.buy ? 1 : -1) * Double($1.0.ratio) * $1.1! }
         let shift = (limit - net) / Double(legs.map(\.ratio).reduce(0, +))
@@ -214,7 +214,7 @@ extension Broker {
     /// Closes an option's what-if trade at its mid (the Options window's Close).
     func closeSimOption(_ symbol: String) {
         guard simPositions[symbol] != nil else { return }
-        guard let mid = quotes[symbol]?.mid, mid > 0 else { return say("\(symbol): no price yet, so the what-if trade can't close") }
+        guard let mid = quotes[symbol]?.optionMark, mid > 0 else { return say("\(symbol): no price yet, so the what-if trade can't close") }
         closeSim(symbol, at: (mid * 100).rounded() / 100, why: "closed at the mid")
     }
 
