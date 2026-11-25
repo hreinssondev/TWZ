@@ -21,7 +21,7 @@
 //  power and its own timeframe switch. ⌥1–6 (⌃ too) with this window in front sets every chart's timeframe here, and ⇧1–5 (or a click on the header's layout numbers) loads one of its own saved chart layouts (see `GridLayout`).
 //  The header's 1–5 before them are this window's own view sets or scales, as the main window's top bar has (see
 //  `ScaleButtons`; ⌥⇧1–5 with this window in front). On the Forex list, 1/2 after them shows the pairs past those
-//  the grid has room for (2/2), and back. With P on, or the
+//  the grid has room for (2/2), and back, and 5D orders the pairs by their range over the last 5 finished days. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
 //
@@ -231,6 +231,8 @@ struct SecondaryChartsView: View {
     @State private var lastGainers: [String] = []
     /// The Forex list's second page: the pairs past those the grid has room for, in its cells instead.
     @State private var showsRest = false
+    /// The Forex list by each pair's range over its last 5 finished days, widest first (see `TradingEngine.setForexByRange`).
+    @AppStorage("secondaryChartsForexByRange") private var forexByRange = false
     @AppStorage(SecondaryCharts.timeframeKey) private var masterTimeframe: Timeframe = .m1
     @AppStorage("secondaryHeaderHeight") private var headerHeight: Double = 28
     @AppStorage(SecondaryCharts.pausedKey) private var isPaused: Bool = false
@@ -359,7 +361,7 @@ struct SecondaryChartsView: View {
                 ScaleButtons(window: .chartsWindow)
                 GridLayoutButtons(window: .chartsWindow, showsIcon: false)
             }
-            if workspace.chartsWindowList == .forex { restButton }
+            if workspace.chartsWindowList == .forex { forexButtons }
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
@@ -397,22 +399,35 @@ struct SecondaryChartsView: View {
         )
     }
 
-    /// Forex only: flips between the pairs that fit the grid and the ones past them.
-    private var restButton: some View {
-        Button {
-            showsRest.toggle()
-            if !isPaused { lastGainers = []; syncWithGainers() }
-        } label: {
-            Text(showsRest ? "2/2" : "1/2")
+    /// Forex only: 1/2 flips between the pairs that fit the grid and the ones past them; 5D orders them by 5-day range.
+    private var forexButtons: some View {
+        HStack(spacing: 3) {
+            forexButton(showsRest ? "2/2" : "1/2", lit: showsRest,
+                        help: showsRest ? "Back to the first pairs of the Forex list" : "The Forex list's pairs past those the grid has room for") {
+                showsRest.toggle()
+                if !isPaused { lastGainers = []; syncWithGainers() }
+            }
+            forexButton("5D", lit: forexByRange,
+                        help: forexByRange ? "Back to the Forex list's fixed order"
+                            : "The pairs by their range over the last 5 finished days, (high − low) / low, widest first; set once a day, after 17:00 ET") {
+                forexByRange.toggle()
+                broker.setForexByRange(forexByRange, owner: SecondaryCharts.scannerOwner)
+            }
+        }
+    }
+
+    private func forexButton(_ title: String, lit: Bool, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
                 .font(.system(size: 10).monospacedDigit())
-                .foregroundStyle(showsRest ? Color.primary : Color.secondary)
+                .foregroundStyle(lit ? Color.primary : Color.secondary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(showsRest ? 0.16 : 0.08)))
+                .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(lit ? 0.16 : 0.08)))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(showsRest ? "Back to the first pairs of the Forex list" : "The Forex list's pairs past those the grid has room for")
+        .help(help)
     }
 
     /// The Zoom slider moved, or a swipe moved it (that zoomed the charts already, see `zoomChartsWindow`).
@@ -431,6 +446,7 @@ struct SecondaryChartsView: View {
 
     private func start() {
         lastGainers = []
+        broker.setForexByRange(forexByRange, owner: SecondaryCharts.scannerOwner)
         broker.setScanner(SecondaryCharts.scan(workspace.chartsWindowList), owner: SecondaryCharts.scannerOwner)
         syncWithGainers()
     }
@@ -443,6 +459,7 @@ struct SecondaryChartsView: View {
             workspace.isChartSelected = false
         }
         broker.setScanner(nil, owner: SecondaryCharts.scannerOwner)
+        broker.setForexByRange(false, owner: SecondaryCharts.scannerOwner)
         lastGainers = []
         workspace.secondaryPins = [:]
         workspace.secondaryDisplaced = [:]

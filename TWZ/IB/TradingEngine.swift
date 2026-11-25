@@ -473,6 +473,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         ssrChaseSent.removeAll()
         ssrSymbolByReq.removeAll()
         prevCloseSymbolByReq.removeAll()
+        forexRangeSymbolByReq.removeAll()
+        newForexRanges.removeAll()
         scans.removeAll()
         fxReq = nil
         detailsSymbolByReq.removeAll()
@@ -550,6 +552,103 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         scheduleRestrictionCheck()
         syncNews()
         watchListNews()
+    }
+
+    // MARK: - Forex by 5-day range
+
+    /// Lists showing the Forex list by each pair's range over its last 5 finished days, (high − low) / low, widest
+    /// first. Fetched from IB's daily midpoint bars once per forex day (it ends 17:00 ET) and kept, in the defaults
+    /// too, until the next one ends: the order holds all day.
+    private var forexRangeOwners: Set<String> = []
+    private var forexRanges: [String: Double] = [:]
+    /// The forex day `forexRanges` are for (they cover the 5 before it).
+    private var forexRangesDay = ""
+    private var forexRangesLoaded = false
+    private var forexRangeSymbolByReq: [Int: String] = [:]
+    private var newForexRanges: [String: Double] = [:]
+    private var forexRangeCheckScheduled = false
+    private static let forexRangesKey = "forexRanges5Day"
+    private static let forexRangesDayKey = "forexRanges5DayDay"
+
+    /// The forex day under way, as "yyyyMMdd": it ends at 17:00 ET, so from then on it's the next date's.
+    private static func forexDayKey(_ date: Date = Date()) -> String {
+        MarketSession.dayKey(date.addingTimeInterval(7 * 3600))
+    }
+
+    /// A list showing the Forex list asks for it by 5-day range (true) or in its fixed order.
+    func setForexByRange(_ on: Bool, owner: String) {
+        guard forexRangeOwners.contains(owner) != on else { return }
+        if on { forexRangeOwners.insert(owner) } else { forexRangeOwners.remove(owner) }
+        if on {
+            requestForexRanges()
+            scheduleForexRangeCheck()
+        }
+        refreshForexScans()
+    }
+
+    /// `ForexPair.listed`, by 5-day range for an owner asking for that (pairs without one last, in list order).
+    private func forexOrder(for owner: String) -> [String] {
+        if !forexRangesLoaded {
+            forexRangesLoaded = true
+            forexRanges = defaults.dictionary(forKey: Self.forexRangesKey) as? [String: Double] ?? [:]
+            forexRangesDay = defaults.string(forKey: Self.forexRangesDayKey) ?? ""
+        }
+        guard forexRangeOwners.contains(owner), !forexRanges.isEmpty else { return ForexPair.listed }
+        return ForexPair.listed.enumerated().sorted { a, b in
+            switch (forexRanges[a.element], forexRanges[b.element]) {
+            case let (x?, y?) where x != y: x > y
+            case (_?, nil): true
+            case (nil, _?): false
+            default: a.offset < b.offset
+            }
+        }.map(\.element)
+    }
+
+    private func refreshForexScans() {
+        guard apiReady else { return }
+        for (owner, spec) in scanSpecs where spec.kind == .forex {
+            let symbols = Array(forexOrder(for: owner).prefix(spec.rows))
+            if scans[owner]?.symbols != symbols { scans[owner] = ScanResult(symbols: symbols, updated: Date()) }
+        }
+    }
+
+    /// Every listed pair's last two weeks of daily bars, unless this forex day's ranges are in (or on their way).
+    private func requestForexRanges() {
+        _ = forexOrder(for: "")
+        guard apiReady, !forexRangeOwners.isEmpty, forexRangesDay != Self.forexDayKey(),
+              forexRangeSymbolByReq.isEmpty else { return }
+        newForexRanges = [:]
+        for symbol in ForexPair.listed {
+            let reqId = makeReqId()
+            forexRangeSymbolByReq[reqId] = symbol
+            sendFields([20, reqId] + contract(symbol) + [false, "", "1 day", "2 W", 0, "MIDPOINT", 1, false, ""])
+        }
+    }
+
+    /// A pair's bars (or error) in: once every pair has answered, the new ranges replace the old.
+    private func forexRangeAnswered() {
+        guard forexRangeSymbolByReq.isEmpty else { return }
+        if !newForexRanges.isEmpty {
+            forexRanges = newForexRanges
+            forexRangesDay = Self.forexDayKey()
+            defaults.set(forexRanges, forKey: Self.forexRangesKey)
+            defaults.set(forexRangesDay, forKey: Self.forexRangesDayKey)
+        }
+        newForexRanges = [:]
+        refreshForexScans()
+    }
+
+    /// Every minute while a list wants the range order: a new forex day (or a failed fetch) fetches again.
+    private func scheduleForexRangeCheck() {
+        guard !forexRangeCheckScheduled else { return }
+        forexRangeCheckScheduled = true
+        queue.asyncAfter(deadline: .now() + 60) { [weak self] in
+            guard let self else { return }
+            self.forexRangeCheckScheduled = false
+            guard !self.forexRangeOwners.isEmpty else { return }
+            self.requestForexRanges()
+            self.scheduleForexRangeCheck()
+        }
     }
 
     // MARK: - Market data
@@ -917,7 +1016,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         guard apiReady, let spec = scanSpecs[owner] else { return }
         // IB has no forex scanner: the Forex list is `ForexPair.listed`, in its fixed order.
         if spec.kind == .forex {
-            scans[owner] = ScanResult(symbols: Array(ForexPair.listed.prefix(spec.rows)), updated: Date())
+            scans[owner] = ScanResult(symbols: Array(forexOrder(for: owner).prefix(spec.rows)), updated: Date())
+            if forexRangeOwners.contains(owner) { requestForexRanges() }
             return
         }
         let reqId = makeReqId()
@@ -2809,6 +2909,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if closeKeyByReq.removeValue(forKey: reqId) != nil { return }
         if ssrSymbolByReq.removeValue(forKey: reqId) != nil { return }
         if prevCloseSymbolByReq.removeValue(forKey: reqId) != nil { return }
+        if forexRangeSymbolByReq.removeValue(forKey: reqId) != nil { return forexRangeAnswered() }
         if let owner = scanOwnerByReq.removeValue(forKey: reqId) {
             scanReqByOwner[owner] = nil
             scans[owner, default: ScanResult()].error = text
@@ -2883,6 +2984,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 smartQuotes[symbol] = q
                 updateQuote(symbol)
             }
+            return
+        }
+        if let symbol = forexRangeSymbolByReq.removeValue(forKey: reqId) {
+            // Its last 5 finished forex days (daily bars' dates are "yyyyMMdd", the day each ends at 17:00 ET).
+            let today = Self.forexDayKey()
+            let days = stride(from: 5, to: min(f.count - 7, 5 + count * 8), by: 8)
+                .map { (day: String(f[$0].prefix(8)), high: f.double($0 + 2), low: f.double($0 + 3)) }
+                .filter { $0.day < today && $0.low > 0 }
+                .suffix(5)
+            if let high = days.map(\.high).max(), let low = days.map(\.low).min(), low > 0 {
+                newForexRanges[symbol] = (high - low) / low * 100
+            }
+            forexRangeAnswered()
             return
         }
         if let symbol = ssrSymbolByReq.removeValue(forKey: reqId) {
