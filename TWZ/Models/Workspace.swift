@@ -467,6 +467,7 @@ final class Workspace {
     @ObservationIgnored private var loads = 0
 
     init() {
+        TimeframePickerStyle.switchToMenuOnce()
         // Main charts start empty and fill from the gainers scanner, but for those set by hand,
         // which come back in their cells with their stock.
         let mainTimeframe = defaults.string(forKey: MainGrid.timeframeKey).flatMap(Timeframe.init(rawValue:)) ?? .m1

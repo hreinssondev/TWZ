@@ -249,6 +249,15 @@ enum TimeframePickerStyle: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static let storageKey = "timeframePickerStyle"
+    static let defaultStyle: TimeframePickerStyle = .menu
+
+    /// Once: the menu on every chart, whatever style was set before (Settings can pick another again).
+    static func switchToMenuOnce() {
+        let defaults = UserDefaults.standard, done = "timeframePickerStyleMenuOnce"
+        guard !defaults.bool(forKey: done) else { return }
+        defaults.set(TimeframePickerStyle.menu.rawValue, forKey: storageKey)
+        defaults.set(true, forKey: done)
+    }
 }
 
 /// Where the account bar sits: at the top, in the title bar beside the window buttons (default), or at

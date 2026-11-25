@@ -291,7 +291,7 @@ struct ChartHeaderInfo: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     @Environment(\.sideColors) private var sideColors
-    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
+    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = TimeframePickerStyle.defaultStyle
     @AppStorage(HeaderPerformance.layoutKey) private var layoutByWidth = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.perStockKey) private var perStock = HeaderPerformance.defaultOn
     let chart: ChartModel

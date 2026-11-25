@@ -722,7 +722,7 @@ private struct AppearanceSettings: View {
     @AppStorage(SideColors.customUpKey) private var sideUp = ""
     @AppStorage(SideColors.customDownKey) private var sideDown = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
-    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = .minimal
+    @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = TimeframePickerStyle.defaultStyle
     @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top
     @AppStorage(Indicators.vwapKey) private var showVWAP = true
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
