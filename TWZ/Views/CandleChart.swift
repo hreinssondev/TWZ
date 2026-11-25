@@ -7,7 +7,8 @@
 //  around the cursor; a diagonal swipe does both; with ⇧, ⌘ or ⌥ held (any of them, together too), a
 //  swipe moves the grid's Zoom slider instead (see `onZoomAll`), and with ⌃ (others too) it squeezes or
 //  stretches the price axis. With Settings › Appearance's view sync on, any view moved by hand (dragged, swiped,
-//  pinched, ⌃-scaled, reset) moves every other chart in the same window alike (see `ViewSync`).
+//  pinched, ⌃-scaled, reset) moves every other chart in the same window alike (see `ViewSync`); with ⇧, ⌘ or ⌥ held
+//  (a swipe: begun with them, under Swiping on) only this chart moves.
 //  Settings › Appearance › Swiping swaps the two: a swipe the grid's zoom, a
 //  ⇧-, ⌘- or ⌥-swipe this chart.
 //  Mouse: wheel zooms, shift-wheel pans, ⌘- or ⌥-wheel the grid's zoom, ⌃-wheel the price axis.
@@ -188,9 +189,9 @@ struct CandleChart: View {
                 if let id = orderLine(near: location, size: geo.size, singleClick: true) { onCancelOrder?(id) }
             }
             .background(ScrollCatcher(
-                onScroll: { dx, dy, location in
-                    if dx != 0 { pan(byPoints: dx, plotWidth: plotWidth) }
-                    if dy != 0 { zoom(by: exp(dy * 0.01), at: location.x, plotWidth: plotWidth) }
+                onScroll: { dx, dy, location, solo in
+                    if dx != 0 { pan(byPoints: dx, plotWidth: plotWidth, solo: solo) }
+                    if dy != 0 { zoom(by: exp(dy * 0.01), at: location.x, plotWidth: plotWidth, solo: solo) }
                 },
                 onPriceScale: { dy in scalePrices(by: exp(dy * 0.01)) },
                 onShiftScroll: onZoomAll.map { zoomAll in { d in zoomAll(exp(d * 0.01)) } },
@@ -275,27 +276,28 @@ struct CandleChart: View {
     }
 
     /// Clamped write: never past the oldest bars, and at most half a screen into the future.
-    private func setScrollBack(_ value: Double) {
+    private func setScrollBack(_ value: Double, solo: Bool? = nil) {
         let maxBack = max(0, Double(chart.bars.count) - 10)
         chart.scrollBack = min(maxBack, max(-chart.visibleBars / 2, value))
         chart.adjustedByHand = true
         chart.pendingEdge = nil
-        viewChanged()
+        viewChanged(solo: solo)
     }
 
     /// The view was moved by hand: with Settings › Appearance's view sync on, every other chart in this
-    /// window takes it (see `ViewSync`).
-    private func viewChanged() {
-        if viewSync { workspace.matchViews(to: chart, sameWindow: true) }
+    /// window takes it (see `ViewSync`), unless `solo` (by default: ⇧, ⌘ or ⌥ held now).
+    private func viewChanged(solo: Bool? = nil) {
+        let solo = solo ?? !NSEvent.modifierFlags.intersection([.shift, .command, .option]).isEmpty
+        if viewSync, !solo { workspace.matchViews(to: chart, sameWindow: true) }
     }
 
     /// Positive points move the content right (revealing older bars).
-    private func pan(byPoints points: CGFloat, plotWidth: CGFloat) {
-        setScrollBack(chart.scrollBack + Double(points / barWidth(plotWidth: plotWidth)))
+    private func pan(byPoints points: CGFloat, plotWidth: CGFloat, solo: Bool? = nil) {
+        setScrollBack(chart.scrollBack + Double(points / barWidth(plotWidth: plotWidth)), solo: solo)
     }
 
     /// Scales the number of visible bars by `factor`, keeping the bar under `anchorX` in place.
-    private func zoom(by factor: Double, at anchorX: CGFloat, plotWidth: CGFloat) {
+    private func zoom(by factor: Double, at anchorX: CGFloat, plotWidth: CGFloat, solo: Bool? = nil) {
         let x = min(plotWidth, max(0, anchorX))
         let rest = restOfDay
         let oldWidth = barWidth(plotWidth: plotWidth), oldPadding = rightPadding(rest)
@@ -303,7 +305,7 @@ struct CandleChart: View {
         chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, chart.visibleBars * factor))
         let newWidth = barWidth(plotWidth: plotWidth), newPadding = rightPadding(rest)
         let fromRight = Double(plotWidth - x)
-        setScrollBack(chart.scrollBack + (newPadding - oldPadding) + fromRight / oldWidth - fromRight / newWidth)
+        setScrollBack(chart.scrollBack + (newPadding - oldPadding) + fromRight / oldWidth - fromRight / newWidth, solo: solo)
     }
 
     /// Stretches (factor < 1) or squeezes (> 1) the price axis around the middle of the view.
@@ -976,9 +978,10 @@ struct CandleChart: View {
 /// It also reports every left click, takes ⌥-clicks (before SwiftUI's tap and drag gestures see them)
 /// and ⌥ key changes.
 private struct ScrollCatcher: NSViewRepresentable {
-    /// (dx, dy, location): dx in points (positive = content moves right), dy in points
-    /// (positive = zoom out), location in view coordinates with a top-left origin.
-    var onScroll: (CGFloat, CGFloat, CGPoint) -> Void
+    /// (dx, dy, location, solo): dx in points (positive = content moves right), dy in points
+    /// (positive = zoom out), location in view coordinates with a top-left origin; solo: a swipe begun with ⇧, ⌘
+    /// or ⌥ held under Settings › Appearance › Swiping on, so it moves this chart alone (see `ViewSync`).
+    var onScroll: (CGFloat, CGFloat, CGPoint, Bool) -> Void
     /// ⌃ + scroll, in points (positive = squeeze the prices, like zooming out).
     var onPriceScale: (CGFloat) -> Void
     /// ⌘, ⌥ or ⇧ + a trackpad swipe (⌘ or ⌥ + a mouse wheel), either way, in points (positive = zoom out); nil: it
@@ -1013,7 +1016,7 @@ private struct ScrollCatcher: NSViewRepresentable {
     }
 
     final class CatcherView: NSView {
-        var onScroll: ((CGFloat, CGFloat, CGPoint) -> Void)?
+        var onScroll: ((CGFloat, CGFloat, CGPoint, Bool) -> Void)?
         var onPriceScale: ((CGFloat) -> Void)?
         var onShiftScroll: ((CGFloat) -> Void)?
         var onMagnify: ((CGFloat, CGPoint) -> Void)?
@@ -1023,6 +1026,8 @@ private struct ScrollCatcher: NSViewRepresentable {
         /// pan and zoom this chart. A trackpad gesture keeps it through its momentum (see `handleScroll`).
         enum Gesture { case chart, gridZoom, priceScale }
         private var gesture = Gesture.chart
+        /// The chart gesture going on was begun (or taken over) with ⇧, ⌘ or ⌥ on a trackpad: Swiping on, this chart only.
+        private var solo = false
 
         static func gesture(for flags: NSEvent.ModifierFlags, precise: Bool) -> Gesture {
             let command = flags.contains(.command), option = flags.contains(.option)
@@ -1099,10 +1104,11 @@ private struct ScrollCatcher: NSViewRepresentable {
             // What the gesture does is set as it begins, and by keys pressed during it; its momentum
             // keeps doing the same, keys let go or not.
             let keys = Self.gesture(for: event.modifierFlags, precise: event.hasPreciseScrollingDeltas)
-            if !event.hasPreciseScrollingDeltas || event.phase.contains(.began) || event.phase.contains(.mayBegin) {
+            if !event.hasPreciseScrollingDeltas || event.phase.contains(.began) || event.phase.contains(.mayBegin)
+                || !event.modifierFlags.intersection([.option, .command, .control, .shift]).isEmpty {
                 gesture = keys
-            } else if !event.modifierFlags.intersection([.option, .command, .control, .shift]).isEmpty {
-                gesture = keys
+                solo = keys == .chart && event.hasPreciseScrollingDeltas
+                    && !event.modifierFlags.intersection([.option, .command, .shift]).isEmpty
             }
             // Whichever way it goes most (the system may turn a ⇧-swipe sideways).
             let d = abs(dy) >= abs(dx) ? dy : dx
@@ -1113,7 +1119,7 @@ private struct ScrollCatcher: NSViewRepresentable {
             case .gridZoom where onShiftScroll != nil:
                 if d != 0 { onShiftScroll?(d) }
             case .gridZoom, .chart:
-                onScroll?(dx, dy, location)
+                onScroll?(dx, dy, location, solo)
             }
         }
     }

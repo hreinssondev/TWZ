@@ -160,7 +160,8 @@ enum GridZoom {
 
 /// Settings › Appearance › Chart views: on (the default), a chart's view moved by hand (dragged, swiped, pinched,
 /// ⌃-scaled or reset) moves every other chart in its window alike, as ⌥0 does (see `Workspace.matchViews`);
-/// the other window's charts stay as they are. Off, only that chart moves.
+/// the other window's charts stay as they are; with ⇧, ⌘ or ⌥ held (a swipe begun with them, Swiping on), only that
+/// chart moves. Off, only that chart moves.
 enum ViewSync {
     static let key = "viewSyncInWindow"
     static let defaultOn = true

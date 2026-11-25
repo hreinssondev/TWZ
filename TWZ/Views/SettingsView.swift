@@ -937,7 +937,7 @@ private struct AppearanceSettings: View {
             Section("Chart views") {
                 Toggle("Moving one chart's view moves every chart in its window", isOn: $viewSync)
                 Text(viewSync
-                     ? "Dragging, swiping, pinching, ⌃-scaling or resetting a chart does the same to every other chart in that window (the same time on screen, prices moved alike); the other window's charts stay."
+                     ? "Dragging, swiping, pinching, ⌃-scaling or resetting a chart does the same to every other chart in that window (the same time on screen, prices moved alike); the other window's charts stay. Hold ⇧, ⌘ or ⌥ to move only the chart under the pointer."
                      : "Only the chart you move changes; ⌥0 or ⇧A gives the others its view.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
