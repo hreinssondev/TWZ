@@ -28,24 +28,15 @@ struct ChartPainter {
 
     mutating func clip(to path: Path) { clips.append(path) }
 
-    func fill(_ path: Path, with shading: Shading) { fill(path.cgPath, with: shading) }
-
-    /// A rounded rectangle as a Core Graphics path (SwiftUI's builds slowly), its corners no rounder than it allows.
-    static func roundedRect(_ rect: CGRect, radius: CGFloat) -> CGPath {
-        let r = max(0, min(radius, rect.width / 2, rect.height / 2))
-        guard rect.width > 0, rect.height > 0 else { return CGPath(rect: rect, transform: nil) }
-        return CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil)
-    }
-
-    func fill(_ path: CGPath, with shading: Shading) {
+    func fill(_ path: Path, with shading: Shading) {
         inState {
             switch shading {
             case .color(let color):
-                cg.addPath(path)
+                cg.addPath(path.cgPath)
                 cg.setFillColor(Self.cgColor(color))
                 cg.fillPath()
             case .linearGradient(let gradient, let start, let end):
-                cg.addPath(path)
+                cg.addPath(path.cgPath)
                 cg.clip()
                 let colors = gradient.stops.map { Self.cgColor($0.color) } as CFArray
                 var locations = gradient.stops.map { CGFloat($0.location) }
@@ -57,19 +48,13 @@ struct ChartPainter {
     }
 
     func stroke(_ path: Path, with shading: Shading, lineWidth: CGFloat = 1) {
-        stroke(path.cgPath, with: shading, style: StrokeStyle(lineWidth: lineWidth))
-    }
-
-    func stroke(_ path: Path, with shading: Shading, style: StrokeStyle) { stroke(path.cgPath, with: shading, style: style) }
-
-    func stroke(_ path: CGPath, with shading: Shading, lineWidth: CGFloat = 1) {
         stroke(path, with: shading, style: StrokeStyle(lineWidth: lineWidth))
     }
 
-    func stroke(_ path: CGPath, with shading: Shading, style: StrokeStyle) {
+    func stroke(_ path: Path, with shading: Shading, style: StrokeStyle) {
         guard case .color(let color) = shading else { return }
         inState {
-            cg.addPath(path)
+            cg.addPath(path.cgPath)
             cg.setStrokeColor(Self.cgColor(color))
             cg.setLineWidth(style.lineWidth)
             cg.setLineCap(style.lineCap)

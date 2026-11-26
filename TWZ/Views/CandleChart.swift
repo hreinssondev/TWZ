@@ -152,25 +152,6 @@ enum OlderBars {
     }
 }
 
-/// No trade today (a US market holiday, or before the first one): the price is yesterday's close.
-private struct YesterdayCloseBadge: View {
-    @Environment(Broker.self) private var broker
-    let chart: ChartModel
-    let trailing: CGFloat
-
-    var body: some View {
-        if broker.quote(chart.symbol)?.lastIsClose == true {
-            Text("Yesterday's close · no trades today")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.black)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Capsule().fill(Color.orange))
-                .padding(.top, 4).padding(.trailing, trailing)
-                .allowsHitTesting(false)
-        }
-    }
-}
-
 /// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
 enum RightSpace {
     static let key = "chartRightSpaceBars"
@@ -272,8 +253,16 @@ struct CandleChart: View {
             Color.clear
             .background(ChartCanvas { painter, size in draw(in: &painter, size: size) })
             .overlay(alignment: .topTrailing) {
-                // In a view of its own: it reads the quote, and read here every price tick would rebuild this view.
-                YesterdayCloseBadge(chart: chart, trailing: axisWidth + 4)
+                // No trade today (a US market holiday, or before the first one): the price is yesterday's close.
+                if broker.quote(chart.symbol)?.lastIsClose == true {
+                    Text("Yesterday's close · no trades today")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(Color.orange))
+                        .padding(.top, 4).padding(.trailing, axisWidth + 4)
+                        .allowsHitTesting(false)
+                }
             }
             .contentShape(Rectangle())
             .onContinuousHover { phase in
@@ -605,7 +594,7 @@ struct CandleChart: View {
 
         // Forex: a thin line where each trading day starts (17:00 New York, the FX rollover).
         if chart.timeframe.isIntraday, forex != nil {
-            let separators = CGMutablePath()
+            var separators = Path()
             for i in max(start, 1)..<end where Self.forexDay(bars[i].time) != Self.forexDay(bars[i - 1].time) {
                 let xx = x(i) - barWidth / 2
                 separators.move(to: CGPoint(x: xx, y: plot.minY))
@@ -622,31 +611,27 @@ struct CandleChart: View {
         let ticks = Self.niceTicks(lo: lo, hi: hi, count: max(2, Int(priceRect.height / labelSpacing)), minStep: minStep)
         let decimals = ticks.count > 1 ? Self.decimals(forStep: ticks[1] - ticks[0], atLeast: minDecimals) : minDecimals
         var priceLabels: [AxisLabels.Item] = []
-        // Grid lines only with them on in Settings (off, nothing to draw; the labels stay).
-        let hGrid = CGMutablePath()
         for tick in ticks {
             let yy = y(tick)
-            if showGrid {
-                hGrid.move(to: CGPoint(x: plot.minX, y: yy))
-                hGrid.addLine(to: CGPoint(x: plot.maxX, y: yy))
-            }
-            priceLabels.append(.init(text: Self.priceLabel(tick, decimals: decimals),
+            var path = Path()
+            path.move(to: CGPoint(x: plot.minX, y: yy))
+            path.addLine(to: CGPoint(x: plot.maxX, y: yy))
+            ctx.stroke(path, with: .color(gridColor), lineWidth: 1)
+            priceLabels.append(.init(text: tick.formatted(.number.precision(.fractionLength(decimals))),
                                      point: CGPoint(x: plot.maxX + 6, y: yy), anchor: .leading))
         }
-        if showGrid { ctx.stroke(hGrid, with: .color(gridColor), lineWidth: 1) }
         AxisLabels.draw(priceLabels, size: axisFontSize, color: labelNSColor, in: ctx)
 
         // Vertical grid + time labels, roughly every 90px.
         let labelEvery = max(1, Int((90 / barWidth).rounded(.up)))
         let timeLabelSpan = Double(labelEvery) * (chart.timeframe.barSeconds ?? 86_400)
         var timeLabels: [AxisLabels.Item] = []
-        let vGrid = CGMutablePath()
         for i in start..<end where i % labelEvery == 0 {
             let xx = x(i)
-            if showGrid {
-                vGrid.move(to: CGPoint(x: xx, y: plot.minY))
-                vGrid.addLine(to: CGPoint(x: xx, y: plot.maxY))
-            }
+            var path = Path()
+            path.move(to: CGPoint(x: xx, y: plot.minY))
+            path.addLine(to: CGPoint(x: xx, y: plot.maxY))
+            plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
             let previous = i >= labelEvery ? bars[i - labelEvery].time : nil
             timeLabels.append(.init(text: timeLabel(bars[i].time, previous: previous, spacing: timeLabelSpan),
                                     point: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1), anchor: .center))
@@ -655,22 +640,21 @@ struct CandleChart: View {
             for k in 0..<rest.slots where (bars.count + k) % labelEvery == 0 {
                 let xx = x(bars.count + k)
                 guard xx > plot.minX, xx < plot.maxX else { continue }
-                if showGrid {
-                    vGrid.move(to: CGPoint(x: xx, y: plot.minY))
-                    vGrid.addLine(to: CGPoint(x: xx, y: plot.maxY))
-                }
+                var path = Path()
+                path.move(to: CGPoint(x: xx, y: plot.minY))
+                path.addLine(to: CGPoint(x: xx, y: plot.maxY))
+                plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
                 let time = rest.from.addingTimeInterval(Double(k) * rest.barSeconds)
                 timeLabels.append(.init(text: timeLabel(time, previous: time.addingTimeInterval(-timeLabelSpan), spacing: timeLabelSpan),
                                         point: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1), anchor: .center))
             }
         }
-        if showGrid { plotCtx.stroke(vGrid, with: .color(gridColor), lineWidth: 1) }
         AxisLabels.draw(timeLabels, size: 9, color: labelNSColor, in: plotCtx)
 
         // Volume, at Settings' opacity.
         let maxVolume = visible.map(\.volume).max() ?? 0
         if maxVolume > 0, volumeOpacity > 0 {
-            let upVol = CGMutablePath(), downVol = CGMutablePath()
+            var upVol = Path(), downVol = Path()
             for i in start..<end {
                 let b = bars[i]
                 let h = CGFloat(b.volume / maxVolume) * volumeHeight
@@ -682,7 +666,7 @@ struct CandleChart: View {
         }
 
         // Candles: batch into two paths per color for speed.
-        let upWicks = CGMutablePath(), downWicks = CGMutablePath(), upBodies = CGMutablePath(), downBodies = CGMutablePath()
+        var upWicks = Path(), downWicks = Path(), upBodies = Path(), downBodies = Path()
         let bodyWidth = max(1, barWidth * 0.7)
         for i in start..<end {
             let b = bars[i]
@@ -800,7 +784,7 @@ struct CandleChart: View {
         let width = AxisLabels.width(text, size: 9, weight: .semibold) + 8
         let minX = min(max(plot.minX, x - width / 2), plot.maxX - width)
         let rect = CGRect(x: minX, y: plot.maxY + 1, width: width, height: timeAxisHeight - 1)
-        ctx.fill(ChartPainter.roundedRect(rect, radius: 3), with: .color(color))
+        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color))
         AxisLabels.draw([.init(text: text, point: CGPoint(x: rect.midX, y: rect.midY), anchor: .center)],
                         size: 9, weight: .semibold, color: color.isLight ? .black : .white, in: ctx)
     }
@@ -816,7 +800,7 @@ struct CandleChart: View {
     private func drawIndicators(in ctx: inout ChartPainter, bars: [Bar], start: Int, end: Int,
                                 x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
         func stroke(_ values: [Double?], color: Color, breakBefore: (Int) -> Bool = { _ in false }) {
-            let path = CGMutablePath()
+            var path = Path()
             var drawing = false
             for (offset, value) in values.enumerated() {
                 guard let value else { drawing = false; continue }
@@ -992,7 +976,7 @@ struct CandleChart: View {
             : CGRect(x: plot.maxX + 1, y: y - tagHeight / 2, width: max(axisWidth - 2, textSize.width + 8), height: tagHeight)
         let textAt = CGPoint(x: rect.minX + 4, y: y)
         if boxed, let progress {
-            let box = ChartPainter.roundedRect(rect, radius: 3)
+            let box = Path(roundedRect: rect, cornerRadius: 3)
             let split = rect.minX + rect.width * min(1, max(0, progress))
             let filled = CGRect(x: rect.minX, y: rect.minY, width: split - rect.minX, height: rect.height)
             let unfilled = CGRect(x: split, y: rect.minY, width: rect.maxX - split, height: rect.height)
@@ -1004,9 +988,9 @@ struct CandleChart: View {
             var dark = ctx
             dark.clip(to: Path(unfilled))
             drawText(.white, in: dark)
-            ctx.stroke(ChartPainter.roundedRect(rect.insetBy(dx: 0.5, dy: 0.5), radius: 3), with: .color(color.opacity(opacity)), lineWidth: 1)
+            ctx.stroke(Path(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 3), with: .color(color.opacity(opacity)), lineWidth: 1)
         } else {
-            if boxed { ctx.fill(ChartPainter.roundedRect(rect, radius: 3), with: .color(color.opacity(opacity))) }
+            if boxed { ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color.opacity(opacity))) }
             drawText(textColor, in: ctx)
         }
         return rect
@@ -1018,7 +1002,7 @@ struct CandleChart: View {
         let text = broker.usdNok.map { Fmt.nok(pnl * $0, signed: true, groupedFrom: 0) } ?? Fmt.amount(pnl, signed: true)
         let width = AxisLabels.width(text, size: axisFontSize, weight: .semibold) + 8
         let rect = CGRect(x: plot.maxX - width - 2, y: y - tagHeight / 2, width: width, height: tagHeight)
-        ctx.fill(ChartPainter.roundedRect(rect, radius: 3), with: .color(sideColors.of(pnl >= 0)))
+        ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(sideColors.of(pnl >= 0)))
         AxisLabels.draw([.init(text: text, point: CGPoint(x: rect.midX, y: y), anchor: .center)],
                         size: axisFontSize, weight: .semibold, color: .white, in: ctx)
     }
@@ -1047,41 +1031,18 @@ struct CandleChart: View {
 
     private static var timeLabels: [Int64: String] = [:]
 
-    /// A zone's offset from GMT over a stretch of time with no DST change in it: a bar's offset is a comparison
-    /// away while bars run through the same stretch.
-    private struct ZoneOffset {
-        var from = TimeInterval.infinity
-        var until = -TimeInterval.infinity
-        var seconds = 0
+    /// A zone's offset from GMT, looked up once per hour of time (it only changes on the hour, at DST).
+    private static func offset(of zone: TimeZone, at time: Date, cache: inout [Int: Int]) -> Int {
+        let hour = Int((time.timeIntervalSince1970 / 3600).rounded(.down))
+        if let cached = cache[hour] { return cached }
+        if cache.count > 50_000 { cache.removeAll(keepingCapacity: true) }
+        let offset = zone.secondsFromGMT(for: time)
+        cache[hour] = offset
+        return offset
     }
 
-    private static func offset(of zone: TimeZone, at time: Date, cache: inout ZoneOffset) -> Int {
-        let t = time.timeIntervalSince1970
-        if t >= cache.from, t < cache.until { return cache.seconds }
-        let seconds = zone.secondsFromGMT(for: time)
-        let until = zone.nextDaylightSavingTimeTransition(after: time)?.timeIntervalSince1970 ?? .infinity
-        // Back to the last change before it: a day at a time, then the exact hour isn't needed (bars before it miss
-        // the stretch and look up again).
-        var from = t
-        while from > t - 400 * 86_400, zone.secondsFromGMT(for: Date(timeIntervalSince1970: from - 86_400)) == seconds { from -= 86_400 }
-        cache = ZoneOffset(from: from, until: until, seconds: seconds)
-        return seconds
-    }
-
-    private static var localOffsets = ZoneOffset()
-    private static var newYorkOffsets = ZoneOffset()
-
-    /// Price axis labels, formatted once each (as `formatted`, the locale's separators).
-    private static var priceLabels: [Int64: String] = [:]
-
-    static func priceLabel(_ price: Double, decimals: Int) -> String {
-        let key = Int64((price * pow(10, Double(decimals))).rounded()) << 4 | Int64(decimals & 0xF)
-        if let cached = priceLabels[key] { return cached }
-        if priceLabels.count > 20_000 { priceLabels.removeAll(keepingCapacity: true) }
-        let label = price.formatted(.number.precision(.fractionLength(decimals)))
-        priceLabels[key] = label
-        return label
-    }
+    private static var localOffsets: [Int: Int] = [:]
+    private static var newYorkOffsets: [Int: Int] = [:]
 
     /// The local calendar day a time falls in, as a day count.
     private static func localDay(_ time: Date) -> Int {
