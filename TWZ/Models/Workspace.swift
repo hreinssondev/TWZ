@@ -436,8 +436,9 @@ final class Workspace {
 
     /// A swipe's (or wheel's, pinch's) zoom of every chart in a window, by the zoom's settings key, until it's saved:
     /// written once the zooming pauses, so the views watching the stored zoom (the grid, every chart pane) update
-    /// once rather than on every scroll event. The Zoom sliders show it meanwhile.
-    private(set) var liveZooms: [String: Double] = [:]
+    /// once rather than on every scroll event. The Zoom sliders catch up once it's saved.
+    /// Not observed: watching it, the slider (and the top bar around it) would update on every frame of a zoom.
+    @ObservationIgnored private(set) var liveZooms: [String: Double] = [:]
     @ObservationIgnored private var zoomSaves: [String: Task<Void, Never>] = [:]
 
     /// The zoom stored under `key`, or the one a swipe is still holding.

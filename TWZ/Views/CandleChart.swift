@@ -134,25 +134,21 @@ enum ZoomAnchor {
 /// Loads older bars once a chart's view reaches the oldest bar loaded: zoomed or scrolled out that far, or too little
 /// history to fill it (see `Broker.loadOlderBars`). Zoomed out as wide as the bars loaded counts too: zooming around the
 /// pointer leaves room for the future on the right, so the oldest bar can stay just off screen when the zoom stops at
-/// every bar loaded (a forex pair's day of minutes is more than `maxVisibleBars`).
-private struct OlderBarsLoader: View {
-    @Environment(Broker.self) private var broker
-    let chart: ChartModel
+/// every bar loaded (a forex pair's day of minutes is more than `maxVisibleBars`). Checked as the chart draws, so
+/// nothing in SwiftUI follows the zoom and place on every frame.
+enum OlderBars {
+    /// Each chart's bar count while its view reaches the oldest bar, -1 while it doesn't.
+    private static var shown: [ObjectIdentifier: Int] = [:]
 
-    /// The bar count while the view reaches the oldest bar (nil otherwise): older bars that still
-    /// leave it on screen ask for the page before them.
-    private var oldestBarShown: Int? {
+    static func check(_ chart: ChartModel, broker: Broker) {
         let count = Double(chart.bars.count)
-        let shows = count > 0 && (chart.scrollBack + chart.visibleBars >= count || chart.visibleBars >= count)
-        return shows ? chart.bars.count : nil
-    }
-
-    var body: some View {
-        Color.clear
-            .allowsHitTesting(false)
-            .onChange(of: oldestBarShown, initial: true) { _, shown in
-                if shown != nil { broker.loadOlderBars(chart) }
-            }
+        let reaches = count > 0 && (chart.scrollBack + chart.visibleBars >= count || chart.visibleBars >= count)
+        // Older bars that still leave it on screen ask for the page before them.
+        let now = reaches ? chart.bars.count : -1
+        let id = ObjectIdentifier(chart)
+        guard shown[id] != now else { return }
+        shown[id] = now
+        if reaches { DispatchQueue.main.async { broker.loadOlderBars(chart) } }
     }
 }
 
@@ -205,30 +201,34 @@ struct CandleChart: View {
     /// (not an order line's cancel) waits a double-click's time, so a third click can take it instead.
     var onTripleClick: ((Double) -> Void)?
 
-    @AppStorage(CandleTheme.storageKey) private var candleTheme: CandleTheme = .teal
+    private var candleTheme: CandleTheme { ChartSettings.shared.values.candleTheme }
 
     /// Read here rather than passed in, so each tick redraws only the chart, not the pane around it.
     private var lastPrice: Double? { broker.quote(chart.symbol)?.last }
-    @AppStorage(CandleTheme.customUpKey) private var customUp = CandleTheme.defaultUpHex
-    @AppStorage(CandleTheme.customDownKey) private var customDown = CandleTheme.defaultDownHex
-    @AppStorage(LineColors.hoverKey) private var hoverHex = ""
-    @AppStorage(LineColors.lastPriceKey) private var lastPriceHex = ""
-    @AppStorage(LineDashes.lastPriceKey) private var lastPriceDashed = LineDashes.defaultLastPrice
-    @AppStorage(LineColors.showLastPriceLineKey) private var showLastPriceLine = true
-    @AppStorage(LineColors.showGridKey) private var showGrid = false
-    @AppStorage(VolumeBars.opacityKey) private var volumeOpacity = VolumeBars.defaultOpacity
-    @AppStorage(LineDashes.hoverKey) private var hoverDashed = LineDashes.defaultHover
-    @AppStorage(LineDashes.dotsKey(LineDashes.lastPriceKey)) private var lastPriceDots = LineDashes.defaultDots(LineDashes.lastPriceKey)
-    @AppStorage(LineDashes.dotsKey(LineDashes.hoverKey)) private var hoverDots = LineDashes.defaultDots(LineDashes.hoverKey)
-    @AppStorage(Indicators.vwapKey) private var showVWAP = true
-    @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
-    @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
-    @AppStorage(Indicators.tradesKey) private var showTrades = false
-    @AppStorage(Indicators.lineWidthKey) private var indicatorWidth = Indicators.defaultLineWidth
-    @AppStorage(PriceAxis.fontSizeKey) private var axisFontSize = PriceAxis.defaultFontSize
-    @AppStorage(PriceAxis.labelSpacingKey) private var labelSpacing = PriceAxis.defaultLabelSpacing
-    @AppStorage(PriceAxis.lastPriceOpacityKey) private var lastPriceOpacity = PriceAxis.defaultLastPriceOpacity
-    @AppStorage(RightSpace.key) private var rightPaddingBars = RightSpace.defaultBars
+    private var customUp: String { ChartSettings.shared.values.customUp }
+    private var customDown: String { ChartSettings.shared.values.customDown }
+    private var hoverHex: String { ChartSettings.shared.values.hoverHex }
+    private var lastPriceHex: String { ChartSettings.shared.values.lastPriceHex }
+    private var lastPriceDashed: Bool { ChartSettings.shared.values.lastPriceDashed }
+    private var showLastPriceLine: Bool { ChartSettings.shared.values.showLastPriceLine }
+    private var showGrid: Bool { ChartSettings.shared.values.showGrid }
+    private var volumeOpacity: Double { ChartSettings.shared.values.volumeOpacity }
+    private var hoverDashed: Bool { ChartSettings.shared.values.hoverDashed }
+    private var lastPriceDots: Bool { ChartSettings.shared.values.lastPriceDots }
+    private var hoverDots: Bool { ChartSettings.shared.values.hoverDots }
+    private var showVWAP: Bool { ChartSettings.shared.values.showVWAP }
+    private var showFastSMA: Bool { ChartSettings.shared.values.showFastSMA }
+    private var showSlowSMA: Bool { ChartSettings.shared.values.showSlowSMA }
+    private var showTrades: Bool { ChartSettings.shared.values.showTrades }
+    private var indicatorWidth: Double { ChartSettings.shared.values.indicatorWidth }
+    private var axisFontSize: Double { ChartSettings.shared.values.axisFontSize }
+    private var labelSpacing: Double { ChartSettings.shared.values.labelSpacing }
+    private var lastPriceOpacity: Double { ChartSettings.shared.values.lastPriceOpacity }
+    /// The settings above are read once for every chart (see `ChartSettings`).
+    private var rightPaddingBars: Double {
+        get { ChartSettings.shared.values.rightPaddingBars }
+        nonmutating set { UserDefaults.standard.set(newValue, forKey: RightSpace.key) }
+    }
     @State private var hover: CGPoint?
     @State private var dragStart: (scroll: Double, shift: Double)?
     @State private var optionHeld = false
@@ -334,9 +334,6 @@ struct CandleChart: View {
                 }
             ))
         }
-        // In a view of its own: it reads the chart's zoom and place, which change on every frame of a zoom or pan, and
-        // read here they'd rebuild this whole view (gestures, hover, scroll catcher) every frame rather than only redraw it.
-        .background { OlderBarsLoader(chart: chart) }
     }
 
     // MARK: Viewport
@@ -533,6 +530,7 @@ struct CandleChart: View {
 
     private func draw(in ctx: inout ChartPainter, size: CGSize) {
         let bars = chart.bars
+        OlderBars.check(chart, broker: broker)
         // A chart theme: its own background behind everything, axes included.
         let scene = candleTheme.scene
         if let scene {
