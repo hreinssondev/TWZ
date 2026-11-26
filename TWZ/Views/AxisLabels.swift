@@ -53,7 +53,7 @@ enum AxisLabels {
 
     /// `items` in the monospaced-digit system font at `size`: a leading anchor starts the text at the point, centered
     /// on it vertically; a center anchor centers it there both ways (as `GraphicsContext.draw(_:at:anchor:)`).
-    static func draw(_ items: [Item], size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor, in ctx: GraphicsContext) {
+    static func draw(_ items: [Item], size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor, in ctx: ChartPainter) {
         guard !items.isEmpty else { return }
         ctx.withCGContext { cg in
             // The context runs top-down; flipped text draws upright in it.

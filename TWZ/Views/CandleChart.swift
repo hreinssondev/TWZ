@@ -247,11 +247,11 @@ struct CandleChart: View {
     var body: some View {
         GeometryReader { geo in
             let plotWidth = max(1, geo.size.width - axisWidth)
-            Canvas(rendersAsynchronously: false) { ctx, size in
-                let started = FrameMeter.shared.chartBegan()
-                draw(in: &ctx, size: size)
-                FrameMeter.shared.chartEnded(started)
-            }
+            // Read here, so a change in them redraws the chart; the rest it draws from (the chart's zoom and place,
+            // bars, prices) redraws it on its own, without SwiftUI (see `ChartCanvas`).
+            let _ = (hover, optionHeld, controlHeld, commandHeld)
+            Color.clear
+            .background(ChartCanvas { painter, size in draw(in: &painter, size: size) })
             .overlay(alignment: .topTrailing) {
                 // No trade today (a US market holiday, or before the first one): the price is yesterday's close.
                 if broker.quote(chart.symbol)?.lastIsClose == true {
@@ -531,7 +531,7 @@ struct CandleChart: View {
         return v.price(at: point.y)
     }
 
-    private func draw(in ctx: inout GraphicsContext, size: CGSize) {
+    private func draw(in ctx: inout ChartPainter, size: CGSize) {
         let bars = chart.bars
         // A chart theme: its own background behind everything, axes included.
         let scene = candleTheme.scene
@@ -543,8 +543,8 @@ struct CandleChart: View {
             let plot = plotRect(size: size)
             guard plot.width > 20, plot.height > 20 else { return }
             let msg = chart.isLoading ? "Loading…" : (chart.error ?? (chart.symbol.isEmpty ? "Enter a symbol" : "No data"))
-            ctx.draw(Text(msg).font(.system(size: 11)).foregroundStyle(scene.map { AnyShapeStyle($0.label) } ?? AnyShapeStyle(.secondary)),
-                     at: CGPoint(x: size.width / 2, y: size.height / 2))
+            AxisLabels.draw([.init(text: msg, point: CGPoint(x: size.width / 2, y: size.height / 2), anchor: .center)],
+                            size: 11, color: scene.map { NSColor($0.label) } ?? AxisLabels.secondary, in: ctx)
             return
         }
         let plot = v.plot, priceRect = v.priceRect, volumeHeight = v.volumeHeight
@@ -782,14 +782,13 @@ struct CandleChart: View {
     }
 
     /// A box on the time axis, centered on `x` (kept inside the plot's width), in the hover color.
-    private func drawTimeTag(in ctx: inout GraphicsContext, text: String, x: CGFloat, plot: CGRect, color: Color) {
-        let resolved = ctx.resolve(Text(text).font(.system(size: 9, weight: .semibold).monospacedDigit())
-            .foregroundStyle(color.isLight ? Color.black : Color.white))
-        let width = resolved.measure(in: CGSize(width: 300, height: 40)).width + 8
+    private func drawTimeTag(in ctx: inout ChartPainter, text: String, x: CGFloat, plot: CGRect, color: Color) {
+        let width = AxisLabels.width(text, size: 9, weight: .semibold) + 8
         let minX = min(max(plot.minX, x - width / 2), plot.maxX - width)
         let rect = CGRect(x: minX, y: plot.maxY + 1, width: width, height: timeAxisHeight - 1)
         ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color))
-        ctx.draw(resolved, at: CGPoint(x: rect.midX, y: rect.midY))
+        AxisLabels.draw([.init(text: text, point: CGPoint(x: rect.midX, y: rect.midY), anchor: .center)],
+                        size: 9, weight: .semibold, color: color.isLight ? .black : .white, in: ctx)
     }
 
     // MARK: Indicators
@@ -800,7 +799,7 @@ struct CandleChart: View {
 
     /// VWAP (intraday only, from 04:00 ET), SMA 9 and SMA 21 over the visible bars, each if turned on
     /// in Settings.
-    private func drawIndicators(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int,
+    private func drawIndicators(in ctx: inout ChartPainter, bars: [Bar], start: Int, end: Int,
                                 x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
         func stroke(_ values: [Double?], color: Color, breakBefore: (Int) -> Bool = { _ in false }) {
             var path = Path()
@@ -833,7 +832,7 @@ struct CandleChart: View {
     }
 
     /// The day's fills in this chart's symbol, on the visible bars.
-    private func drawTrades(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, bodyWidth: CGFloat,
+    private func drawTrades(in ctx: inout ChartPainter, bars: [Bar], start: Int, end: Int, bodyWidth: CGFloat,
                             x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
         let fills = broker.fills.values.filter { $0.symbol == chart.symbol && (showTrades || shownFillIds.contains($0.id)) }
         guard !fills.isEmpty else { return }
@@ -859,7 +858,7 @@ struct CandleChart: View {
     /// An arrow pointing right, its tip at `tip`: a fill's (see `drawTrades`, `drawPointers`). Thinly
     /// outlined dark, or with `outline`, ringed in that color: a rim with sharp corners, so the arrow keeps
     /// its shape, set off from the chart by a thin dark line.
-    private static func drawPointer(at tip: CGPoint, color: Color, outline: Color? = nil, in ctx: inout GraphicsContext) {
+    private static func drawPointer(at tip: CGPoint, color: Color, outline: Color? = nil, in ctx: inout ChartPainter) {
         let head: CGFloat = 5, halfWidth: CGFloat = 3.5, stem: CGFloat = 5, stemHalf: CGFloat = 1
         var arrow = Path()
         arrow.move(to: tip)
@@ -884,7 +883,7 @@ struct CandleChart: View {
     /// `pointers` on the visible bars, like the trade arrows, their tips just left of the candle. One after the
     /// last bar points at the last bar: its own bar isn't in yet, or never comes (a what-if trade with the
     /// market closed, on a weekend, say).
-    private func drawPointers(in ctx: inout GraphicsContext, bars: [Bar], start: Int, end: Int, bodyWidth: CGFloat,
+    private func drawPointers(in ctx: inout ChartPainter, bars: [Bar], start: Int, end: Int, bodyWidth: CGFloat,
                               x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
         for p in pointers {
             let latest = bars.last.flatMap { p.time >= $0.time ? bars.count - 1 : nil }
@@ -941,7 +940,7 @@ struct CandleChart: View {
     }
 
     /// `chartTag` is a second box in the chart, just left of the axis or of the tag when it's inside.
-    private func drawLine(in ctx: inout GraphicsContext, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, dotted: Bool = false, tag: String,
+    private func drawLine(in ctx: inout ChartPainter, y: CGFloat, plot: CGRect, color: Color, dashed: Bool, dotted: Bool = false, tag: String,
                           tagOpacity: Double = 1, tagInside: Bool = false, chartTag: String? = nil, showsLine: Bool = true,
                           showsTag: Bool = true, lineStart: CGFloat? = nil, progress: Double? = nil, lineWidth: CGFloat = 1) {
         if showsLine {
@@ -964,14 +963,14 @@ struct CandleChart: View {
     /// `progress` (0–1, an order's fill): the box starts black, outlined in its color, and fills with it
     /// from the left that far, its text white on the black part.
     @discardableResult
-    private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
+    private func drawTag(in ctx: inout ChartPainter, text: String, y: CGFloat, plot: CGRect, color: Color,
                          opacity: Double = 1, inside: Bool = false, insideRight: CGFloat? = nil, progress: Double? = nil) -> CGRect {
         let boxed = !PriceAxis.hidesLastPriceBox(opacity)
         let textColor: NSColor = boxed && opacity >= 0.5 && color.isLight ? .black : .white
         // Core Text from lines kept between frames (see `AxisLabels`).
         let fontSize = axisFontSize
         let textSize = CGSize(width: AxisLabels.width(text, size: fontSize, weight: .semibold), height: 0)
-        func drawText(_ color: NSColor, in ctx: GraphicsContext) {
+        func drawText(_ color: NSColor, in ctx: ChartPainter) {
             AxisLabels.draw([.init(text: text, point: textAt, anchor: .leading)], size: fontSize, weight: .semibold, color: color, in: ctx)
         }
         let rect = inside
@@ -1001,14 +1000,13 @@ struct CandleChart: View {
 
     /// The P/L at the hovered price, in a green (gain) or red (loss) tag just left of the price axis:
     /// whole NOK at USD.NOK (dollars and cents without a rate).
-    private func drawPnLTag(in ctx: inout GraphicsContext, pnl: Double, y: CGFloat, plot: CGRect) {
+    private func drawPnLTag(in ctx: inout ChartPainter, pnl: Double, y: CGFloat, plot: CGRect) {
         let text = broker.usdNok.map { Fmt.nok(pnl * $0, signed: true, groupedFrom: 0) } ?? Fmt.amount(pnl, signed: true)
-        let resolved = ctx.resolve(Text(text)
-            .font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(.white))
-        let width = resolved.measure(in: CGSize(width: 300, height: 40)).width + 8
+        let width = AxisLabels.width(text, size: axisFontSize, weight: .semibold) + 8
         let rect = CGRect(x: plot.maxX - width - 2, y: y - tagHeight / 2, width: width, height: tagHeight)
         ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(sideColors.of(pnl >= 0)))
-        ctx.draw(resolved, at: CGPoint(x: rect.midX, y: y))
+        AxisLabels.draw([.init(text: text, point: CGPoint(x: rect.midX, y: y), anchor: .center)],
+                        size: axisFontSize, weight: .semibold, color: .white, in: ctx)
     }
 
     private static func sessionTint(_ phase: MarketSession.Phase, scene: ChartScene?) -> Color? {
