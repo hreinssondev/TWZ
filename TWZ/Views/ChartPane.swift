@@ -354,25 +354,7 @@ struct ChartHeaderInfo: View {
                 .background(Capsule().fill(sideColors.of(p.quantity > 0).opacity(0.25)))
             }
 
-            // A what-if trade (simulated, see `SimTrades.swift`): "SIM LONG 23 322 +452", its value and
-            // P/L in NOK like a position's, outlined in the what-if color.
-            if let sim = info.sim {
-                let last = broker.quote(sim.symbol)?.last
-                let usd = broker.usdPerPriceUnit(sim.symbol)
-                let valueNOK = usd.flatMap { usd in broker.usdNok.map { abs(sim.quantity) * (last ?? sim.avgCost) * usd * $0 } }
-                let pnl = last.flatMap { broker.simPnLNOK(sim, at: $0) }
-                HStack(spacing: 4) {
-                    Text("SIM \(sim.isLong ? "LONG" : "SHORT") \(valueNOK.map { Fmt.nok($0, groupedFrom: 0) } ?? Fmt.shares(abs(sim.quantity)))")
-                    if let pnl {
-                        Text(Fmt.nok(pnl, signed: true, groupedFrom: 0)).foregroundStyle(sideColors.of(pnl >= 0))
-                    }
-                }
-                .help("What-if trade, simulated and never sent to IB: \(Fmt.shares(abs(sim.quantity))) @ "
-                      + "\(Fmt.price(sim.avgCost, for: sim.symbol)). ⌃-click the chart for its stop loss or take profit; ⌘⌫ closes it.")
-                .font(.system(size: 10, weight: .semibold).monospacedDigit())
-                .padding(.horizontal, 5).padding(.vertical, 1)
-                .overlay(Capsule().strokeBorder(TradingChart.whatIfColor.opacity(0.8)))
-            }
+            // A what-if trade (SIM) shows no badge here: its P/L is in the hover and its lines on the chart.
 
             // Tick-by-tick: a fast chart (⌘↩, filled ⚡) streams its trades; the selected chart its
             // trades and bid/ask (outlined ⚡ unless also fast). Lit while trades stream, dim offline
