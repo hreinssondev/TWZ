@@ -195,8 +195,8 @@ final class Broker {
     /// chart's view belongs to.
     @ObservationIgnored var viewList: String?
     @ObservationIgnored private var loadedLists: [Int: String] = [:]
-    /// The Charts window's lit scale (see `Workspace.chartsWindowActiveScale`): every chart there loading a stock takes it.
-    @ObservationIgnored var chartsWindowScale: ChartScale?
+    /// Each Charts window's lit scale (see `ChartsWindowState.activeScale`): every chart there loading a stock takes it.
+    @ObservationIgnored var chartsWindowScales: [ChartsWin: ChartScale] = [:]
     /// The zoom set by hand, trumping `gridScale`'s (see `Workspace.manualZoom`).
     @ObservationIgnored var gridZoomOverride: Double?
     @ObservationIgnored private var chartViewsSave: Task<Void, Never>?
@@ -204,8 +204,8 @@ final class Broker {
     /// Reset: these charts' window forgets where its charts were left (see `ChartViews`), on `timeframe`
     /// only if given; the main window only in the grid's list, the other lists keeping theirs.
     func forgetChartViews(of charts: [ChartModel], timeframe: Timeframe? = nil) {
-        for window in Set(charts.map(\.inChartsWindow)) {
-            chartViews.forget(inChartsWindow: window, list: window ? nil : viewList, timeframe: timeframe)
+        for window in Set(charts.map(\.windowIndex)) {
+            chartViews.forget(window: window, list: window > 0 ? nil : viewList, timeframe: timeframe)
         }
         chartViewsChanged()
     }
@@ -216,26 +216,26 @@ final class Broker {
             let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
             let list = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
             chartViews.keep(zoom: chart.visibleBars, place: chart.place, manual: chart.adjustedByHand,
-                            for: .init(bars: key, inChartsWindow: chart.inChartsWindow, list: list))
+                            for: .init(bars: key, window: chart.windowIndex, list: list))
         }
         chartViewsChanged()
     }
 
     /// The main window's kept views (saving a view set).
-    var mainChartViews: [ChartViews.Key: ChartViews.View] { chartViews.entries(inChartsWindow: false) }
+    var mainChartViews: [ChartViews.Key: ChartViews.View] { chartViews.entries(window: 0) }
 
-    /// The Charts window's kept views (saving its view set).
-    var chartsWindowViews: [ChartViews.Key: ChartViews.View] { chartViews.entries(inChartsWindow: true) }
+    /// A Charts window's kept views (saving its view set).
+    func chartsWindowViews(_ win: ChartsWin) -> [ChartViews.Key: ChartViews.View] { chartViews.entries(window: win.rawValue) }
 
-    /// The Charts window's kept views become a view set's.
-    func replaceChartsWindowViews(with views: [ChartViews.Key: ChartViews.View]) {
-        chartViews.replace(inChartsWindow: true, with: views)
+    /// A Charts window's kept views become a view set's.
+    func replaceChartsWindowViews(_ win: ChartsWin, with views: [ChartViews.Key: ChartViews.View]) {
+        chartViews.replace(window: win.rawValue, with: views)
         chartViewsChanged()
     }
 
     /// The main window's kept views become a view set's.
     func replaceMainChartViews(with views: [ChartViews.Key: ChartViews.View]) {
-        chartViews.replace(inChartsWindow: false, with: views)
+        chartViews.replace(window: 0, with: views)
         chartViewsChanged()
     }
 
@@ -244,7 +244,7 @@ final class Broker {
         guard !chart.symbol.isEmpty else { return }
         let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
         let list = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
-        guard let view = chartViews.view(for: .init(bars: key, inChartsWindow: chart.inChartsWindow, list: list)) else { return }
+        guard let view = chartViews.view(for: .init(bars: key, window: chart.windowIndex, list: list)) else { return }
         if let zoom = view.zoom { chart.visibleBars = zoom }
         chart.place = view.place
         chart.adjustedByHand = view.manual == true
@@ -258,7 +258,7 @@ final class Broker {
             let list = chart.inChartsWindow ? nil : viewList
             if let list { loadedLists[chart.id] = list }
             let view = chartViews.view(for: .init(bars: .init(symbol: chart.symbol, timeframe: chart.timeframe),
-                                                  inChartsWindow: chart.inChartsWindow, list: list))
+                                                  window: chart.windowIndex, list: list))
             chart.visibleBars = view?.zoom ?? zoom
             chart.place = view?.place ?? ChartModel.Place()
             chart.adjustedByHand = view?.manual == true
@@ -276,8 +276,8 @@ final class Broker {
             guard old != list else { continue }
             let bars = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
             chartViews.keep(zoom: chart.visibleBars, place: chart.place, manual: chart.adjustedByHand,
-                            for: .init(bars: bars, inChartsWindow: false, list: old))
-            let view = chartViews.view(for: .init(bars: bars, inChartsWindow: false, list: list))
+                            for: .init(bars: bars, window: 0, list: old))
+            let view = chartViews.view(for: .init(bars: bars, window: 0, list: list))
             if let view {
                 if let zoom = view.zoom { chart.visibleBars = zoom }
                 chart.place = view.place
@@ -300,8 +300,8 @@ final class Broker {
     /// adjusted by hand any more.
     func forgetChartAdjustments(of charts: [ChartModel]) {
         for chart in charts { chart.adjustedByHand = false }
-        for window in Set(charts.map(\.inChartsWindow)) {
-            chartViews.forgetManual(inChartsWindow: window, list: window ? nil : viewList)
+        for window in Set(charts.map(\.windowIndex)) {
+            chartViews.forgetManual(window: window, list: window > 0 ? nil : viewList)
         }
         chartViewsChanged()
     }
@@ -316,7 +316,7 @@ final class Broker {
             let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
             let list = chart.inChartsWindow ? nil : loadedLists[chart.id] ?? viewList
             chartViews.keep(zoom: chart.visibleBars, place: chart.place, manual: chart.adjustedByHand,
-                            for: .init(bars: key, inChartsWindow: chart.inChartsWindow, list: list))
+                            for: .init(bars: key, window: chart.windowIndex, list: list))
         }
         chartViewsSave?.cancel()
         chartViews.save()
@@ -432,7 +432,7 @@ final class Broker {
         let window = chart.inChartsWindow
         if previous != key {
             chartViews.keep(zoom: chart.visibleBars, place: chart.place, manual: chart.adjustedByHand,
-                            for: .init(bars: previous, inChartsWindow: window, list: previousList))
+                            for: .init(bars: previous, window: chart.windowIndex, list: previousList))
             chartViewsChanged()
         }
         chart.pendingEdge = nil
@@ -463,7 +463,7 @@ final class Broker {
             // left on it, if anywhere (else the view stays as it is, at the latest bars on another
             // timeframe; in the main grid, coming from another list, the default view: a list doesn't take
             // another's); then a lit scale, but not over a view adjusted by hand.
-            let view = chartViews.view(for: .init(bars: key, inChartsWindow: window, list: list))
+            let view = chartViews.view(for: .init(bars: key, window: chart.windowIndex, list: list))
             chart.adjustedByHand = view?.manual == true
             if let view {
                 if let zoom = view.zoom { chart.visibleBars = zoom }
@@ -478,7 +478,9 @@ final class Broker {
                 gridScale.apply(to: chart)
                 if let gridZoomOverride { chart.visibleBars = gridZoomOverride }
             }
-            if window, !chart.adjustedByHand, let chartsWindowScale { chartsWindowScale.apply(to: chart) }
+            if window, !chart.adjustedByHand, let scale = ChartsWin.of(chartID: chart.id).flatMap({ chartsWindowScales[$0] }) {
+                scale.apply(to: chart)
+            }
         }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         var spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)

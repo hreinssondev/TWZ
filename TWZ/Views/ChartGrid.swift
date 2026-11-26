@@ -465,7 +465,8 @@ extension Workspace {
         // The time of the last bar on screen, while scrolled back.
         let edge: Date? = source.scrollBack > 0 && !bars.isEmpty
             ? bars[min(bars.count - 1, max(0, Int((Double(bars.count) - source.scrollBack).rounded()) - 1))].time : nil
-        let charts = sameWindow && source.inChartsWindow ? secondaryCharts : mainCells.compactMap(chart(id:))
+        let charts = sameWindow ? ChartsWin.of(chartID: source.id).map { chartsWindow($0).charts } ?? mainCells.compactMap(chart(id:))
+            : mainCells.compactMap(chart(id:))
         for chart in charts where chart !== source && !chart.symbol.isEmpty {
             let ratio = ChartScale.barRatio(from: source.timeframe, to: chart.timeframe)
             chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, source.visibleBars * ratio))

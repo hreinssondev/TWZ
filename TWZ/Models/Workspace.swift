@@ -55,6 +55,8 @@ final class ChartModel: Identifiable {
     /// The Charts window's charts (see `Workspace.secondaryCharts`) have ids from this on.
     static let chartsWindowFirstID = 100
     var inChartsWindow: Bool { Self.isChartsWindow(id) }
+    /// 0 in the main window, else its Charts window's number (see `ChartsWin`).
+    var windowIndex: Int { id / 100 }
     static func isChartsWindow(_ id: Int) -> Bool { id >= chartsWindowFirstID }
 
     /// The view's place: how far back from the latest bar, and moved and zoomed up or down.
@@ -140,7 +142,11 @@ nonisolated struct GridPlace: Codable, Equatable {
 final class Workspace {
     /// The main window's charts, one for each cell of the largest grid (see `ChartGrid`).
     let mainCharts: [ChartModel]
-    let secondaryCharts: [ChartModel]
+    /// The Charts windows' state, the first's then the second's (see `ChartsWindowState`).
+    let chartsWindows: [ChartsWindowState]
+    func chartsWindow(_ win: ChartsWin) -> ChartsWindowState { chartsWindows[win.rawValue - 1] }
+    /// Every Charts window's charts.
+    var secondaryCharts: [ChartModel] { chartsWindows.flatMap(\.charts) }
     /// The main-window chart in each cell, in reading order, laid out for `mainColumns` × `mainRows` (see `MainGrid.rowColumns`).
     var mainCells: [Int]
     var mainColumns: Int
@@ -182,7 +188,7 @@ final class Workspace {
                 return "\(s.display) is already the order key \"\(key.label)\""
             }
             if resetShortcut == s { return "\(s.display) is the extra Reset shortcut" }
-            if chartsWindowShortcut == s { return "\(s.display) shows and hides the Charts window" }
+            if let window = chartsWindows.first(where: { $0.shortcut == s }) { return "\(s.display) shows and hides \(window.win.title)" }
         }
         var updated = sets
         if let replacing, let i = updated.firstIndex(of: replacing) { updated[i] = new } else { updated.append(new) }
@@ -269,8 +275,6 @@ final class Workspace {
     /// The main charts that get tick-by-tick trades (⌘↩ toggles the selected one); four at first.
     /// The selected chart gets trades and bid/ask either way (see `TradingEngine.syncTickByTick`).
     var fastChartIDs: Set<Int> { didSet { save() } }
-    /// System-wide shortcut that shows and hides the Charts window (see `ChartsWindowShortcut`).
-    var chartsWindowShortcut: KeyShortcut? { didSet { save() } }
     /// The modifier keys of the 1–9 order keys: buying (⌘ by default) and selling (⌥⌘), see `setNumberModifiers`. Saved.
     var buyModifiers: ModifierSet = .buy { didSet { save() } }
     var sellModifiers: ModifierSet = .sell { didSet { save() } }
@@ -284,16 +288,10 @@ final class Workspace {
     /// instead of following the gainers, until Reset (see `ChartGrid`). Saved with their stock
     /// (see `mainGridPins`).
     var manualChartIDs: Set<Int> = []
-    /// Charts window charts given a stock by hand (their symbol field), by chart id, with the cell each
-    /// keeps: the gainers fill the other cells around them, until the top bar's Reset, an emptied field,
-    /// or a smaller grid without that cell (see `SecondaryChartsView`).
-    var secondaryPins: [Int: Int] = [:]
     /// The stock a main-window chart following the gainers showed when it was given one by hand, by chart
     /// id: it leaves the grid while that chart keeps its own stock, so no other chart moves (see
     /// `followGainers`). Reset, or the chart letting go, brings it back.
     var handDisplaced: [Int: String] = [:]
-    /// The same for the Charts window's charts set by hand (see `secondaryPins`).
-    var secondaryDisplaced: [Int: String] = [:]
 
     /// The stocks kept off the main grid: those the charts still set by hand replaced.
     var displacedGainers: Set<String> { Set(manualChartIDs.compactMap { handDisplaced[$0] }) }
@@ -361,8 +359,6 @@ final class Workspace {
     /// Counts the account bar's Resets: every main-window chart follows the grid's list again, on the
     /// top bar's timeframe.
     var gainerResets = 0
-    /// Counts the Charts window's Resets (⌘R there, see `resetChartsWindow`).
-    var chartsWindowResets = 0
     /// The list the main-window charts follow in place of the top gainers, from a list's load button
     /// or ⌘⇧ shortcut, until another list loads; Reset keeps it (nil: the gainers). Saved.
     var gridScan: ScanSpec? {
@@ -428,21 +424,6 @@ final class Workspace {
     }
     /// The scale last saved or picked, lit or not (`reapplyNumber` goes back to it).
     var lastScale: Int?
-    /// The Charts window's own numbers (its header, see `ScaleButtons`): its view sets and scales by number, and the one
-    /// lit. Saved.
-    var chartsWindowViewSets: [Int: ViewSet] = [:] {
-        didSet { defaults.set(try? JSONEncoder().encode(chartsWindowViewSets), forKey: "chartsWindowViewSets") }
-    }
-    var chartsWindowActiveViewSet: Int? {
-        didSet { defaults.set(chartsWindowActiveViewSet, forKey: "chartsWindowActiveViewSet") }
-    }
-    var chartsWindowScales: [Int: ChartScale] = [:] {
-        didSet { defaults.set(try? JSONEncoder().encode(chartsWindowScales), forKey: "chartsWindowScales") }
-    }
-    /// While lit, every Charts window chart loading another stock takes it too (see `Broker.chartsWindowScale`).
-    var chartsWindowActiveScale: Int? {
-        didSet { defaults.set(chartsWindowActiveScale, forKey: "chartsWindowActiveScale") }
-    }
     /// The top bar's Zoom slider as last moved by hand (dragged, or ⇧- / ⌘- / ⌥-swipe on a chart): it trumps the
     /// lit scale's zoom, on the charts now and on those loading another stock, until a scale is
     /// picked (its number clicked) or saved, or Reset. Saved.
@@ -452,14 +433,6 @@ final class Workspace {
     /// The grid's zoom a swipe has just put the main charts at (see `zoomGrid`), so the Zoom slider
     /// following it doesn't zoom them again.
     @ObservationIgnored var swipedGridZoom: Double?
-    /// The same for the Charts window's charts and its Zoom slider (see `zoomChartsWindow`).
-    @ObservationIgnored var swipedChartsWindowZoom: Double?
-    /// The list the Charts window's charts follow (⌘⇧ and a list's letter there, or its header's menu);
-    /// the main window's stay on theirs. Saved.
-    var chartsWindowList: ScannerKind = UserDefaults.standard.string(forKey: SecondaryCharts.listKey)
-        .flatMap(ScannerKind.init(rawValue:)) ?? .gainers {
-        didSet { defaults.set(chartsWindowList.rawValue, forKey: SecondaryCharts.listKey) }
-    }
     /// Colors given to stocks with ⌥⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
     /// stock that leaves the charts has its color again when it comes back. Set with `setColor`.
     private(set) var stockColors: [String: StockColor] {
@@ -495,7 +468,11 @@ final class Workspace {
     /// A main-window chart.
     /// A main-window chart, or a Charts window one.
     func chart(id: Int) -> ChartModel? {
-        ChartModel.isChartsWindow(id) ? secondaryCharts.first { $0.id == id } : mainCharts.first { $0.id == id }
+        if let win = ChartsWin.of(chartID: id) {
+            let charts = chartsWindow(win).charts
+            return charts.indices.contains(id - win.firstChartID) ? charts[id - win.firstChartID] : nil
+        }
+        return mainCharts.first { $0.id == id }
     }
     /// The symbol orders go to: the selected chart's, or "" with no chart selected (nothing is sent).
     var targetSymbol: String { isChartSelected ? selectedChart.symbol : "" }
@@ -518,13 +495,9 @@ final class Workspace {
         mainRows = rows
         mainCells = Array(0..<MainGrid.cellCount(columns: columns, rows: rows))
 
-        // Secondary charts start empty: the window fills them from the gainers scanner while it's
+        // The Charts windows' charts start empty: each window fills them from its list while it's
         // open and not paused, so nothing loads for them at launch.
-        let secondaryTimeframe = defaults.string(forKey: SecondaryCharts.timeframeKey)
-            .flatMap(Timeframe.init(rawValue:)) ?? .m1
-        secondaryCharts = (0..<SecondaryCharts.count).map { i in
-            ChartModel(id: ChartModel.chartsWindowFirstID + i, symbol: "", timeframe: secondaryTimeframe)
-        }
+        chartsWindows = ChartsWin.allCases.map(ChartsWindowState.init)
 
         if let data = defaults.data(forKey: "hotkeys"),
            let keys = try? JSONDecoder().decode([Hotkey].self, from: data) {
@@ -592,14 +565,6 @@ final class Workspace {
             .flatMap { try? JSONDecoder().decode([Int: ViewSet].self, from: $0) } ?? [:]
         activeViewSet = (defaults.object(forKey: ViewSet.activeKey) as? Int).flatMap { viewSets[$0] != nil ? $0 : nil }
         lastViewSet = activeViewSet
-        chartsWindowViewSets = defaults.data(forKey: "chartsWindowViewSets")
-            .flatMap { try? JSONDecoder().decode([Int: ViewSet].self, from: $0) } ?? [:]
-        chartsWindowActiveViewSet = (defaults.object(forKey: "chartsWindowActiveViewSet") as? Int)
-            .flatMap { chartsWindowViewSets[$0] != nil ? $0 : nil }
-        chartsWindowScales = defaults.data(forKey: "chartsWindowScales")
-            .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
-        chartsWindowActiveScale = (defaults.object(forKey: "chartsWindowActiveScale") as? Int)
-            .flatMap { chartsWindowScales[$0] != nil ? $0 : nil }
         gridLayouts = defaults.data(forKey: GridLayout.storageKey)
             .flatMap { try? JSONDecoder().decode([GridLayout.Window: [Int: GridLayout]].self, from: $0) } ?? [:]
         activeGridLayout = defaults.data(forKey: GridLayout.activeKey)
@@ -610,8 +575,6 @@ final class Workspace {
         listScaleStates = defaults.data(forKey: "listScaleStates")
             .flatMap { try? JSONDecoder().decode([String: ListScaleState].self, from: $0) } ?? [:]
 
-        chartsWindowShortcut = defaults.data(forKey: "chartsWindowShortcut")
-            .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
         resetShortcut = defaults.data(forKey: "resetShortcut")
             .flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
         buyModifiers = defaults.data(forKey: "buyModifiers").flatMap { try? JSONDecoder().decode(ModifierSet.self, from: $0) } ?? .buy
@@ -666,7 +629,6 @@ final class Workspace {
         if let data = try? JSONEncoder().encode(scanFilters) { defaults.set(data, forKey: "scanFilters") }
         if let data = try? JSONEncoder().encode(whatIfs) { defaults.set(data, forKey: "whatIfs") }
         defaults.set(fastChartIDs.sorted(), forKey: "fastChartIDs")
-        defaults.set(chartsWindowShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "chartsWindowShortcut")
         defaults.set(resetShortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: "resetShortcut")
         defaults.set(try? JSONEncoder().encode(buyModifiers), forKey: "buyModifiers")
         defaults.set(try? JSONEncoder().encode(sellModifiers), forKey: "sellModifiers")

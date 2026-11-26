@@ -183,21 +183,24 @@ extension Workspace {
         manualZoom = nil
         manualChartIDs = []
         handDisplaced = [:]
-        secondaryPins = [:]
-        secondaryDisplaced = [:]
+        for window in chartsWindows {
+            window.pins = [:]
+            window.displaced = [:]
+        }
         gainerResets += 1
     }
 
     /// The Charts window's Reset: every chart there back to its Zoom slider's zoom, on its list. ⌘R (or another
     /// Reset key) keeps the charts set by hand; its Reset button (`releasingHandSet`) lets them go too. The main
     /// window's charts stay as they are.
-    func resetChartsWindow(releasingHandSet: Bool = false) {
+    func resetChartsWindow(_ win: ChartsWin, releasingHandSet: Bool = false) {
+        let window = chartsWindow(win)
         if releasingHandSet {
-            secondaryPins = [:]
-            secondaryDisplaced = [:]
+            window.pins = [:]
+            window.displaced = [:]
         }
-        chartsWindowActiveScale = nil
-        chartsWindowResets += 1
+        window.activeScale = nil
+        window.resets += 1
     }
 
     /// Loads a symbol into a chart, on `timeframe` if given, and (re)subscribes its data.

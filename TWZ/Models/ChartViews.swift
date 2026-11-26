@@ -33,8 +33,20 @@ struct ChartViews: Codable {
         var bars: BarCache.Key
         var inChartsWindow: Bool
         /// The main grid's list it was left in (see `Workspace.gridListKey`): each list keeps its own.
-        /// nil in the Charts window, and for views kept before lists kept their own.
+        /// nil in the Charts windows, and for views kept before lists kept their own.
         var list: String?
+        /// The second Charts window's (2); nil in the main window and the first Charts window.
+        var chartsWindow: Int?
+
+        /// `window`: 0 the main window, else the Charts window's number (see `ChartModel.windowIndex`).
+        init(bars: BarCache.Key, window: Int, list: String?) {
+            self.bars = bars
+            inChartsWindow = window > 0
+            self.list = list
+            chartsWindow = window > 1 ? window : nil
+        }
+
+        var window: Int { inChartsWindow ? chartsWindow ?? 1 : 0 }
     }
 
     struct View: Codable {
@@ -64,33 +76,33 @@ struct ChartViews: Codable {
 
     /// The view kept for `key`, or one kept for its stock and timeframe before lists kept their own.
     func view(for key: Key) -> View? {
-        views[key] ?? (key.list == nil ? nil : views[Key(bars: key.bars, inChartsWindow: key.inChartsWindow, list: nil)])
+        views[key] ?? (key.list == nil ? nil : views[Key(bars: key.bars, window: key.window, list: nil)])
     }
 
     /// A click on a scale's number: no view of the window's `list` counts as adjusted by hand any more.
-    mutating func forgetManual(inChartsWindow: Bool, list: String?) {
-        for key in views.keys where key.inChartsWindow == inChartsWindow && (key.list == list || key.list == nil) {
+    mutating func forgetManual(window: Int, list: String?) {
+        for key in views.keys where key.window == window && (key.list == list || key.list == nil) {
             views[key]?.manual = nil
         }
     }
 
     /// Reset: the window's charts start over at the latest bars, on `timeframe` only if given, and in the main
     /// grid in `list` only if given (the other lists keep theirs; views kept before lists kept their own go too).
-    mutating func forget(inChartsWindow: Bool, list: String? = nil, timeframe: Timeframe? = nil) {
+    mutating func forget(window: Int, list: String? = nil, timeframe: Timeframe? = nil) {
         views = views.filter { key, _ in
-            key.inChartsWindow != inChartsWindow || (timeframe.map { key.bars.timeframe != $0 } ?? false)
+            key.window != window || (timeframe.map { key.bars.timeframe != $0 } ?? false)
                 || (list != nil && key.list != nil && key.list != list)
         }
     }
 
     /// The window's views (a view set's, see `ViewSet`).
-    func entries(inChartsWindow: Bool) -> [Key: View] {
-        views.filter { $0.key.inChartsWindow == inChartsWindow }
+    func entries(window: Int) -> [Key: View] {
+        views.filter { $0.key.window == window }
     }
 
     /// The window's views become `entries` (picking a view set).
-    mutating func replace(inChartsWindow: Bool, with entries: [Key: View]) {
-        views = views.filter { $0.key.inChartsWindow != inChartsWindow }.merging(entries) { _, new in new }
+    mutating func replace(window: Int, with entries: [Key: View]) {
+        views = views.filter { $0.key.window != window }.merging(entries) { _, new in new }
     }
 
     static func saved() -> ChartViews {

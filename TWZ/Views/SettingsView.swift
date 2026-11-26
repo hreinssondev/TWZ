@@ -346,20 +346,22 @@ private struct TradingSettings: View {
                     }
                 }
             }
-            Section("Charts window") {
-                @Bindable var workspace = workspace
-                ShortcutRecorder(title: "Show / hide shortcut", shortcut: $workspace.chartsWindowShortcut, owner: .chartsWindow)
-                if let failure = GlobalHotkey.shared.failure {
-                    Text(failure).font(.caption).foregroundStyle(.red)
+            Section("Charts windows") {
+                ForEach(workspace.chartsWindows, id: \.win) { window in
+                    @Bindable var window = window
+                    ShortcutRecorder(title: "\(window.win.title) show / hide shortcut", shortcut: $window.shortcut, owner: .chartsWindow(window.win))
+                    if let failure = GlobalHotkey.shared.failure(window.win.rawValue) {
+                        Text(failure).font(.caption).foregroundStyle(.red)
+                    }
+                    if window.shortcut?.isPlain == true {
+                        Text("A single key works in every app, so other apps can't type it while it's set.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
-                Text("Works from any app: shows the Charts window in front (opening it if needed); pressed again, hides the app and goes back to the one before. Hidden, its charts stay live, so it comes back instantly. Closing the window turns them off like P.")
+                Text("Works from any app: shows that Charts window in front (opening it if needed); pressed again, hides the app and goes back to the one before. Hidden, its charts stay live, so it comes back instantly. Closing the window turns them off like P. Each window has its own list, grid, zoom, numbers and layouts; Charts 2 is laid out for a portrait screen (All Charts 3×6, up to 4 columns × 8 rows). The Window menu opens either.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if workspace.chartsWindowShortcut?.isPlain == true {
-                    Text("A single key works in every app, so other apps can't type it while it's set.")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
             }
         }
         .formStyle(.grouped)

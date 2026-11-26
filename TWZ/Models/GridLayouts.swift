@@ -13,17 +13,27 @@ import AppKit
 
 nonisolated struct GridLayout: Codable, Equatable {
     enum Window: String, Codable, CodingKeyRepresentable {
-        case main, chartsWindow
+        case main, chartsWindow, chartsWindow2
 
-        var columnsKey: String { self == .main ? MainGrid.columnsKey : SecondaryCharts.columnsKey }
-        var rowsKey: String { self == .main ? MainGrid.rowsKey : SecondaryCharts.rowsKey }
-        var columnSplitsKey: String { self == .main ? "mainChartColumnSplits" : "secondaryChartsColumnSplits" }
-        var rowSplitsKey: String { self == .main ? "mainChartRowSplits" : "secondaryChartsRowSplits" }
-        /// The Charts window's All Charts (6×3) or custom grid; the main window has none.
-        var modeKey: String? { self == .main ? nil : SecondaryCharts.layoutKey }
-        var defaultColumns: Int { self == .main ? 2 : 5 }
-        var defaultRows: Int { 2 }
-        var defaultMode: String? { self == .main ? nil : SecondaryCharts.Layout.all.rawValue }
+        /// The Charts window it is, if one.
+        var chartsWin: ChartsWin? {
+            switch self {
+            case .main: nil
+            case .chartsWindow: .first
+            case .chartsWindow2: .second
+            }
+        }
+        var columnsKey: String { chartsWin.map { $0.key(SecondaryCharts.columnsKey) } ?? MainGrid.columnsKey }
+        var rowsKey: String { chartsWin.map { $0.key(SecondaryCharts.rowsKey) } ?? MainGrid.rowsKey }
+        var columnSplitsKey: String { chartsWin.map { $0.key("secondaryChartsColumnSplits") } ?? "mainChartColumnSplits" }
+        var rowSplitsKey: String { chartsWin.map { $0.key("secondaryChartsRowSplits") } ?? "mainChartRowSplits" }
+        /// A Charts window's All Charts or custom grid; the main window has none.
+        var modeKey: String? { chartsWin.map { $0.key(SecondaryCharts.layoutKey) } }
+        var defaultColumns: Int { chartsWin?.defaultColumns ?? 2 }
+        var defaultRows: Int { chartsWin?.defaultRows ?? 2 }
+        var defaultMode: String? { chartsWin.map { ($0 == .first ? SecondaryCharts.Layout.all : .custom).rawValue } }
+        /// "", "Charts window: ", "Charts window 2: ", before a message.
+        var messagePrefix: String { chartsWin.map { "\($0.name): " } ?? "" }
     }
 
     static let slots = 1...5
@@ -31,6 +41,8 @@ nonisolated struct GridLayout: Codable, Equatable {
     static let activeKey = "activeGridLayouts"
 
     var mode: String?
+    /// Which window's: All Charts is 6×3 in the first Charts window, 3×6 in the second (nil: saved before there were two).
+    var window: Window?
     var columns: Int
     var rows: Int
     var columnSplits: [String: [Double]]
@@ -40,6 +52,7 @@ nonisolated struct GridLayout: Codable, Equatable {
     init(capturing window: Window) {
         let defaults = UserDefaults.standard
         mode = window.modeKey.map { defaults.string(forKey: $0) ?? window.defaultMode ?? "" }
+        self.window = window
         columns = defaults.object(forKey: window.columnsKey) as? Int ?? window.defaultColumns
         rows = defaults.object(forKey: window.rowsKey) as? Int ?? window.defaultRows
         columnSplits = defaults.dictionary(forKey: window.columnSplitsKey) as? [String: [Double]] ?? [:]
@@ -63,7 +76,7 @@ nonisolated struct GridLayout: Codable, Equatable {
 
     /// "4×2", or "All Charts (6×3)".
     var label: String {
-        mode == SecondaryCharts.Layout.all.rawValue ? "All Charts (6×3)" : "\(columns)×\(rows)"
+        mode == SecondaryCharts.Layout.all.rawValue ? (window?.chartsWin ?? .first).allLabel : "\(columns)×\(rows)"
     }
 }
 
@@ -73,12 +86,12 @@ extension Workspace {
         let layout = GridLayout(capturing: window)
         gridLayouts[window, default: [:]][slot] = layout
         activeGridLayout[window] = slot
-        broker.say("\(window == .main ? "" : "Charts window: ")layout \(slot) saved, \(layout.label)")
+        broker.say("\(window.messagePrefix)layout \(slot) saved, \(layout.label)")
     }
 
     /// A click on a layout number, or ⇧1–5: the layout saved under `slot` back (with none, a beep).
     func pickGridLayout(_ slot: Int, in window: GridLayout.Window, broker: Broker) {
-        let prefix = window == .main ? "" : "Charts window: "
+        let prefix = window.messagePrefix
         guard let layout = gridLayouts[window]?[slot] else {
             NSSound.beep()
             broker.say("\(prefix)no layout \(slot) yet: ⇧-click \(slot) in the layout numbers saves the charts' layout there")

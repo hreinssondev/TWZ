@@ -51,8 +51,8 @@ struct TWZApp: App {
             }
         }
 
-        Window(SecondaryCharts.windowTitle, id: SecondaryCharts.windowID) {
-            SecondaryChartsView()
+        Window(ChartsWin.first.title, id: ChartsWin.first.windowID) {
+            SecondaryChartsView(win: .first)
                 .modifier(SideColorsFromSettings())
                 .environment(broker)
                 .environment(workspace)
@@ -61,6 +61,18 @@ struct TWZApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowBackgroundDragBehavior(.enabled)
         .defaultSize(width: 1400, height: 900)
+
+        // The second Charts window, for a portrait screen (see `ChartsWin`).
+        Window(ChartsWin.second.title, id: ChartsWin.second.windowID) {
+            SecondaryChartsView(win: .second)
+                .modifier(SideColorsFromSettings())
+                .environment(broker)
+                .environment(workspace)
+                .preferredColorScheme(.dark)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowBackgroundDragBehavior(.enabled)
+        .defaultSize(width: 1440, height: 2400)
 
         Window(OptionsWindow.windowTitle, id: OptionsWindow.windowID) {
             OptionsView()

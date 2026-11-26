@@ -26,7 +26,7 @@ struct ShortcutRecorder: View {
     enum Owner: Equatable {
         case hotkey(UUID)
         case orderKey(UUID)
-        case chartsWindow
+        case chartsWindow(ChartsWin)
         case reset
     }
 
@@ -110,8 +110,8 @@ struct ShortcutRecorder: View {
             problem = "\(new.display) already resets the chart grid. Try another."
             return
         }
-        if owner != .chartsWindow, workspace.chartsWindowShortcut == new {
-            problem = "\(new.display) shows and hides the Charts window. Try another."
+        if let window = workspace.chartsWindows.first(where: { owner != .chartsWindow($0.win) && $0.shortcut == new }) {
+            problem = "\(new.display) shows and hides \(window.win.title). Try another."
             return
         }
         problem = nil

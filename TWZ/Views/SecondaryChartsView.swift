@@ -24,6 +24,8 @@
 //  the grid has room for (2/2), and back, and 5D orders the pairs by their range over the last 5 finished days. With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
+//  There are two of these windows, Charts and Charts 2 (the Window menu, or each one's own shortcut), each with all of
+//  the above of its own (see `ChartsWin`, `ChartsWindowState`); Charts 2 is laid out for a portrait screen.
 //
 
 import SwiftUI
@@ -51,13 +53,102 @@ enum SecondaryCharts {
         kind == .gainers ? gainersScan : ScanSpec(kind: kind, filter: kind.defaultFilter, rows: ScannerKind.maxRowCount)
     }
 
-    static func isWindow(_ window: NSWindow?) -> Bool {
-        guard let window else { return false }
-        return window.identifier?.rawValue.hasPrefix(windowID) == true || window.title == windowTitle
-    }
+    /// Either Charts window.
+    static func isWindow(_ window: NSWindow?) -> Bool { ChartsWin.of(window) != nil }
 
     enum Layout: String {
         case all, custom
+    }
+}
+
+/// Which Charts window: there are two, each with its own charts, list, grid, Zoom slider, numbers, layouts and
+/// shortcut. The first keeps the settings it always had; the second's are the same keys with "2" on the end, and
+/// it's laid out for a portrait screen (All Charts 3×6, Cols / Rows up to 4 × 8).
+enum ChartsWin: Int, CaseIterable, Codable, Hashable {
+    case first = 1, second = 2
+
+    /// Its charts' ids: 100… in the first, 200… in the second (see `ChartModel.windowIndex`).
+    var firstChartID: Int { rawValue * 100 }
+    /// A stored setting's key for this window.
+    func key(_ base: String) -> String { self == .first ? base : base + "2" }
+    var scannerOwner: String { key(SecondaryCharts.scannerOwner) }
+    var windowID: String { self == .first ? SecondaryCharts.windowID : "charts-window-2" }
+    var title: String { self == .first ? SecondaryCharts.windowTitle : "Charts 2" }
+    /// In messages: "Charts window", "Charts window 2".
+    var name: String { self == .first ? "Charts window" : "Charts window 2" }
+    var layoutWindow: GridLayout.Window { self == .first ? .chartsWindow : .chartsWindow2 }
+    /// All Charts' grid, and the Cols / Rows sliders' most (as many charts either way, `SecondaryCharts.count`).
+    var allColumns: Int { self == .first ? 6 : 3 }
+    var allRows: Int { self == .first ? 3 : 6 }
+    var maxColumns: Int { self == .first ? SecondaryCharts.maxColumns : SecondaryCharts.maxRows }
+    var maxRows: Int { self == .first ? SecondaryCharts.maxRows : SecondaryCharts.maxColumns }
+    var defaultColumns: Int { self == .first ? 5 : 2 }
+    var defaultRows: Int { self == .first ? 2 : 4 }
+    var allLabel: String { "All Charts (\(allColumns)×\(allRows))" }
+
+    static func of(chartID: Int) -> ChartsWin? { ChartsWin(rawValue: chartID / 100) }
+    static func of(_ window: NSWindow?) -> ChartsWin? {
+        guard let window else { return nil }
+        let id = window.identifier?.rawValue ?? ""
+        return allCases.first { id.hasPrefix($0.windowID) || window.title == $0.title }
+    }
+}
+
+/// One Charts window's own state (see `ChartsWin`), saved where it says so.
+@Observable
+final class ChartsWindowState {
+    let win: ChartsWin
+    /// One chart for each cell of its largest grid, empty until the window's open and not paused.
+    let charts: [ChartModel]
+    /// Charts given a stock by hand (their symbol field), by chart id, with the cell each keeps: the gainers fill
+    /// the other cells around them, until the Reset button, an emptied field, or a smaller grid without that cell.
+    var pins: [Int: Int] = [:]
+    /// The stock a chart set by hand showed while following the list, which leaves the charts meanwhile.
+    var displaced: [Int: String] = [:]
+    /// Counts its Resets (⌘R there, see `Workspace.resetChartsWindow`).
+    var resets = 0
+    /// Its own numbers (its header, see `ScaleButtons`): its view sets and scales by number, and the one lit. Saved.
+    var viewSets: [Int: ViewSet] {
+        didSet { defaults.set(try? JSONEncoder().encode(viewSets), forKey: win.key("chartsWindowViewSets")) }
+    }
+    var activeViewSet: Int? {
+        didSet { defaults.set(activeViewSet, forKey: win.key("chartsWindowActiveViewSet")) }
+    }
+    var scales: [Int: ChartScale] {
+        didSet { defaults.set(try? JSONEncoder().encode(scales), forKey: win.key("chartsWindowScales")) }
+    }
+    /// While lit, every chart here loading another stock takes it too (see `Broker.chartsWindowScales`).
+    var activeScale: Int? {
+        didSet { defaults.set(activeScale, forKey: win.key("chartsWindowActiveScale")) }
+    }
+    /// The zoom a swipe has just put its charts at (see `Workspace.zoomChartsWindow`), so its Zoom slider following
+    /// it doesn't zoom them again.
+    @ObservationIgnored var swipedZoom: Double?
+    /// The list its charts follow (⌘⇧ and a list's letter there, or its header's menu). Saved.
+    var list: ScannerKind {
+        didSet { defaults.set(list.rawValue, forKey: win.key(SecondaryCharts.listKey)) }
+    }
+    /// System-wide shortcut that shows and hides it (see `ChartsWindowShortcut`). Saved.
+    var shortcut: KeyShortcut? {
+        didSet { defaults.set(shortcut.flatMap { try? JSONEncoder().encode($0) }, forKey: win.key("chartsWindowShortcut")) }
+    }
+    @ObservationIgnored private let defaults = UserDefaults.standard
+
+    init(_ win: ChartsWin) {
+        self.win = win
+        let d = UserDefaults.standard
+        let timeframe = d.string(forKey: win.key(SecondaryCharts.timeframeKey)).flatMap(Timeframe.init(rawValue:)) ?? .m1
+        charts = (0..<SecondaryCharts.count).map { ChartModel(id: win.firstChartID + $0, symbol: "", timeframe: timeframe) }
+        let viewSets = d.data(forKey: win.key("chartsWindowViewSets"))
+            .flatMap { try? JSONDecoder().decode([Int: ViewSet].self, from: $0) } ?? [:]
+        self.viewSets = viewSets
+        activeViewSet = (d.object(forKey: win.key("chartsWindowActiveViewSet")) as? Int).flatMap { viewSets[$0] != nil ? $0 : nil }
+        let scales = d.data(forKey: win.key("chartsWindowScales"))
+            .flatMap { try? JSONDecoder().decode([Int: ChartScale].self, from: $0) } ?? [:]
+        self.scales = scales
+        activeScale = (d.object(forKey: win.key("chartsWindowActiveScale")) as? Int).flatMap { scales[$0] != nil ? $0 : nil }
+        list = d.string(forKey: win.key(SecondaryCharts.listKey)).flatMap(ScannerKind.init(rawValue:)) ?? .gainers
+        shortcut = d.data(forKey: win.key("chartsWindowShortcut")).flatMap { try? JSONDecoder().decode(KeyShortcut.self, from: $0) }
     }
 }
 
@@ -96,79 +187,87 @@ extension Workspace {
     /// ⇧-, ⌘- or ⌥-swipe on Charts window chart `chart`: every chart there zooms by `factor` from the zoom on
     /// screen, as `zoomGrid` does for the main charts. The new zoom, for the window's Zoom slider.
     func zoomChartsWindow(by factor: Double, from chart: ChartModel, sliderZoom: Double, broker: Broker) -> Double {
-        let shown = secondaryCharts.filter { !$0.symbol.isEmpty }
+        guard let win = ChartsWin.of(chartID: chart.id) else { return sliderZoom }
+        let window = chartsWindow(win)
+        let shown = window.charts.filter { !$0.symbol.isEmpty }
         let base = !GridZoom.resetsAdjusted && chart.adjustedByHand
             ? shown.first { !$0.adjustedByHand }?.visibleBars ?? sliderZoom
             : chart.visibleBars
         guard base > 0 else { return sliderZoom }
         let most = shown.map { Double($0.bars.count) }.max() ?? 0
         let zoom = min(max(ChartModel.maxVisibleBars, most, base), max(15, base * factor))
-        setZoom(zoom, of: secondaryCharts, broker: broker, by: zoom / base)
-        if zoom != sliderZoom { swipedChartsWindowZoom = zoom }
+        setZoom(zoom, of: window.charts, broker: broker, by: zoom / base)
+        if zoom != sliderZoom { window.swipedZoom = zoom }
         return zoom
     }
 
     // MARK: - The Charts window's numbers (see `ScaleButtons`)
 
-    /// Tells the broker the Charts window's lit scale, which its charts loading a stock take (scales only as scales).
+    /// Tells the broker each Charts window's lit scale, which its charts loading a stock take (scales only as scales).
     func syncChartsWindowScale(to broker: Broker) {
-        broker.chartsWindowScale = NumberButtons.areScales ? chartsWindowActiveScale.flatMap { chartsWindowScales[$0] } : nil
+        for window in chartsWindows {
+            broker.chartsWindowScales[window.win] = NumberButtons.areScales ? window.activeScale.flatMap { window.scales[$0] } : nil
+        }
     }
 
     /// ⇧-click on a Charts window number, as view sets: every chart's zoom and place there on every timeframe, saved.
-    func saveChartsWindowViewSet(_ slot: Int, broker: Broker) {
-        broker.keepChartViews(of: secondaryCharts)
-        chartsWindowViewSets[slot] = ViewSet(views: broker.chartsWindowViews,
-                                             zooms: Dictionary(uniqueKeysWithValues: secondaryCharts.map { ($0.id, $0.zooms) }))
-        chartsWindowActiveViewSet = slot
-        broker.say("Charts window view set \(slot) saved: every chart's zoom and place there on every timeframe")
+    func saveChartsWindowViewSet(_ slot: Int, in win: ChartsWin, broker: Broker) {
+        let window = chartsWindow(win)
+        broker.keepChartViews(of: window.charts)
+        window.viewSets[slot] = ViewSet(views: broker.chartsWindowViews(win),
+                                        zooms: Dictionary(uniqueKeysWithValues: window.charts.map { ($0.id, $0.zooms) }))
+        window.activeViewSet = slot
+        broker.say("\(win.name) view set \(slot) saved: every chart's zoom and place there on every timeframe")
     }
 
     /// A click on a Charts window number, as view sets: every chart there back to it; lit, it goes off.
-    func pickChartsWindowViewSet(_ slot: Int, broker: Broker) {
-        if chartsWindowActiveViewSet == slot {
-            chartsWindowActiveViewSet = nil
-            return broker.say("Charts window view set \(slot) off: charts keep their views as they are")
+    func pickChartsWindowViewSet(_ slot: Int, in win: ChartsWin, broker: Broker) {
+        let window = chartsWindow(win)
+        if window.activeViewSet == slot {
+            window.activeViewSet = nil
+            return broker.say("\(win.name) view set \(slot) off: charts keep their views as they are")
         }
-        guard let set = chartsWindowViewSets[slot] else {
+        guard let set = window.viewSets[slot] else {
             NSSound.beep()
-            return broker.say("Nothing saved as Charts window view set \(slot) yet: ⇧-click its number to save every chart's zoom and place there")
+            return broker.say("Nothing saved as \(win.name) view set \(slot) yet: ⇧-click its number to save every chart's zoom and place there")
         }
-        broker.replaceChartsWindowViews(with: set.views)
-        for chart in secondaryCharts {
+        broker.replaceChartsWindowViews(win, with: set.views)
+        for chart in window.charts {
             chart.zooms = set.zooms[chart.id] ?? [:]
             broker.restoreView(of: chart)
         }
-        chartsWindowActiveViewSet = slot
-        broker.say("Charts window view set \(slot): every chart's zoom and place there as saved")
+        window.activeViewSet = slot
+        broker.say("\(win.name) view set \(slot): every chart's zoom and place there as saved")
     }
 
     /// ⇧-click on a Charts window number, as scales: the selected chart's view, if it's one of that window's; false otherwise.
-    func saveChartsWindowScale(_ slot: Int) -> Bool {
-        guard isChartSelected, ChartModel.isChartsWindow(selectedChartID), let chart = chart(id: selectedChartID),
+    func saveChartsWindowScale(_ slot: Int, in win: ChartsWin) -> Bool {
+        guard isChartSelected, ChartsWin.of(chartID: selectedChartID) == win, let chart = chart(id: selectedChartID),
               !chart.symbol.isEmpty else { return false }
-        chartsWindowScales[slot] = ChartScale(of: chart)
-        chartsWindowActiveScale = slot
+        let window = chartsWindow(win)
+        window.scales[slot] = ChartScale(of: chart)
+        window.activeScale = slot
         return true
     }
 
     /// A click on a Charts window number, as scales: every chart there takes it (those adjusted by hand too) and so do
     /// those loading a stock while it's lit; lit, it goes off.
-    func pickChartsWindowScale(_ slot: Int, broker: Broker) {
-        if chartsWindowActiveScale == slot {
-            chartsWindowActiveScale = nil
+    func pickChartsWindowScale(_ slot: Int, in win: ChartsWin, broker: Broker) {
+        let window = chartsWindow(win)
+        if window.activeScale == slot {
+            window.activeScale = nil
             syncChartsWindowScale(to: broker)
-            return broker.say("Charts window scale \(slot) off: charts keep their own views")
+            return broker.say("\(win.name) scale \(slot) off: charts keep their own views")
         }
-        guard let scale = chartsWindowScales[slot] else {
+        guard let scale = window.scales[slot] else {
             NSSound.beep()
-            return broker.say("Nothing saved as Charts window scale \(slot) yet: ⇧-click its number to save the selected chart's view")
+            return broker.say("Nothing saved as \(win.name) scale \(slot) yet: ⇧-click its number to save the selected chart's view")
         }
-        broker.forgetChartAdjustments(of: secondaryCharts)
-        for chart in secondaryCharts where !chart.symbol.isEmpty { scale.apply(to: chart) }
-        chartsWindowActiveScale = slot
+        broker.forgetChartAdjustments(of: window.charts)
+        for chart in window.charts where !chart.symbol.isEmpty { scale.apply(to: chart) }
+        window.activeScale = slot
         syncChartsWindowScale(to: broker)
-        broker.say("Charts window scale \(slot) on every chart there, also as its list changes (pick it again to turn it off)")
+        broker.say("\(win.name) scale \(slot) on every chart there, also as its list changes (pick it again to turn it off)")
     }
 
     /// Sets the charts' default zoom and zooms them to it. The zooms they were left at on other stocks
@@ -225,6 +324,9 @@ extension Workspace {
 struct SecondaryChartsView: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
+    /// Which Charts window this is.
+    let win: ChartsWin
+    private var state: ChartsWindowState { workspace.chartsWindow(win) }
 
     private static let gap: CGFloat = 4
 
@@ -232,21 +334,36 @@ struct SecondaryChartsView: View {
     /// The Forex list's second page: the pairs past those the grid has room for, in its cells instead.
     @State private var showsRest = false
     /// The Forex list by each pair's range over its last 5 finished days, widest first (see `TradingEngine.setForexByRange`).
-    @AppStorage("secondaryChartsForexByRange") private var forexByRange = false
-    @AppStorage(SecondaryCharts.timeframeKey) private var masterTimeframe: Timeframe = .m1
-    @AppStorage("secondaryHeaderHeight") private var headerHeight: Double = 28
-    @AppStorage(SecondaryCharts.pausedKey) private var isPaused: Bool = false
-    @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
-    @AppStorage(SecondaryCharts.columnsKey) private var customColumns: Int = 5
-    @AppStorage(SecondaryCharts.rowsKey) private var customRows: Int = 2
+    @AppStorage private var forexByRange: Bool
+    @AppStorage private var masterTimeframe: Timeframe
+    @AppStorage private var headerHeight: Double
+    @AppStorage private var isPaused: Bool
+    @AppStorage private var layout: SecondaryCharts.Layout
+    @AppStorage private var customColumns: Int
+    @AppStorage private var customRows: Int
     /// Bars on screen at the default zoom, one for All Charts and one for the custom grid.
-    @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.initialVisibleBars
-    @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.initialVisibleBars
-    @State private var columnSplits = SplitStore(key: "secondaryChartsColumnSplits")
-    @State private var rowSplits = SplitStore(key: "secondaryChartsRowSplits")
+    @AppStorage private var allZoom: Double
+    @AppStorage private var customZoom: Double
+    @State private var columnSplits: SplitStore
+    @State private var rowSplits: SplitStore
 
-    private var columns: Int { layout == .all ? 6 : customColumns }
-    private var rows: Int { layout == .all ? 3 : customRows }
+    init(win: ChartsWin) {
+        self.win = win
+        _forexByRange = AppStorage(wrappedValue: false, win.key("secondaryChartsForexByRange"))
+        _masterTimeframe = AppStorage(wrappedValue: .m1, win.key(SecondaryCharts.timeframeKey))
+        _headerHeight = AppStorage(wrappedValue: 28, win.key("secondaryHeaderHeight"))
+        _isPaused = AppStorage(wrappedValue: false, win.key(SecondaryCharts.pausedKey))
+        _layout = AppStorage(wrappedValue: win == .first ? .all : .custom, win.key(SecondaryCharts.layoutKey))
+        _customColumns = AppStorage(wrappedValue: win.defaultColumns, win.key(SecondaryCharts.columnsKey))
+        _customRows = AppStorage(wrappedValue: win.defaultRows, win.key(SecondaryCharts.rowsKey))
+        _allZoom = AppStorage(wrappedValue: ChartModel.initialVisibleBars, win.key(SecondaryCharts.allZoomKey))
+        _customZoom = AppStorage(wrappedValue: ChartModel.initialVisibleBars, win.key(SecondaryCharts.customZoomKey))
+        _columnSplits = State(initialValue: SplitStore(key: win.layoutWindow.columnSplitsKey))
+        _rowSplits = State(initialValue: SplitStore(key: win.layoutWindow.rowSplitsKey))
+    }
+
+    private var columns: Int { layout == .all ? win.allColumns : customColumns }
+    private var rows: Int { layout == .all ? win.allRows : customRows }
     private var count: Int { columns * rows }
     @State private var dragStartHeight: Double?
 
@@ -264,7 +381,7 @@ struct SecondaryChartsView: View {
                 SplitGrid(columns: columns, rows: rows, items: items,
                           gap: Self.gap, inset: Self.gap,
                           columnSplits: $columnSplits, rowSplits: $rowSplits) { chart in
-                    SecondaryChartPane(chart: chart, cell: items.firstIndex { $0.id == chart.id })
+                    SecondaryChartPane(win: win, chart: chart, cell: items.firstIndex { $0.id == chart.id })
                 }
             }
         }
@@ -276,14 +393,14 @@ struct SecondaryChartsView: View {
         }
         // On close only: hiding the window (ordering it out) keeps the charts live.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
-            if SecondaryCharts.isWindow(note.object as? NSWindow) { stop() }
+            if ChartsWin.of(note.object as? NSWindow) == win { stop() }
         }
         // Fills the charts as soon as the scanner answers, e.g. right after P is turned off.
-        .onChange(of: broker.scans[SecondaryCharts.scannerOwner]?.symbols) {
+        .onChange(of: broker.scans[win.scannerOwner]?.symbols) {
             if !isPaused { syncWithGainers() }
         }
         .onChange(of: masterTimeframe) { _, new in
-            workspace.setTimeframe(new, of: workspace.secondaryCharts, broker: broker)
+            workspace.setTimeframe(new, of: state.charts, broker: broker)
         }
         .onChange(of: isPaused) { _, paused in
             if paused { stop() } else { start() }
@@ -291,26 +408,26 @@ struct SecondaryChartsView: View {
         // Charts still in the new top N stay put; the rest are emptied (smaller grid) or filled (larger).
         // A chart set by hand whose cell is gone lets go of its stock.
         .onChange(of: count) {
-            workspace.secondaryPins = workspace.secondaryPins.filter { $0.value < count }
+            state.pins = state.pins.filter { $0.value < count }
             if !isPaused { lastGainers = []; syncWithGainers() }
         }
         // A chart set or let go by hand, or Reset: the gainers fill the cells around the ones set by hand.
-        .onChange(of: workspace.secondaryPins) {
+        .onChange(of: state.pins) {
             if !isPaused { lastGainers = []; syncWithGainers() }
         }
         // Another list: the charts still in its top N stay, the rest load its stocks.
-        .onChange(of: workspace.chartsWindowList) {
+        .onChange(of: state.list) {
             if !isPaused { start() }
         }
-        .onChange(of: workspace.chartsWindowResets) {
+        .onChange(of: state.resets) {
             workspace.syncChartsWindowScale(to: broker)
-            workspace.resetViews(of: workspace.secondaryCharts, zoom: layout == .all ? allZoom : customZoom, broker: broker)
+            workspace.resetViews(of: state.charts, zoom: layout == .all ? allZoom : customZoom, broker: broker)
         }
         .onChange(of: layout) { applyZoom() }
         // A chart layout loaded: its lines (see `GridLayout`).
         .onChange(of: workspace.gridLayoutLoads) {
-            columnSplits = SplitStore(key: GridLayout.Window.chartsWindow.columnSplitsKey)
-            rowSplits = SplitStore(key: GridLayout.Window.chartsWindow.rowSplitsKey)
+            columnSplits = SplitStore(key: win.layoutWindow.columnSplitsKey)
+            rowSplits = SplitStore(key: win.layoutWindow.rowSplitsKey)
         }
         .onChange(of: allZoom) { zoomMoved(to: $1) }
         .onChange(of: customZoom) { zoomMoved(to: $1) }
@@ -325,8 +442,8 @@ struct SecondaryChartsView: View {
                     .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help(layout == .all ? "Show the custom grid set by the sliders" : "Show the top 18, 6×3")
-            Picker("", selection: Binding(get: { workspace.chartsWindowList }, set: { workspace.chartsWindowList = $0 })) {
+            .help(layout == .all ? "Show the custom grid set by the sliders" : "Show the top \(win.allColumns * win.allRows), \(win.allColumns)×\(win.allRows)")
+            Picker("", selection: Binding(get: { state.list }, set: { state.list = $0 })) {
                 ForEach(ScannerKind.allCases) { Text($0.rawValue).tag($0) }
             }
             .labelsHidden()
@@ -335,7 +452,7 @@ struct SecondaryChartsView: View {
             .help("The list these charts follow (the main window's stay on theirs). With this window in front: "
                   + ScannerKind.shortcutHelp.replacingOccurrences(of: "shows the list and loads it into the chart grid", with: "switches it"))
             GridSliders(columns: $customColumns, rows: $customRows, zoom: layout == .all ? $allZoom : $customZoom,
-                        columnRange: 1...SecondaryCharts.maxColumns, rowRange: 1...SecondaryCharts.maxRows,
+                        columnRange: 1...win.maxColumns, rowRange: 1...win.maxRows,
                         showsSize: layout == .custom)
             // Every chart's timeframe here, right of the sliders as in the main window's top bar.
             TimeframePicker(selection: Binding(
@@ -344,7 +461,7 @@ struct SecondaryChartsView: View {
             ))
             .help("Every chart's timeframe here (with this window in front: ⌥1–6 or ⌃1–6); a chart's own switch changes just that chart")
             Button {
-                workspace.resetChartsWindow(releasingHandSet: true)
+                workspace.resetChartsWindow(win, releasingHandSet: true)
             } label: {
                 Text("Reset")
                     .font(.system(size: 10).monospacedDigit())
@@ -358,12 +475,12 @@ struct SecondaryChartsView: View {
             .help("Every chart here back to the Zoom slider's zoom, and the charts whose symbol you typed follow the list again. ⌘R does the first only, keeping those")
             // View sets / scales, then chart layouts, close together, as in the main window's top bar.
             HStack(spacing: 3) {
-                ScaleButtons(window: .chartsWindow)
-                GridLayoutButtons(window: .chartsWindow, showsIcon: false)
+                ScaleButtons(window: win.layoutWindow)
+                GridLayoutButtons(window: win.layoutWindow, showsIcon: false)
             }
-            if workspace.chartsWindowList == .forex { forexButtons }
+            if state.list == .forex { forexButtons }
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
-            if !isPaused, let error = broker.scans[SecondaryCharts.scannerOwner]?.error {
+            if !isPaused, let error = broker.scans[win.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
             }
             Spacer()
@@ -411,7 +528,7 @@ struct SecondaryChartsView: View {
                         help: forexByRange ? "Back to the Forex list's fixed order"
                             : "The pairs by their range over the last 5 finished days, (high − low) / low, widest first; set once a day, after 17:00 ET") {
                 forexByRange.toggle()
-                broker.setForexByRange(forexByRange, owner: SecondaryCharts.scannerOwner)
+                broker.setForexByRange(forexByRange, owner: win.scannerOwner)
             }
         }
     }
@@ -422,8 +539,8 @@ struct SecondaryChartsView: View {
 
     /// The Zoom slider moved, or a swipe moved it (that zoomed the charts already, see `zoomChartsWindow`).
     private func zoomMoved(to zoom: Double) {
-        if workspace.swipedChartsWindowZoom == zoom {
-            workspace.swipedChartsWindowZoom = nil
+        if state.swipedZoom == zoom {
+            state.swipedZoom = nil
             return
         }
         applyZoom()
@@ -431,57 +548,57 @@ struct SecondaryChartsView: View {
 
     /// Sets every chart's default zoom for the current view and zooms them to it.
     private func applyZoom() {
-        workspace.setZoom(layout == .all ? allZoom : customZoom, of: workspace.secondaryCharts, broker: broker)
+        workspace.setZoom(layout == .all ? allZoom : customZoom, of: state.charts, broker: broker)
     }
 
     private func start() {
         lastGainers = []
-        broker.setForexByRange(forexByRange, owner: SecondaryCharts.scannerOwner)
-        broker.setScanner(SecondaryCharts.scan(workspace.chartsWindowList), owner: SecondaryCharts.scannerOwner)
+        broker.setForexByRange(forexByRange, owner: win.scannerOwner)
+        broker.setScanner(SecondaryCharts.scan(state.list), owner: win.scannerOwner)
         syncWithGainers()
     }
 
     /// Stops the scanner and empties every chart, cancelling their data.
     private func stop() {
         // A chart here was selected: the main window's last one is again.
-        if ChartModel.isChartsWindow(workspace.selectedChartID) {
+        if ChartsWin.of(chartID: workspace.selectedChartID) == win {
             workspace.selectedChartID = workspace.lastMainChartID
             workspace.isChartSelected = false
         }
-        broker.setScanner(nil, owner: SecondaryCharts.scannerOwner)
-        broker.setForexByRange(false, owner: SecondaryCharts.scannerOwner)
+        broker.setScanner(nil, owner: win.scannerOwner)
+        broker.setForexByRange(false, owner: win.scannerOwner)
         lastGainers = []
-        workspace.secondaryPins = [:]
-        workspace.secondaryDisplaced = [:]
-        for chart in workspace.secondaryCharts { workspace.clear(chart, broker: broker) }
+        state.pins = [:]
+        state.displaced = [:]
+        for chart in state.charts { workspace.clear(chart, broker: broker) }
     }
 
     /// Fills the charts not set by hand with the top gainers, as many as there are cells left around
     /// the ones set by hand; the other charts are emptied.
     private func syncWithGainers() {
-        let pins = workspace.secondaryPins
+        let pins = state.pins
         // Less the stocks the charts set by hand replaced.
-        let displaced = Set(pins.keys.compactMap { workspace.secondaryDisplaced[$0] })
-        var gainers = (broker.scans[SecondaryCharts.scannerOwner]?.symbols ?? []).filter { !displaced.contains($0) }
+        let displaced = Set(pins.keys.compactMap { state.displaced[$0] })
+        var gainers = (broker.scans[win.scannerOwner]?.symbols ?? []).filter { !displaced.contains($0) }
         let slots = count - pins.values.filter { $0 < count }.count
         // The Forex list's second page: the pairs past the first `slots`, less those set by hand.
-        if showsRest, workspace.chartsWindowList == .forex {
-            let pinned = Set(workspace.secondaryCharts.filter { pins[$0.id] != nil }.map(\.symbol))
+        if showsRest, state.list == .forex {
+            let pinned = Set(state.charts.filter { pins[$0.id] != nil }.map(\.symbol))
             gainers = Array(gainers.filter { !pinned.contains($0) }.dropFirst(slots))
         }
         guard !gainers.isEmpty, gainers != lastGainers else { return }
         lastGainers = gainers
-        workspace.fill(workspace.secondaryCharts.filter { pins[$0.id] == nil },
+        workspace.fill(state.charts.filter { pins[$0.id] == nil },
                        withTop: slots, of: gainers, broker: broker)
     }
 
     /// The charts in grid order: one set by hand in its own cell, the others in gainer rank order around them.
     private var items: [ChartModel] {
-        let pins = workspace.secondaryPins
+        let pins = state.pins
         let pinned = Dictionary(pins.map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
-        var rest = workspace.ranked(workspace.secondaryCharts.filter { pins[$0.id] == nil }, by: lastGainers)[...]
-        return (0..<workspace.secondaryCharts.count).compactMap { cell in
-            if let id = pinned[cell], let chart = workspace.secondaryCharts.first(where: { $0.id == id }) { return chart }
+        var rest = workspace.ranked(state.charts.filter { pins[$0.id] == nil }, by: lastGainers)[...]
+        return (0..<state.charts.count).compactMap { cell in
+            if let id = pinned[cell], let chart = state.charts.first(where: { $0.id == id }) { return chart }
             return rest.popFirst()
         }
     }
@@ -493,14 +610,26 @@ struct SecondaryChartPane: View {
     @Environment(Broker.self) private var broker
     @Environment(\.sideColors) private var sideColors
     @Environment(Workspace.self) private var workspace
+    let win: ChartsWin
     let chart: ChartModel
     /// Its place in the grid, which a symbol typed into it keeps.
     var cell: Int?
 
-    @AppStorage(SecondaryCharts.layoutKey) private var layout: SecondaryCharts.Layout = .all
+    @AppStorage private var layout: SecondaryCharts.Layout
     @AppStorage(HeaderPerformance.freezeKey) private var freezesHeaders = HeaderPerformance.defaultOn
-    @AppStorage(SecondaryCharts.allZoomKey) private var allZoom: Double = ChartModel.initialVisibleBars
-    @AppStorage(SecondaryCharts.customZoomKey) private var customZoom: Double = ChartModel.initialVisibleBars
+    @AppStorage private var allZoom: Double
+    @AppStorage private var customZoom: Double
+
+    init(win: ChartsWin, chart: ChartModel, cell: Int?) {
+        self.win = win
+        self.chart = chart
+        self.cell = cell
+        _layout = AppStorage(wrappedValue: win == .first ? .all : .custom, win.key(SecondaryCharts.layoutKey))
+        _allZoom = AppStorage(wrappedValue: ChartModel.initialVisibleBars, win.key(SecondaryCharts.allZoomKey))
+        _customZoom = AppStorage(wrappedValue: ChartModel.initialVisibleBars, win.key(SecondaryCharts.customZoomKey))
+    }
+
+    private var state: ChartsWindowState { workspace.chartsWindow(win) }
     @State private var symbolText = ""
     /// The symbol box is being edited: only a click on it starts that (see `SymbolField`).
     @State private var symbolFocused = false
@@ -552,15 +681,15 @@ struct SecondaryChartPane: View {
                 // Typed by hand: the chart keeps it and its cell; an emptied field gives it back to the gainers.
                 let symbol = ForexPair.normalize(symbolText)
                 if symbol.isEmpty {
-                    workspace.secondaryDisplaced[chart.id] = nil
-                    workspace.secondaryPins[chart.id] = nil
+                    state.displaced[chart.id] = nil
+                    state.pins[chart.id] = nil
                 } else {
                     // The stock it showed while following the gainers leaves the charts, so nothing else moves.
-                    if workspace.secondaryPins[chart.id] == nil, !chart.symbol.isEmpty {
-                        workspace.secondaryDisplaced[chart.id] = chart.symbol
+                    if state.pins[chart.id] == nil, !chart.symbol.isEmpty {
+                        state.displaced[chart.id] = chart.symbol
                     }
                     if symbol != chart.symbol { workspace.load(symbol, into: chart, broker: broker) }
-                    if let cell { workspace.secondaryPins[chart.id] = cell }
+                    if let cell { state.pins[chart.id] = cell }
                 }
                 symbolText = chart.symbol
                 symbolFocused = false

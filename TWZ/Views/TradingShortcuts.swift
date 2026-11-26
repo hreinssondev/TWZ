@@ -181,23 +181,25 @@ struct TradingShortcuts: ViewModifier {
                     }
                     // In the Charts window, the Reset keys (⌘R, ⇧R outside a text field, ⌥R, ⌃R, ⌘⇧R, Settings' extra one)
                     // reset that window alone (see `Workspace.resetChartsWindow`).
-                    if SecondaryCharts.isWindow(event.window), event.window?.attachedSheet == nil,
+                    let chartsWin = ChartsWin.of(event.window)
+                    if let chartsWin, event.window?.attachedSheet == nil,
                        (modifiers == .command || modifiers == .shift || modifiers == .option || modifiers == .control || modifiers == [.command, .shift])
                         && event.charactersIgnoringModifiers?.lowercased() == "r"
                         || workspace.resetShortcut.map({ KeyShortcut(event) == $0 }) == true {
                         if event.window?.firstResponder is NSTextView, modifiers == .shift || KeyShortcut(event).isPlain { return event }
                         if !event.isARepeat {
-                            workspace.resetChartsWindow()
-                            broker.say("Charts window reset: every chart at the Zoom slider's zoom (symbols you typed stay; the Reset button lets them go)")
+                            workspace.resetChartsWindow(chartsWin)
+                            broker.say("\(chartsWin.name) reset: every chart at the Zoom slider's zoom (symbols you typed stay; the Reset button lets them go)")
                         }
                         return nil
                     }
                     // In the Charts window, ⌘⇧ and a list's letter switches its charts to that list (only there).
-                    if modifiers == [.command, .shift], SecondaryCharts.isWindow(event.window), event.window?.attachedSheet == nil,
+                    if modifiers == [.command, .shift], let chartsWin, event.window?.attachedSheet == nil,
                        let kind = ScannerKind.forShortcut(event.charactersIgnoringModifiers?.lowercased() ?? "") {
-                        if !event.isARepeat, workspace.chartsWindowList != kind {
-                            workspace.chartsWindowList = kind
-                            broker.say("Charts window: \(kind.rawValue)")
+                        let window = workspace.chartsWindow(chartsWin)
+                        if !event.isARepeat, window.list != kind {
+                            window.list = kind
+                            broker.say("\(chartsWin.name): \(kind.rawValue)")
                         }
                         return nil
                     }
@@ -263,7 +265,7 @@ struct TradingShortcuts: ViewModifier {
                        let slot = OrderKeys.number(keyCode: event.keyCode), GridLayout.slots.contains(slot) {
                         if event.window?.firstResponder is NSTextView { return event }
                         if !event.isARepeat {
-                            workspace.pickGridLayout(slot, in: SecondaryCharts.isWindow(event.window) ? .chartsWindow : .main,
+                            workspace.pickGridLayout(slot, in: chartsWin?.layoutWindow ?? .main,
                                                      broker: broker)
                         }
                         return nil
@@ -279,12 +281,12 @@ struct TradingShortcuts: ViewModifier {
                     // ⌥⇧1–5: the top bar's view set or scale under that number, as a click on it.
                     if modifiers == [.option, .shift], inMainWindow,
                        let slot = OrderKeys.number(keyCode: event.keyCode), ChartScale.slots.contains(slot) {
-                        if !event.isARepeat, SecondaryCharts.isWindow(event.window) {
-                            // The Charts window in front: its own numbers.
+                        if !event.isARepeat, let chartsWin {
+                            // A Charts window in front: its own numbers.
                             if NumberButtons.areScales {
-                                workspace.pickChartsWindowScale(slot, broker: broker)
+                                workspace.pickChartsWindowScale(slot, in: chartsWin, broker: broker)
                             } else {
-                                workspace.pickChartsWindowViewSet(slot, broker: broker)
+                                workspace.pickChartsWindowViewSet(slot, in: chartsWin, broker: broker)
                             }
                         } else if !event.isARepeat {
                             if NumberButtons.areScales {
@@ -300,9 +302,9 @@ struct TradingShortcuts: ViewModifier {
                     if modifiers == .option || modifiers == .control,
                        inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
                         // The Charts window in front: every chart there, as its header's switch.
-                        if SecondaryCharts.isWindow(event.window) {
-                            UserDefaults.standard.set(timeframe.rawValue, forKey: SecondaryCharts.timeframeKey)
-                            workspace.setTimeframe(timeframe, of: workspace.secondaryCharts, broker: broker)
+                        if let chartsWin {
+                            UserDefaults.standard.set(timeframe.rawValue, forKey: chartsWin.key(SecondaryCharts.timeframeKey))
+                            workspace.setTimeframe(timeframe, of: workspace.chartsWindow(chartsWin).charts, broker: broker)
                             return nil
                         }
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)

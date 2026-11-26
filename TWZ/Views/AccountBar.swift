@@ -145,17 +145,16 @@ struct ScaleButtons: View {
     @AppStorage(NumberButtons.scalesKey) private var asScales = NumberButtons.defaultScales
     let window: GridLayout.Window
 
-    private var inChartsWindow: Bool { window == .chartsWindow }
+    private var inChartsWindow: Bool { window.chartsWin != nil }
+    private var cw: ChartsWindowState? { window.chartsWin.map(workspace.chartsWindow) }
 
     var body: some View {
         HStack(spacing: 1) {
             ForEach(ChartScale.slots, id: \.self) { slot in
-                let lit = inChartsWindow
-                    ? (asScales ? workspace.chartsWindowActiveScale == slot : workspace.chartsWindowActiveViewSet == slot)
-                    : (asScales ? workspace.activeScale == slot : workspace.activeViewSet == slot)
-                let saved = inChartsWindow
-                    ? (asScales ? workspace.chartsWindowScales[slot] != nil : workspace.chartsWindowViewSets[slot] != nil)
-                    : (asScales ? workspace.chartScales[slot] != nil : workspace.viewSets[slot] != nil)
+                let lit = cw.map { asScales ? $0.activeScale == slot : $0.activeViewSet == slot }
+                    ?? (asScales ? workspace.activeScale == slot : workspace.activeViewSet == slot)
+                let saved = cw.map { asScales ? $0.scales[slot] != nil : $0.viewSets[slot] != nil }
+                    ?? (asScales ? workspace.chartScales[slot] != nil : workspace.viewSets[slot] != nil)
                 Button {
                     pick(slot)
                 } label: {
@@ -196,17 +195,17 @@ struct ScaleButtons: View {
 
     private func pick(_ slot: Int) {
         let shift = NSEvent.modifierFlags.contains(.shift)
-        if inChartsWindow {
+        if let win = window.chartsWin {
             if !asScales {
-                if shift { workspace.saveChartsWindowViewSet(slot, broker: broker) } else { workspace.pickChartsWindowViewSet(slot, broker: broker) }
+                if shift { workspace.saveChartsWindowViewSet(slot, in: win, broker: broker) } else { workspace.pickChartsWindowViewSet(slot, in: win, broker: broker) }
             } else if !shift {
-                workspace.pickChartsWindowScale(slot, broker: broker)
-            } else if workspace.saveChartsWindowScale(slot), let symbol = workspace.chart(id: workspace.selectedChartID)?.symbol {
+                workspace.pickChartsWindowScale(slot, in: win, broker: broker)
+            } else if workspace.saveChartsWindowScale(slot, in: win), let symbol = workspace.chart(id: workspace.selectedChartID)?.symbol {
                 workspace.syncChartsWindowScale(to: broker)
-                broker.say("Charts window scale \(slot) saved from \(symbol)'s view")
+                broker.say("\(win.name) scale \(slot) saved from \(symbol)'s view")
             } else {
                 NSSound.beep()
-                broker.say("Select a chart in the Charts window to save its view as scale \(slot)")
+                broker.say("Select a chart in the \(win.name) to save its view as scale \(slot)")
             }
             return
         }
