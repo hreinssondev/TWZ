@@ -519,11 +519,17 @@ struct CandleChart: View {
 
     private func draw(in ctx: inout GraphicsContext, size: CGSize) {
         let bars = chart.bars
+        // A chart theme: its own background behind everything, axes included.
+        let scene = candleTheme.scene
+        if let scene {
+            ctx.fill(Path(CGRect(origin: .zero, size: size)),
+                     with: .linearGradient(scene.background, startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+        }
         guard let v = viewport(size: size) else {
             let plot = plotRect(size: size)
             guard plot.width > 20, plot.height > 20 else { return }
             let msg = chart.isLoading ? "Loading…" : (chart.error ?? (chart.symbol.isEmpty ? "Enter a symbol" : "No data"))
-            ctx.draw(Text(msg).font(.system(size: 11)).foregroundStyle(.secondary),
+            ctx.draw(Text(msg).font(.system(size: 11)).foregroundStyle(scene.map { AnyShapeStyle($0.label) } ?? AnyShapeStyle(.secondary)),
                      at: CGPoint(x: size.width / 2, y: size.height / 2))
             return
         }
@@ -540,8 +546,8 @@ struct CandleChart: View {
         plotCtx.clip(to: Path(CGRect(x: 0, y: 0, width: plot.maxX, height: size.height)))
 
         // Grid lines switched off in Settings: drawn clear, the labels stay.
-        let gridColor = Color.primary.opacity(showGrid ? 0.07 : 0)
-        let labelColor = Color.secondary
+        let gridColor = scene.map { $0.grid.opacity(showGrid ? 0.14 : 0) } ?? Color.primary.opacity(showGrid ? 0.07 : 0)
+        let labelColor = scene.map { AnyShapeStyle($0.label) } ?? AnyShapeStyle(.secondary)
         let (up, down) = candleTheme.colors(customUp: customUp, customDown: customDown)
 
         // Session shading, one band per run of bars from the same session.
@@ -552,7 +558,7 @@ struct CandleChart: View {
                 let phase = bars[i].phase
                 var j = i
                 while j + 1 < end, bars[j + 1].phase == phase { j += 1 }
-                if let tint = Self.sessionTint(phase) {
+                if let tint = Self.sessionTint(phase, scene: scene) {
                     let band = CGRect(x: x(i) - barWidth / 2, y: plot.minY,
                                       width: CGFloat(j - i + 1) * barWidth, height: plot.height)
                     plotCtx.fill(Path(band), with: .color(tint))
@@ -565,7 +571,7 @@ struct CandleChart: View {
                     anchorX - CGFloat(anchor - rest.index(t, barCount: bars.count)) * barWidth
                 }
                 for session in rest.sessions {
-                    guard let tint = Self.sessionTint(session.phase) else { continue }
+                    guard let tint = Self.sessionTint(session.phase, scene: scene) else { continue }
                     let left = edge(session.start)
                     plotCtx.fill(Path(CGRect(x: left, y: plot.minY, width: edge(session.end) - left, height: plot.height)),
                                  with: .color(tint))
@@ -581,7 +587,7 @@ struct CandleChart: View {
                 separators.move(to: CGPoint(x: xx, y: plot.minY))
                 separators.addLine(to: CGPoint(x: xx, y: plot.maxY))
             }
-            plotCtx.stroke(separators, with: .color(Color.primary.opacity(0.25)), lineWidth: 0.5)
+            plotCtx.stroke(separators, with: .color(scene?.label.opacity(0.3) ?? Color.primary.opacity(0.25)), lineWidth: 0.5)
         }
 
         // Horizontal grid + price labels.
@@ -984,11 +990,11 @@ struct CandleChart: View {
         ctx.draw(resolved, at: CGPoint(x: rect.midX, y: y))
     }
 
-    private static func sessionTint(_ phase: MarketSession.Phase) -> Color? {
+    private static func sessionTint(_ phase: MarketSession.Phase, scene: ChartScene?) -> Color? {
         switch phase {
         case .regular: nil
-        case .preMarket, .afterHours: Color.primary.opacity(0.045)
-        case .overnight, .closed: Color.indigo.opacity(0.08)
+        case .preMarket, .afterHours: scene?.label.opacity(0.06) ?? Color.primary.opacity(0.045)
+        case .overnight, .closed: scene?.grid.opacity(0.08) ?? Color.indigo.opacity(0.08)
         }
     }
 

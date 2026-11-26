@@ -260,6 +260,7 @@ private struct TradingSettings: View {
             + "Top Gainers, Forex (S, H and L wait a moment for a second letter)"),
         ("⌥ or ⌃ 1 2 3 4 5 6", "Every chart's timeframe: 1m / 5m / 15m / 30m / 1h / D (one modifier alone: two together, ⌃⌥3 say, are free for a hotkey or order key)"),
         ("⌃⇧1 … 9, 0", "Candle colors: the themes in Settings › Appearance › Candle colors, top first (⌃⇧0: the tenth)"),
+        ("⌃⇧Q W E R T Y U I O P", "Chart themes: candles, background, grid and labels together (Settings › Appearance › Chart themes)"),
         ("⇧1 2 3 4 5", "The chart layout saved under that number in the top bar's layout numbers (▦ 1–5: ⇧-click saves the grid's columns, rows and lines there, a click loads it); with the Charts window in front, that window's own. Not while typing"),
         ("⌘R, ⇧R, ⌥R, ⌃R or ⌘⇧R", "Reset, as the top bar's button: every chart follows the grid's list again"),
         ("´", "Back to the grid shown before (its list and timeframe: from 15m to 5m, from Forex to Most Active $), and pressed again back here; not while typing"),
@@ -770,32 +771,41 @@ private struct AppearanceSettings: View {
                 set: { outlineWidth = $0 / SelectedOutline.selectedMultiple })
     }
 
+    /// A theme to pick, with a preview, its shortcut and a checkmark while it's on.
+    private func themeRow(_ option: CandleTheme) -> some View {
+        let colors = option.colors(customUp: customUp, customDown: customDown)
+        return Button {
+            theme = option
+        } label: {
+            HStack(spacing: 10) {
+                CandleSwatch(up: colors.up, down: colors.down, scene: option.scene)
+                Text(option.rawValue)
+                Spacer()
+                Text(option.shortcut)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                if theme == option {
+                    Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     var body: some View {
         Form {
             Section("Presets") {
                 ForEach(Array(AppearancePresets.slots), id: \.self) { PresetRow(slot: $0) }
             }
             Section("Candle colors") {
-                ForEach(CandleTheme.allCases) { option in
-                    let colors = option.colors(customUp: customUp, customDown: customDown)
-                    Button {
-                        theme = option
-                    } label: {
-                        HStack(spacing: 10) {
-                            CandleSwatch(up: colors.up, down: colors.down)
-                            Text(option.rawValue)
-                            Spacer()
-                            Text(option.shortcut)
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.tertiary)
-                            if theme == option {
-                                Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
+                ForEach(CandleTheme.candleOnly) { themeRow($0) }
+            }
+            Section("Chart themes") {
+                ForEach(CandleTheme.chartThemes) { themeRow($0) }
+                Text("The candles and the chart's own background, grid and labels. A candle color above goes back to the app's look.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("App colors") {
                 Picker("Up / down outside the candles", selection: $sideSource) {
@@ -1122,6 +1132,8 @@ private struct LineStylePicker: View {
 private struct CandleSwatch: View {
     let up: Color
     let down: Color
+    /// A chart theme's background behind them.
+    var scene: ChartScene? = nil
 
     private static let candles: [(isUp: Bool, low: CGFloat, open: CGFloat, close: CGFloat, high: CGFloat)] = [
         (true, 0.15, 0.30, 0.65, 0.80),
@@ -1132,6 +1144,10 @@ private struct CandleSwatch: View {
 
     var body: some View {
         Canvas { ctx, size in
+            if let scene {
+                ctx.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 3),
+                         with: .linearGradient(scene.background, startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
+            }
             let slot = size.width / CGFloat(Self.candles.count)
             func y(_ v: CGFloat) -> CGFloat { size.height * (1 - v) }
             for (i, c) in Self.candles.enumerated() {

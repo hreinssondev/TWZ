@@ -270,7 +270,7 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    // ⌃⇧1–9, 0: the candle colors, Settings' themes from the top (see `CandleTheme.forShortcut`).
+                    // ⌃⇧1–9, 0: the candle colors, Settings' themes from the top; ⌃⇧Q–P the chart themes (see `CandleTheme.forShortcut`).
                     if modifiers == [.control, .shift], inMainWindow, let theme = CandleTheme.forShortcut(keyCode: event.keyCode) {
                         if !event.isARepeat {
                             UserDefaults.standard.set(theme.rawValue, forKey: CandleTheme.storageKey)

@@ -19,19 +19,60 @@ enum CandleTheme: String, CaseIterable, Identifiable {
     case neon = "Neon Green / Neon Red"
     case olive = "Olive / Maroon"
     case pastel = "Pastel Green / Salmon"
+    // Chart themes: the candles and the chart's own background, grid and labels (see `ChartScene`).
+    case synthwave = "Synthwave"
+    case terminal = "Retro Terminal"
+    case deepSea = "Deep Sea"
+    case volcano = "Volcano"
+    case bubblegum = "Bubblegum"
+    case aurora = "Northern Lights"
+    case sunset = "Tropical Sunset"
+    case casino = "Casino Night"
+    case neonCity = "Neon City"
+    case iceCream = "Ice Cream"
     var id: String { rawValue }
 
-    /// ⌃⇧1–9 picks the themes in Settings' order, ⌃⇧0 the tenth.
+    /// The themes with only candle colors (⌃⇧1–9, 0), and the chart themes (⌃⇧Q–P).
+    static var candleOnly: [CandleTheme] { allCases.filter { $0.scene == nil } }
+    static var chartThemes: [CandleTheme] { allCases.filter { $0.scene != nil } }
+
+    /// The top letter row, Q to P, by key code (where the keys sit, whatever the keyboard layout).
+    private static let letterRow: [(keyCode: UInt16, letter: String)] = [
+        (12, "Q"), (13, "W"), (14, "E"), (15, "R"), (17, "T"), (16, "Y"), (32, "U"), (34, "I"), (31, "O"), (35, "P"),
+    ]
+
+    /// ⌃⇧1–9 picks the candle themes in Settings' order, ⌃⇧0 the tenth; ⌃⇧Q … P the chart themes.
     static func forShortcut(keyCode: UInt16) -> CandleTheme? {
+        if let i = letterRow.firstIndex(where: { $0.keyCode == keyCode }) {
+            return i < chartThemes.count ? chartThemes[i] : nil
+        }
         let n = keyCode == 29 || keyCode == 82 ? 10 : OrderKeys.number(keyCode: keyCode)
-        guard let n, n <= allCases.count else { return nil }
-        return allCases[n - 1]
+        guard let n, n <= candleOnly.count else { return nil }
+        return candleOnly[n - 1]
     }
 
-    /// "⌃⇧1" … "⌃⇧9", "⌃⇧0".
+    /// "⌃⇧1" … "⌃⇧9", "⌃⇧0"; "⌃⇧Q" … "⌃⇧P".
     var shortcut: String {
-        let n = (Self.allCases.firstIndex(of: self) ?? 0) + 1
+        if let i = Self.chartThemes.firstIndex(of: self) { return "⌃⇧" + Self.letterRow[i].letter }
+        let n = (Self.candleOnly.firstIndex(of: self) ?? 0) + 1
         return "⌃⇧\(n == 10 ? 0 : n)"
+    }
+
+    /// A chart theme's background (top to bottom), grid and label colors; nil keeps the app's own.
+    var scene: ChartScene? {
+        switch self {
+        case .synthwave: ChartScene(top: 0x241047, bottom: 0x0B0420, grid: 0xB967FF, label: 0xC9B6FF)
+        case .terminal: ChartScene(top: 0x04140B, bottom: 0x000000, grid: 0x33FF66, label: 0x7FD99A)
+        case .deepSea: ChartScene(top: 0x0A2A47, bottom: 0x020C18, grid: 0x4FC3F7, label: 0x9CCFE8)
+        case .volcano: ChartScene(top: 0x2A0E06, bottom: 0x0A0302, grid: 0xFF7043, label: 0xE0A890)
+        case .bubblegum: ChartScene(top: 0x3A1840, bottom: 0x1A0820, grid: 0xFF9AD5, label: 0xF2C4E6)
+        case .aurora: ChartScene(top: 0x0B2233, bottom: 0x050A14, grid: 0x6BFFB8, label: 0xA8D8D0)
+        case .sunset: ChartScene(top: 0x3B1450, bottom: 0x140A24, grid: 0xFF9E64, label: 0xFFC6A8)
+        case .casino: ChartScene(top: 0x0F4A2E, bottom: 0x05200F, grid: 0xFFD700, label: 0xD8C98A)
+        case .neonCity: ChartScene(top: 0x10101F, bottom: 0x05050C, grid: 0x00F0FF, label: 0x8FE9F2)
+        case .iceCream: ChartScene(top: 0x3A2620, bottom: 0x1E1310, grid: 0xF5E1C8, label: 0xE8D2BC)
+        default: nil
+        }
     }
 
     static let storageKey = "candleTheme"
@@ -53,8 +94,36 @@ enum CandleTheme: String, CaseIterable, Identifiable {
         case .neon: (Color(red: 0.00, green: 1.00, blue: 0.45), Color(red: 1.00, green: 0.10, blue: 0.32))
         case .olive: (Color(red: 0.50, green: 0.62, blue: 0.15), Color(red: 0.58, green: 0.10, blue: 0.13))
         case .pastel: (Color(red: 0.66, green: 0.90, blue: 0.56), Color(red: 0.98, green: 0.55, blue: 0.45))
+        case .synthwave: (Color(rgb: 0x00F0FF), Color(rgb: 0xFF2E97))
+        case .terminal: (Color(rgb: 0x33FF66), Color(rgb: 0xFFB000))
+        case .deepSea: (Color(rgb: 0x3DF5D0), Color(rgb: 0xFF7A6B))
+        case .volcano: (Color(rgb: 0xFFD54A), Color(rgb: 0xFF3D00))
+        case .bubblegum: (Color(rgb: 0x7CFFCB), Color(rgb: 0xFF6EC7))
+        case .aurora: (Color(rgb: 0x6BFFB8), Color(rgb: 0xD58BFF))
+        case .sunset: (Color(rgb: 0xFFD166), Color(rgb: 0xFF4F79))
+        case .casino: (Color(rgb: 0xFFD700), Color(rgb: 0xFF3B3B))
+        case .neonCity: (Color(rgb: 0xFCEE0A), Color(rgb: 0xFF003C))
+        case .iceCream: (Color(rgb: 0xA8F0DC), Color(rgb: 0xFFA8C5))
         }
     }
+}
+
+/// A chart theme's look behind the candles: a top-to-bottom background, the grid lines' color (shown only with
+/// Settings' grid lines on) and the price and time labels'.
+struct ChartScene {
+    let top: Color
+    let bottom: Color
+    let grid: Color
+    let label: Color
+
+    init(top: UInt32, bottom: UInt32, grid: UInt32, label: UInt32) {
+        self.top = Color(rgb: top)
+        self.bottom = Color(rgb: bottom)
+        self.grid = Color(rgb: grid)
+        self.label = Color(rgb: label)
+    }
+
+    var background: Gradient { Gradient(colors: [top, bottom]) }
 }
 
 /// Buy / sell, long / short and gain / loss colors outside the candles (lists, Orders / Positions /
@@ -486,6 +555,11 @@ nonisolated enum HotkeyColor: String, Codable, CaseIterable, Identifiable {
 }
 
 extension Color {
+    /// 0xRRGGBB.
+    init(rgb v: UInt32) {
+        self.init(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
+    }
+
     /// "RRGGBB" (with or without "#").
     init?(hex: String) {
         let s = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
