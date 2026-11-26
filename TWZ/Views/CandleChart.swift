@@ -1232,7 +1232,8 @@ private struct ScrollCatcher: NSViewRepresentable {
                 // A ⌃-swipe on the trackpad scales the opposite way to the ⌃-wheel.
                 if d != 0 { onPriceScale?(event.hasPreciseScrollingDeltas ? -d : d) }
             case .gridZoom where onShiftScroll != nil:
-                if d != 0 { onShiftScroll?(d) }
+                // Locked to panning (Swipe zooms every chart on): the chart under the pointer pans, nothing zooms.
+                if panLocked { onScroll?(event.scrollingDeltaX, 0, location, false) } else if d != 0 { onShiftScroll?(d) }
             case .gridZoom, .chart:
                 // Locked to panning: every bit sideways pans, none zooms.
                 if panLocked { onScroll?(event.scrollingDeltaX, 0, location, solo) } else { onScroll?(dx, dy, location, solo) }

@@ -1023,7 +1023,7 @@ private struct AppearanceSettings: View {
                     .foregroundStyle(.secondary)
                 Toggle("Pan locks once swiped sideways", isOn: $swipeLocksPan)
                 Text(swipeLocksPan
-                     ? "Swiping up or down zooms the chart as usual, but once a two-finger swipe goes left or right it only pans, until the fingers lift (and through its glide after)."
+                     ? "Swiping up or down zooms as usual (every chart, with Swipe zooms every chart on), but once a two-finger swipe goes left or right it only pans the chart under the pointer, until the fingers lift (and through its glide after)."
                      : "A nearly straight swipe only pans or only zooms; a clearly diagonal one does both.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
