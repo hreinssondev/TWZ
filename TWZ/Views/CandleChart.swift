@@ -225,6 +225,18 @@ struct CandleChart: View {
             Canvas(rendersAsynchronously: false) { ctx, size in
                 draw(in: &ctx, size: size)
             }
+            .overlay(alignment: .topTrailing) {
+                // No trade today (a US market holiday, or before the first one): the price is yesterday's close.
+                if broker.quote(chart.symbol)?.lastIsClose == true {
+                    Text("Yesterday's close · no trades today")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(Color.orange))
+                        .padding(.top, 4).padding(.trailing, axisWidth + 4)
+                        .allowsHitTesting(false)
+                }
+            }
             .contentShape(Rectangle())
             .onContinuousHover { phase in
                 if case .active(let p) = phase {

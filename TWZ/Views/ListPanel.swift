@@ -265,6 +265,8 @@ struct ListPanel: View {
             text = "Not connected"
         } else if let error = scan?.error {
             text = error
+        } else if scan?.isLastSession == true, let updated = scan?.updated {
+            text = "Not current: last session's list (\(updated.formatted(date: .abbreviated, time: .shortened)))"
         } else if let updated = scan?.updated {
             let session = scanner == .forex
                 ? (MarketSession.forexIsOpen() ? "Forex open" : "Forex closed until \(MarketSession.forexReopening())")
@@ -273,7 +275,8 @@ struct ListPanel: View {
         } else {
             text = "Scanning…"
         }
-        return MessageLabel(text: text, color: scan?.error == nil ? Color.secondary : Color.red)
+        let color = scan?.error != nil ? Color.red : scan?.isLastSession == true ? Color.orange : Color.secondary
+        return MessageLabel(text: text, color: color)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(6)
     }

@@ -3415,7 +3415,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if symbols.isEmpty, MarketSession.regularClose() == nil, let spec = scanSpecs[owner],
            let last = lastScans[ScanKey(spec)], !last.symbols.isEmpty {
             // No US session today (a holiday or weekend): the scan comes back empty; the last session's rows stay.
-            scans[owner] = ScanResult(symbols: Array(last.symbols.prefix(spec.rows)), updated: last.updated)
+            scans[owner] = ScanResult(symbols: Array(last.symbols.prefix(spec.rows)), updated: last.updated, isLastSession: true)
             return
         }
         scans[owner] = ScanResult(symbols: symbols, updated: Date())

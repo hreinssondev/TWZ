@@ -744,6 +744,10 @@ nonisolated struct ScanResult: Codable, Equatable {
     var symbols: [String] = []
     var error: String?
     var updated: Date?
+    /// The last session's rows, shown as IB's scan came back empty (no US session today).
+    var isLastSession = false
+
+    private enum CodingKeys: String, CodingKey { case symbols, error, updated }
 }
 
 /// Settings › Trading's Hide restricted stocks (see `Broker.hideRestricted`). Off by default.
