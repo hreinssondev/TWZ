@@ -15,6 +15,9 @@ import SwiftUI
 final class FrameMeter {
     static let shared = FrameMeter()
     static let enabledKey = "showFrameMeter"
+    /// On until turned off in Settings.
+    static let defaultOn = true
+    static var enabled: Bool { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? defaultOn }
 
     struct Frame {
         let end: CFTimeInterval
@@ -33,7 +36,7 @@ final class FrameMeter {
         var overBudget = 0
     }
 
-    private(set) var isOn = UserDefaults.standard.bool(forKey: enabledKey)
+    private(set) var isOn = FrameMeter.enabled
     private var frames: [Frame] = []
     private var inputs: [CFTimeInterval] = []
     private var frameStart: CFTimeInterval?
@@ -44,7 +47,7 @@ final class FrameMeter {
         NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                let on = UserDefaults.standard.bool(forKey: Self.enabledKey)
+                let on = Self.enabled
                 if on != self.isOn { self.isOn = on; self.frames = []; self.inputs = [] }
             }
         }
@@ -105,7 +108,7 @@ final class FrameMeter {
 /// The meter in the top bar (the main window's and the Charts windows'), while it's on in Settings: frames per
 /// second / the screen's refresh rate, the average and slowest frame's chart drawing in ms, input events a second.
 struct FrameMeterBadge: View {
-    @AppStorage(FrameMeter.enabledKey) private var on = false
+    @AppStorage(FrameMeter.enabledKey) private var on = FrameMeter.defaultOn
     @State private var screenHz = NSScreen.main?.maximumFramesPerSecond ?? 60
 
     var body: some View {

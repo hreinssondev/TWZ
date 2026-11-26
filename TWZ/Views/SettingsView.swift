@@ -761,7 +761,7 @@ private struct AppearanceSettings: View {
     @AppStorage(HeaderPerformance.freezeKey) private var headersFrozen = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.layoutKey) private var headerLayoutByWidth = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.perStockKey) private var headerPerStock = HeaderPerformance.defaultOn
-    @AppStorage(FrameMeter.enabledKey) private var frameMeter = false
+    @AppStorage(FrameMeter.enabledKey) private var frameMeter = FrameMeter.defaultOn
     @AppStorage(Swiping.zoomsAllKey) private var swipeZoomsAll = Swiping.defaultZoomsAll
     @AppStorage(Swiping.locksPanKey) private var swipeLocksPan = Swiping.defaultLocksPan
     @AppStorage(ViewSync.key) private var viewSync = ViewSync.defaultOn
