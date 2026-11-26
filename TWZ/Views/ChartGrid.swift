@@ -44,6 +44,8 @@ enum MainGrid {
     static let pinsKey = "mainGridPins"
     static let scanKey = "mainGridScan"
     static let scannerOwner = "main-gainers"
+    /// The top bar's 5D with the Forex list in the grid (see `MainForexButtons`).
+    static let forexByRangeKey = "mainGridForexByRange"
 
     /// With 3 rows the bottom row holds this many charts, whatever the Cols slider says.
     static let threeRowBottomColumns = 7
@@ -91,8 +93,17 @@ struct ChartGrid: View {
 
     private var columns: Int { MainGrid.columns(storedColumns) }
     private var rows: Int { MainGrid.rows(storedRows) }
-    /// The symbols the grid follows: the top gainers, or the list loaded with a list's load button.
-    private var gainers: [String] { broker.scans[MainGrid.scannerOwner]?.symbols ?? [] }
+    @AppStorage(MainGrid.forexByRangeKey) private var forexByRange = false
+    /// The symbols the grid follows: the top gainers, or the list loaded with a list's load button; the Forex
+    /// list's second page (the top bar's 2/2): the pairs past the cells left around those set by hand, less theirs.
+    private var gainers: [String] {
+        let symbols = broker.scans[MainGrid.scannerOwner]?.symbols ?? []
+        guard workspace.mainForexShowsRest, workspace.gridScan?.kind == .forex else { return symbols }
+        let manual = workspace.mainCells.filter { workspace.manualChartIDs.contains($0) }
+        let pinned = Set(manual.compactMap { workspace.chart(id: $0)?.symbol })
+        let slots = MainGrid.cellCount(columns: columns, rows: rows) - manual.count
+        return Array(symbols.filter { !pinned.contains($0) }.dropFirst(slots))
+    }
     private var scan: ScanSpec { workspace.gridScan ?? SecondaryCharts.gainersScan }
 
     var body: some View {
@@ -112,9 +123,11 @@ struct ChartGrid: View {
                 }
             }
             workspace.arrangeMainGrid(columns: columns, rows: rows, gainers: gainers, broker: broker)
+            broker.setForexByRange(forexByRange, owner: MainGrid.scannerOwner)
             broker.setScanner(scan, owner: MainGrid.scannerOwner)
             follow()
         }
+        .onChange(of: forexByRange) { broker.setForexByRange(forexByRange, owner: MainGrid.scannerOwner) }
         // A list's load button, or Reset: the grid's scanner follows.
         .onChange(of: workspace.gridScan) { broker.setScanner(scan, owner: MainGrid.scannerOwner) }
         .onChange(of: [columns, rows]) {
@@ -273,6 +286,7 @@ extension Workspace {
         // A double-click waiting for another list gives up (see `showChart`).
         if pendingFocus?.place.list != Self.listKey(spec) { pendingFocus = nil }
         gridScan = spec
+        mainForexShowsRest = false
         // The list's own views, lit scale and zoom set by hand, before its charts load.
         syncGridScale(to: broker)
         broker.setScanner(spec, owner: MainGrid.scannerOwner)
@@ -548,5 +562,28 @@ struct CrossResizeHandle: View {
             )
             .onTapGesture(count: 2, perform: onReset)
             .animation(.easeOut(duration: 0.1), value: active)
+    }
+}
+
+/// The main window's top bar with the Forex list in the grid, as the Charts window's: 1/2 flips between the pairs that
+/// fit the grid and the ones past them; 5D orders them by 5-day range.
+struct MainForexButtons: View {
+    @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
+    @AppStorage(MainGrid.forexByRangeKey) private var forexByRange = false
+
+    var body: some View {
+        HStack(spacing: 3) {
+            let rest = workspace.mainForexShowsRest
+            ForexListButton(title: rest ? "2/2" : "1/2", lit: rest,
+                            help: rest ? "Back to the first pairs of the Forex list" : "The Forex list's pairs past those the grid has room for") {
+                workspace.mainForexShowsRest.toggle()
+            }
+            ForexListButton(title: "5D", lit: forexByRange,
+                            help: forexByRange ? "Back to the Forex list's fixed order"
+                                : "The pairs by their range over the last 5 finished days, (high − low) / low, widest first; set once a day, after 17:00 ET") {
+                forexByRange.toggle()
+            }
+        }
     }
 }

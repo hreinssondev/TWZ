@@ -73,6 +73,7 @@ struct AccountBar: View {
                         ScaleButtons(window: .main)
                         GridLayoutButtons(window: .main, showsIcon: false)
                     }
+                    if workspace.gridScan?.kind == .forex { MainForexButtons() }
                 }
                 .fixedSize()
             }

@@ -417,17 +417,7 @@ struct SecondaryChartsView: View {
     }
 
     private func forexButton(_ title: String, lit: Bool, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 10).monospacedDigit())
-                .foregroundStyle(lit ? Color.primary : Color.secondary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(lit ? 0.16 : 0.08)))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
+        ForexListButton(title: title, lit: lit, help: help, action: action)
     }
 
     /// The Zoom slider moved, or a swipe moved it (that zoomed the charts already, see `zoomChartsWindow`).
@@ -581,5 +571,27 @@ struct SecondaryChartPane: View {
         .padding(.horizontal, 8)
         .frame(height: 26)
         .background(broker.positionTint(chart.symbol, colors: sideColors))
+    }
+}
+
+/// The Forex list's 1/2 and 5D buttons' look, in the Charts window's top bar and the main window's (see `MainForexButtons`).
+struct ForexListButton: View {
+    let title: String
+    let lit: Bool
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 10).monospacedDigit())
+                .foregroundStyle(lit ? Color.primary : Color.secondary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(lit ? 0.16 : 0.08)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }

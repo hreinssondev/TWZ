@@ -368,6 +368,7 @@ final class Workspace {
     var gridScan: ScanSpec? {
         didSet {
             defaults.set(gridScan.flatMap { try? JSONEncoder().encode($0) }, forKey: MainGrid.scanKey)
+            if gridScan?.kind != oldValue?.kind { mainForexShowsRest = false }
             // Each list keeps its own lit scale and zoom set by hand: the one left keeps them, the one
             // loaded gets its own back.
             let old = Self.listKey(oldValue), new = gridListKey
@@ -378,6 +379,8 @@ final class Workspace {
             manualZoom = state?.manualZoom
         }
     }
+    /// The top bar's 2/2 with the Forex list in the main grid: the pairs past those the grid has room for (see `ChartGrid`).
+    var mainForexShowsRest = false
     /// The main grid's list, by which charts' views, the lit scale and the zoom set by hand are kept.
     var gridListKey: String { Self.listKey(gridScan) }
     static func listKey(_ scan: ScanSpec?) -> String { (scan?.kind ?? .gainers).rawValue }
