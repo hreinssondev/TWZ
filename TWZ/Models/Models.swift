@@ -40,6 +40,8 @@ nonisolated struct Quote: Equatable {
     var openInterest: Double?
     /// IB's 15-minute delayed prices (an option without the options market data subscription).
     var isDelayed = false
+    /// `last` is yesterday's close: no trade today yet (see `TradingEngine.updateQuote`).
+    var lastIsClose = false
 
     var changePercent: Double? {
         guard let last, let prevClose, prevClose > 0 else { return nil }
@@ -738,7 +740,7 @@ nonisolated struct ScanSpec: Codable, Equatable {
     var rows = ScannerKind.rowCount
 }
 
-nonisolated struct ScanResult: Equatable {
+nonisolated struct ScanResult: Codable, Equatable {
     var symbols: [String] = []
     var error: String?
     var updated: Date?

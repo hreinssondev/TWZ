@@ -129,8 +129,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     private var scanSpecs: [String: ScanSpec] = [:]
     /// Each list's latest rows, whichever owner scanned it, so a list switched back to shows them
-    /// while its own scan starts (see `setScanner`).
+    /// while its own scan starts (see `setScanner`). Kept across launches: on a US market holiday or
+    /// weekend IB's stock scanners come back empty, and the last session's rows stay (see `scannerData`).
     private var lastScans: [ScanKey: ScanResult] = [:]
+    private static let lastScansKey = "lastScans"
+    private struct SavedScan: Codable {
+        var key: ScanKey
+        var result: ScanResult
+    }
     private var scanReqByOwner: [String: Int] = [:]
     private var scanOwnerByReq: [Int: String] = [:]
     private var closeKeyByReq: [Int: String] = [:]
@@ -274,6 +280,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         restricted = (defaults.data(forKey: Self.restrictedKey)
             .flatMap { try? JSONDecoder().decode([String: Restriction].self, from: $0) } ?? [:])
             .filter { Date().timeIntervalSince($0.value.seen) < Restriction.kept }
+        lastScans = Dictionary((defaults.data(forKey: Self.lastScansKey)
+            .flatMap { try? JSONDecoder().decode([SavedScan].self, from: $0) } ?? [])
+            .map { ($0.key, $0.result) }, uniquingKeysWith: { _, new in new })
         socket.onEvent = { [weak self] event in self?.handle(event) }
         queue.async { self.watchMainThread() }
     }
@@ -752,9 +761,17 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             q.ask = o.ask ?? q.ask
             q.last = o.last ?? q.last
         }
-        let oldLast = quotes[symbol]?.last
+        // A stock with no trade today (a US market holiday, or before its first trade comes in): its last
+        // price is yesterday's close, so the hover P/L and the rest have a price. Not a trade: the charts
+        // don't follow it, and the first real trade isn't taken for a change.
+        if q.last == nil, !ForexPair.isForex(symbol), !OptionContract.isOption(symbol), let close = q.prevClose, close > 0 {
+            q.last = close
+            q.lastIsClose = true
+        }
+        let old = quotes[symbol]
+        let oldLast = old?.lastIsClose == true ? nil : old?.last
         if quotes[symbol] != q { quotes[symbol] = q }
-        if let last = q.last, last != oldLast { followLast(symbol, price: last, isTrade: oldLast != nil) }
+        if !q.lastIsClose, let last = q.last, last != oldLast { followLast(symbol, price: last, isTrade: oldLast != nil) }
     }
 
     /// Moves the live candle of every chart showing `symbol` to the latest price as soon as it's
@@ -1059,7 +1076,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     }
 
     /// A scan's list and filter, whatever its row count.
-    private struct ScanKey: Hashable {
+    private struct ScanKey: Codable, Hashable {
         var kind: ScannerKind
         var filter: ScannerFilter
 
@@ -3395,8 +3412,18 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             if version >= 3, f[i + 3] == "STK", let conId = Int(f[i + 1]), conId > 0 { conIds[symbol] = conId }
             i += stride
         }
+        if symbols.isEmpty, MarketSession.regularClose() == nil, let spec = scanSpecs[owner],
+           let last = lastScans[ScanKey(spec)], !last.symbols.isEmpty {
+            // No US session today (a holiday or weekend): the scan comes back empty; the last session's rows stay.
+            scans[owner] = ScanResult(symbols: Array(last.symbols.prefix(spec.rows)), updated: last.updated)
+            return
+        }
         scans[owner] = ScanResult(symbols: symbols, updated: Date())
-        if let spec = scanSpecs[owner] { lastScans[ScanKey(spec)] = scans[owner] }
+        if let spec = scanSpecs[owner], !symbols.isEmpty {
+            lastScans[ScanKey(spec)] = scans[owner]
+            let saved = lastScans.map { SavedScan(key: $0.key, result: ScanResult(symbols: $0.value.symbols, updated: $0.value.updated)) }
+            if let data = try? JSONEncoder().encode(saved) { defaults.set(data, forKey: Self.lastScansKey) }
+        }
         if scanSpecs[owner]?.kind == .afterHours { requestSessionCloses(symbols) }
     }
 
