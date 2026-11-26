@@ -956,9 +956,13 @@ struct CandleChart: View {
     private func drawTag(in ctx: inout GraphicsContext, text: String, y: CGFloat, plot: CGRect, color: Color,
                          opacity: Double = 1, inside: Bool = false, insideRight: CGFloat? = nil, progress: Double? = nil) -> CGRect {
         let boxed = !PriceAxis.hidesLastPriceBox(opacity)
-        let textColor: Color = boxed && opacity >= 0.5 && color.isLight ? .black : .white
-        let resolved = ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit()).foregroundStyle(textColor))
-        let textSize = resolved.measure(in: CGSize(width: 300, height: 40))
+        let textColor: NSColor = boxed && opacity >= 0.5 && color.isLight ? .black : .white
+        // Core Text from lines kept between frames (see `AxisLabels`).
+        let fontSize = axisFontSize
+        let textSize = CGSize(width: AxisLabels.width(text, size: fontSize, weight: .semibold), height: 0)
+        func drawText(_ color: NSColor, in ctx: GraphicsContext) {
+            AxisLabels.draw([.init(text: text, point: textAt, anchor: .leading)], size: fontSize, weight: .semibold, color: color, in: ctx)
+        }
         let rect = inside
             ? CGRect(x: (insideRight ?? plot.maxX - 2) - textSize.width - 8, y: y - tagHeight / 2, width: textSize.width + 8, height: tagHeight)
             : CGRect(x: plot.maxX + 1, y: y - tagHeight / 2, width: max(axisWidth - 2, textSize.width + 8), height: tagHeight)
@@ -972,15 +976,14 @@ struct CandleChart: View {
             var lit = ctx
             lit.clip(to: Path(filled))
             lit.fill(box, with: .color(color.opacity(opacity)))
-            lit.draw(resolved, at: textAt, anchor: .leading)
+            drawText(textColor, in: lit)
             var dark = ctx
             dark.clip(to: Path(unfilled))
-            dark.draw(ctx.resolve(Text(text).font(.system(size: axisFontSize, weight: .semibold).monospacedDigit())
-                .foregroundStyle(.white)), at: textAt, anchor: .leading)
+            drawText(.white, in: dark)
             ctx.stroke(Path(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 3), with: .color(color.opacity(opacity)), lineWidth: 1)
         } else {
             if boxed { ctx.fill(Path(roundedRect: rect, cornerRadius: 3), with: .color(color.opacity(opacity))) }
-            ctx.draw(resolved, at: textAt, anchor: .leading)
+            drawText(textColor, in: ctx)
         }
         return rect
     }
@@ -1008,17 +1011,42 @@ struct CandleChart: View {
     /// A time axis label: the time, but the date for daily bars, for labels 12 hours or more apart,
     /// and where a new day starts since the label before (`previous`, `spacing` seconds of bars back).
     private func timeLabel(_ date: Date, previous: Date?, spacing: Double) -> String {
-        guard chart.timeframe.isIntraday, spacing < 12 * 3600,
-              previous.map({ Calendar.current.isDate($0, inSameDayAs: date) }) ?? true
-        else { return Self.dayFormatter.string(from: date) }
-        return Self.timeFormatter.string(from: date)
+        let showsDay = !(chart.timeframe.isIntraday && spacing < 12 * 3600
+                         && previous.map({ Self.localDay($0) == Self.localDay(date) }) ?? true)
+        // The same times come back frame after frame while zooming or panning: formatted once each.
+        let key = Int64(date.timeIntervalSince1970) << 1 | (showsDay ? 1 : 0)
+        if let cached = Self.timeLabels[key] { return cached }
+        if Self.timeLabels.count > 20_000 { Self.timeLabels.removeAll(keepingCapacity: true) }
+        let label = (showsDay ? Self.dayFormatter : Self.timeFormatter).string(from: date)
+        Self.timeLabels[key] = label
+        return label
+    }
+
+    private static var timeLabels: [Int64: String] = [:]
+
+    /// A zone's offset from GMT, looked up once per hour of time (it only changes on the hour, at DST).
+    private static func offset(of zone: TimeZone, at time: Date, cache: inout [Int: Int]) -> Int {
+        let hour = Int((time.timeIntervalSince1970 / 3600).rounded(.down))
+        if let cached = cache[hour] { return cached }
+        if cache.count > 50_000 { cache.removeAll(keepingCapacity: true) }
+        let offset = zone.secondsFromGMT(for: time)
+        cache[hour] = offset
+        return offset
+    }
+
+    private static var localOffsets: [Int: Int] = [:]
+    private static var newYorkOffsets: [Int: Int] = [:]
+
+    /// The local calendar day a time falls in, as a day count.
+    private static func localDay(_ time: Date) -> Int {
+        Int(((time.timeIntervalSince1970 + Double(offset(of: .current, at: time, cache: &localOffsets))) / 86_400).rounded(.down))
     }
 
     private static let newYork = TimeZone(identifier: "America/New_York")!
 
     /// The forex trading day a time falls in, counted in days: each starts at 17:00 New York.
     private static func forexDay(_ time: Date) -> Int {
-        let local = time.timeIntervalSince1970 + Double(newYork.secondsFromGMT(for: time))
+        let local = time.timeIntervalSince1970 + Double(offset(of: newYork, at: time, cache: &newYorkOffsets))
         return Int(((local + 7 * 3600) / 86_400).rounded(.down))
     }
 
@@ -1137,6 +1165,80 @@ private struct ScrollCatcher: NSViewRepresentable {
         /// the fingers lift (and through its momentum).
         private var panLocked = false
 
+        // Scrolls, swipes and pinches not yet applied. A trackpad or mouse reports about 100 times a second, so
+        // applied as they come, the charts would move only that often; instead each is spread over the screen's
+        // refreshes (up to 240 a second), a share every frame until it's all applied (see `tick`): the same
+        // movement in all, done within about 10 ms, with a frame drawn at every refresh.
+        private var pendingPan: CGFloat = 0
+        private var pendingZoom: CGFloat = 0
+        private var pendingLocation = CGPoint.zero
+        private var pendingSolo = false
+        private var pendingGrid: CGFloat = 0
+        private var pendingPrice: CGFloat = 0
+        /// The pinch's zoom factor not yet applied, as its logarithm.
+        private var pendingPinch: Double = 0
+        private var pinchLocation = CGPoint.zero
+        private var link: CADisplayLink?
+        /// How quickly what's pending is applied: about two-thirds within this many seconds.
+        private static let smoothing: Double = 0.005
+
+        private func queueScroll(_ dx: CGFloat, _ dy: CGFloat, at location: CGPoint, solo: Bool) {
+            if solo != pendingSolo, pendingPan != 0 || pendingZoom != 0 { onScroll?(pendingPan, pendingZoom, pendingLocation, pendingSolo); pendingPan = 0; pendingZoom = 0 }
+            pendingPan += dx
+            pendingZoom += dy
+            pendingLocation = location
+            pendingSolo = solo
+            startTicking()
+        }
+
+        private func queueGrid(_ d: CGFloat) { pendingGrid += d; startTicking() }
+        private func queuePrice(_ d: CGFloat) { pendingPrice += d; startTicking() }
+
+        private func queuePinch(_ magnification: CGFloat, at location: CGPoint) {
+            // The chart zooms by 1 / (1 + magnification); kept as a logarithm, so the shares multiply back up to it.
+            pendingPinch += -log1p(Double(max(-0.9, magnification)))
+            pinchLocation = location
+            startTicking()
+        }
+
+        private func startTicking() {
+            if link == nil {
+                let made = displayLink(target: self, selector: #selector(tick(_:)))
+                made.add(to: .main, forMode: .common)
+                link = made
+            }
+            link?.isPaused = false
+        }
+
+        private func stopTicking() {
+            link?.invalidate()
+            link = nil
+        }
+
+        @objc private func tick(_ link: CADisplayLink) {
+            let frame = max(0.001, link.targetTimestamp - link.timestamp)
+            let share = CGFloat(1 - exp(-frame / Self.smoothing))
+            func take(_ pending: inout CGFloat, below: CGFloat) -> CGFloat {
+                let part = abs(pending) < below ? pending : pending * share
+                pending -= part
+                return part
+            }
+            if pendingPan != 0 || pendingZoom != 0 {
+                let dx = take(&pendingPan, below: 0.5), dy = take(&pendingZoom, below: 0.5)
+                onScroll?(dx, dy, pendingLocation, pendingSolo)
+            }
+            if pendingGrid != 0 { onShiftScroll?(take(&pendingGrid, below: 0.5)) }
+            if pendingPrice != 0 { onPriceScale?(take(&pendingPrice, below: 0.5)) }
+            if pendingPinch != 0 {
+                let part = abs(pendingPinch) < 0.002 ? pendingPinch : pendingPinch * Double(share)
+                pendingPinch -= part
+                onMagnify?(CGFloat(exp(-part) - 1), pinchLocation)
+            }
+            if pendingPan == 0, pendingZoom == 0, pendingGrid == 0, pendingPrice == 0, pendingPinch == 0 {
+                link.isPaused = true
+            }
+        }
+
         static func gesture(for flags: NSEvent.ModifierFlags, precise: Bool) -> Gesture {
             let command = flags.contains(.command), option = flags.contains(.option)
             let control = flags.contains(.control), shift = flags.contains(.shift)
@@ -1173,7 +1275,7 @@ private struct ScrollCatcher: NSViewRepresentable {
                 if event.type == .scrollWheel || event.type == .magnify { FrameMeter.shared.input() }
                 switch event.type {
                 case .magnify:
-                    self.onMagnify?(event.magnification, location)
+                    self.queuePinch(event.magnification, at: location)
                 case .rightMouseDown:
                     self.onRightClick?()
                 case .leftMouseDown:
@@ -1192,6 +1294,7 @@ private struct ScrollCatcher: NSViewRepresentable {
         func removeMonitor() {
             if let monitor { NSEvent.removeMonitor(monitor) }
             monitor = nil
+            stopTicking()
         }
 
         private func location(of event: NSEvent) -> CGPoint? {
@@ -1244,13 +1347,13 @@ private struct ScrollCatcher: NSViewRepresentable {
                 }
             case .priceScale:
                 // A ⌃-swipe on the trackpad scales the opposite way to the ⌃-wheel.
-                if d != 0 { onPriceScale?(event.hasPreciseScrollingDeltas ? -d : d) }
+                if d != 0 { queuePrice(event.hasPreciseScrollingDeltas ? -d : d) }
             case .gridZoom where onShiftScroll != nil:
                 // Locked to panning (Swipe zooms every chart on): the chart under the pointer pans, nothing zooms.
-                if panLocked { onScroll?(event.scrollingDeltaX, 0, location, false) } else if d != 0 { onShiftScroll?(d) }
+                if panLocked { queueScroll(event.scrollingDeltaX, 0, at: location, solo: false) } else if d != 0 { queueGrid(d) }
             case .gridZoom, .chart:
                 // Locked to panning: every bit sideways pans, none zooms.
-                if panLocked { onScroll?(event.scrollingDeltaX, 0, location, solo) } else { onScroll?(dx, dy, location, solo) }
+                if panLocked { queueScroll(event.scrollingDeltaX, 0, at: location, solo: solo) } else { queueScroll(dx, dy, at: location, solo: solo) }
             }
         }
     }
