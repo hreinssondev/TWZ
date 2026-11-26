@@ -171,9 +171,12 @@ final class ChartLayer: CALayer {
         guard let drawChart else { return }
         let started = FrameMeter.shared.chartBegan()
         let size = bounds.size
-        // A layer's context runs bottom-up; the chart draws top-down.
-        cg.translateBy(x: 0, y: size.height)
-        cg.scaleBy(x: 1, y: -1)
+        // The chart draws top-down. Hosted by a flipped view the layer is flipped already (its context runs top-down);
+        // otherwise a layer's context runs bottom-up.
+        if !contentsAreFlipped() {
+            cg.translateBy(x: 0, y: size.height)
+            cg.scaleBy(x: 1, y: -1)
+        }
         // Anything observable read while drawing (the chart's zoom, place and bars, prices, fills, settings) redraws
         // it on change.
         withObservationTracking {
