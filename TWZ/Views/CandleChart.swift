@@ -131,6 +131,31 @@ enum ZoomAnchor {
     static var keepsLatest: Bool { UserDefaults.standard.object(forKey: keepsLatestKey) as? Bool ?? defaultKeepsLatest }
 }
 
+/// Loads older bars once a chart's view reaches the oldest bar loaded: zoomed or scrolled out that far, or too little
+/// history to fill it (see `Broker.loadOlderBars`). Zoomed out as wide as the bars loaded counts too: zooming around the
+/// pointer leaves room for the future on the right, so the oldest bar can stay just off screen when the zoom stops at
+/// every bar loaded (a forex pair's day of minutes is more than `maxVisibleBars`).
+private struct OlderBarsLoader: View {
+    @Environment(Broker.self) private var broker
+    let chart: ChartModel
+
+    /// The bar count while the view reaches the oldest bar (nil otherwise): older bars that still
+    /// leave it on screen ask for the page before them.
+    private var oldestBarShown: Int? {
+        let count = Double(chart.bars.count)
+        let shows = count > 0 && (chart.scrollBack + chart.visibleBars >= count || chart.visibleBars >= count)
+        return shows ? chart.bars.count : nil
+    }
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .onChange(of: oldestBarShown, initial: true) { _, shown in
+                if shown != nil { broker.loadOlderBars(chart) }
+            }
+    }
+}
+
 /// Empty bar slots between the last candle and the price axis, set by the Space slider beside Zoom.
 enum RightSpace {
     static let key = "chartRightSpaceBars"
@@ -309,26 +334,12 @@ struct CandleChart: View {
                 }
             ))
         }
-        .onChange(of: oldestBarShown, initial: true) { _, shown in
-            if shown != nil { broker.loadOlderBars(chart) }
-        }
+        // In a view of its own: it reads the chart's zoom and place, which change on every frame of a zoom or pan, and
+        // read here they'd rebuild this whole view (gestures, hover, scroll catcher) every frame rather than only redraw it.
+        .background { OlderBarsLoader(chart: chart) }
     }
 
     // MARK: Viewport
-
-    /// The view reaches the oldest bar loaded: zoomed or scrolled out that far, or too little
-    /// history to fill it. Older bars then load behind it (see `Broker.loadOlderBars`).
-    /// Zoomed out as wide as the bars loaded counts too: zooming around the pointer leaves room
-    /// for the future on the right, so the oldest bar can stay just off screen when the zoom stops at
-    /// every bar loaded (a forex pair's day of minutes is more than `maxVisibleBars`).
-    private var showsOldestBar: Bool {
-        let count = Double(chart.bars.count)
-        return count > 0 && (chart.scrollBack + chart.visibleBars >= count || chart.visibleBars >= count)
-    }
-
-    /// The bar count while the view reaches the oldest bar (nil otherwise): older bars that still
-    /// leave it on screen ask for the page before them.
-    private var oldestBarShown: Int? { showsOldestBar ? chart.bars.count : nil }
 
     private func barWidth(plotWidth: CGFloat) -> CGFloat {
         plotWidth / (chart.visibleBars + rightPadding(restOfDay))
