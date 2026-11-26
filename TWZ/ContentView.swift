@@ -29,6 +29,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @Environment(\.appBackground) private var appBackground
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
     /// 0 = the hotkey row is collapsed.
@@ -99,7 +100,7 @@ struct ContentView: View {
                                         HotkeyPanel()
                                             .frame(height: minBottom)
                                             .background(RoundedRectangle(cornerRadius: 6)
-                                                .fill(Color(nsColor: .windowBackgroundColor))
+                                                .fill(appBackground)
                                                 .shadow(color: .black.opacity(0.35), radius: 8))
                                             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.12)))
                                             .opacity(hotkeysPeek ? 1 : 0)
@@ -171,7 +172,7 @@ struct ContentView: View {
         // with the bar at the bottom, the controls are hidden and the panels go up to the top edge).
         .ignoresSafeArea(.container, edges: .top)
         .background(WindowButtonsHider(hidden: barPosition == .bottom))
-        .sheet(isPresented: Bindable(workspace).showsSettings) { SettingsView() }
+        .sheet(isPresented: Bindable(workspace).showsSettings) { SettingsView().modifier(AppBackgroundFromSettings()) }
         .frame(minWidth: 1200, minHeight: 760)
         // Switching between one list and two moves the right column as far right as it goes for that.
         // A loaded layout keeps its own width.

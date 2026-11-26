@@ -381,6 +381,7 @@ struct PayoffChart: View {
     var compact = false
     @State private var hoverX: CGFloat?
     @Environment(\.sideColors) private var sides
+    @Environment(\.appBackground) private var appBackground
 
     private struct Model {
         var lo: Double, hi: Double, yLo: Double, yHi: Double
@@ -516,7 +517,7 @@ struct PayoffChart: View {
             let size = resolved.measure(in: CGSize(width: 600, height: 40))
             var box = CGRect(x: hoverX + 8, y: r.minY + 14, width: size.width + 10, height: size.height + 6)
             if box.maxX > r.maxX { box.origin.x = hoverX - 8 - box.width }
-            context.fill(Path(roundedRect: box, cornerRadius: 4), with: .color(Color(nsColor: .windowBackgroundColor).opacity(0.92)))
+            context.fill(Path(roundedRect: box, cornerRadius: 4), with: .color(appBackground.opacity(0.92)))
             context.draw(resolved, at: CGPoint(x: box.minX + 5, y: box.midY), anchor: .leading)
         }
     }

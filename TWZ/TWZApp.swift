@@ -25,6 +25,7 @@ struct TWZApp: App {
                 .modifier(ClickToUnfocus())
                 .modifier(ChartsWindowShortcut())
                 .modifier(SideColorsFromSettings())
+                .modifier(AppBackgroundFromSettings())
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)
@@ -54,6 +55,7 @@ struct TWZApp: App {
         Window(ChartsWin.first.title, id: ChartsWin.first.windowID) {
             SecondaryChartsView(win: .first)
                 .modifier(SideColorsFromSettings())
+                .modifier(AppBackgroundFromSettings())
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)
@@ -66,6 +68,7 @@ struct TWZApp: App {
         Window(ChartsWin.second.title, id: ChartsWin.second.windowID) {
             SecondaryChartsView(win: .second)
                 .modifier(SideColorsFromSettings())
+                .modifier(AppBackgroundFromSettings())
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)
@@ -77,6 +80,7 @@ struct TWZApp: App {
         Window(OptionsWindow.windowTitle, id: OptionsWindow.windowID) {
             OptionsView()
                 .modifier(SideColorsFromSettings())
+                .modifier(AppBackgroundFromSettings())
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)

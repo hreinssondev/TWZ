@@ -10,6 +10,7 @@
 import SwiftUI
 
 struct OvernightBanner: View {
+    @Environment(\.appBackground) private var appBackground
     @Environment(Broker.self) private var broker
     @AppStorage(OvernightCheck.enabledKey) private var enabled = OvernightCheck.defaultEnabled
     @AppStorage(OvernightCheck.minutesKey) private var minutes = OvernightCheck.defaultMinutes
@@ -101,7 +102,7 @@ struct OvernightBanner: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .frame(width: 420, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .windowBackgroundColor)).shadow(color: .black.opacity(0.4), radius: 10))
+        .background(RoundedRectangle(cornerRadius: 8).fill(appBackground).shadow(color: .black.opacity(0.4), radius: 10))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder((result?.fits ?? true ? Color.green : Color.orange).opacity(0.6)))
     }
 

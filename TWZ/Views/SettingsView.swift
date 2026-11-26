@@ -743,6 +743,7 @@ private struct AppearanceSettings: View {
     @AppStorage(Dimmed.opacityKey) private var dimmedOpacity = Dimmed.defaultOpacity
     @AppStorage(SideColors.customUpKey) private var sideUp = ""
     @AppStorage(SideColors.customDownKey) private var sideDown = ""
+    @AppStorage(AppBackground.key) private var appBackgroundHex = ""
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
     @AppStorage(TimeframePickerStyle.storageKey) private var pickerStyle: TimeframePickerStyle = TimeframePickerStyle.defaultStyle
     @AppStorage(AccountBarPosition.storageKey) private var barPosition: AccountBarPosition = .top
@@ -808,6 +809,14 @@ private struct AppearanceSettings: View {
                     .foregroundStyle(.secondary)
             }
             Section("App colors") {
+                HStack {
+                    ColorWell(title: "App background", key: AppBackground.key,
+                              color: Color(hex: appBackgroundHex) ?? AppBackground.defaultColor)
+                    Button("Default") { appBackgroundHex = "" }
+                        .controlSize(.small)
+                        .disabled(appBackgroundHex.isEmpty)
+                        .help("Back to the dark gray")
+                }
                 Picker("Up / down outside the candles", selection: $sideSource) {
                     ForEach(SideColors.Source.allCases) { Text($0.rawValue).tag($0) }
                 }

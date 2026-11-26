@@ -179,6 +179,63 @@ struct SideColorsFromSettings: ViewModifier {
     }
 }
 
+/// Settings › Appearance › App colors: the windows' background, "RRGGBB"; empty is the system's dark gray.
+enum AppBackground {
+    static let key = "appBackgroundColor"
+
+    /// The system's dark gray, as it is in the app's dark windows (for the swatch and the color panel to start at).
+    static var defaultColor: Color {
+        var color = NSColor.windowBackgroundColor
+        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
+            color = NSColor.windowBackgroundColor.usingColorSpace(.sRGB) ?? color
+        }
+        return Color(nsColor: color)
+    }
+}
+
+private struct AppBackgroundKey: EnvironmentKey {
+    static let defaultValue = Color(nsColor: .windowBackgroundColor)
+}
+
+extension EnvironmentValues {
+    /// The windows' background (see `AppBackground`), for what floats over the window to match it.
+    var appBackground: Color {
+        get { self[AppBackgroundKey.self] }
+        set { self[AppBackgroundKey.self] = newValue }
+    }
+}
+
+/// Gives a window the background Settings picks, and its views the color.
+struct AppBackgroundFromSettings: ViewModifier {
+    @AppStorage(AppBackground.key) private var hex = ""
+
+    func body(content: Content) -> some View {
+        let color = Color(hex: hex)
+        content
+            .background(WindowBackground(color: color.map { NSColor($0) }))
+            .environment(\.appBackground, color ?? Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+/// Sets its window's background color; nil puts the system's back.
+private struct WindowBackground: NSViewRepresentable {
+    let color: NSColor?
+
+    final class Passthrough: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override var mouseDownCanMoveWindow: Bool { true }
+    }
+
+    func makeNSView(context: Context) -> NSView { Passthrough() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        // The window isn't there yet on the first pass.
+        DispatchQueue.main.async {
+            view.window?.backgroundColor = color ?? .windowBackgroundColor
+        }
+    }
+}
+
 /// Settings › Appearance's timeframe switch: on (the default), a chart switching timeframe keeps its view,
 /// only the candles change; off, each timeframe keeps its own zoom and place to go back to (see
 /// `Broker.loadChart`).
@@ -285,7 +342,7 @@ enum HeaderPerformance {
 /// Every stored Appearance setting. Add new keys here so Settings' "Reset to Defaults" covers them.
 enum AppearanceDefaults {
     static let keys = [
-        CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey,
+        CandleTheme.storageKey, CandleTheme.customUpKey, CandleTheme.customDownKey, AppBackground.key,
         LineColors.lastPriceKey, LineColors.avgCostKey, LineColors.altClickKey, LineColors.hoverKey,
         LineColors.stopLossKey, LineColors.takeProfitKey, LineColors.ordersKey, LineColors.closedTradeKey,
         LineColors.trendKey, TrendLines.widthKey, TrendLines.priceBoxKey, LineColors.showLastPriceLineKey,
