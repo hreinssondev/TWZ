@@ -1103,7 +1103,7 @@ private struct ScrollCatcher: NSViewRepresentable {
         /// What the scroll going on does: ⌃⇧ (without ⌘ or ⌥) the space right of the latest candle, as the Space
         /// slider; ⌃ (with or without others) the price axis; ⌘, ⌥ or ⇧ (a trackpad's),
         /// alone or together, the grid's zoom; else
-        /// pan and zoom this chart. A trackpad gesture keeps it through its momentum (see `handleScroll`).
+        /// pan and zoom this chart. It follows the keys mid-swipe and keeps it through its momentum (see `handleScroll`).
         enum Gesture { case chart, gridZoom, priceScale, rightSpace }
         private var gesture = Gesture.chart
         /// The chart gesture going on was begun (or taken over) with ⇧, ⌘ or ⌥ on a trackpad: Swiping on, this chart only.
@@ -1184,11 +1184,12 @@ private struct ScrollCatcher: NSViewRepresentable {
                 if abs(dy) < abs(dx) * 0.35 { dy = 0 } else if abs(dx) < abs(dy) * 0.35 { dx = 0 }
             }
             if event.isDirectionInvertedFromDevice { dy = -dy }
-            // What the gesture does is set as it begins, and by keys pressed during it; its momentum
-            // keeps doing the same, keys let go or not.
+            // What the gesture does follows the keys held while the fingers are on the trackpad: pressing or
+            // letting go of one mid-swipe switches it at once (⌃ let go, back to plain swiping). Its momentum
+            // keeps doing what it did as the fingers lifted, keys let go or not.
             let keys = Self.gesture(for: event.modifierFlags, precise: event.hasPreciseScrollingDeltas)
-            if !event.hasPreciseScrollingDeltas || event.phase.contains(.began) || event.phase.contains(.mayBegin)
-                || !event.modifierFlags.intersection([.option, .command, .control, .shift]).isEmpty {
+            if !event.hasPreciseScrollingDeltas || event.momentumPhase.isEmpty {
+                if keys != gesture { rightSpaceRest = 0 }
                 gesture = keys
                 solo = keys == .chart && event.hasPreciseScrollingDeltas
                     && !event.modifierFlags.intersection([.option, .command, .shift]).isEmpty
