@@ -192,6 +192,12 @@ enum Swiping {
     static let defaultZoomsAll = false
 
     static var zoomsAll: Bool { UserDefaults.standard.object(forKey: zoomsAllKey) as? Bool ?? defaultZoomsAll }
+
+    /// A trackpad swipe that goes sideways only pans from then on, until the fingers lift (and through its momentum).
+    static let locksPanKey = "swipeLocksPan"
+    static let defaultLocksPan = false
+
+    static var locksPan: Bool { UserDefaults.standard.object(forKey: locksPanKey) as? Bool ?? defaultLocksPan }
 }
 
 /// Settings › Appearance › Performance: three ways the chart headers do less work, each on by default; all
@@ -221,7 +227,7 @@ enum AppearanceDefaults {
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
         TimeframeSwitch.keepViewKey, GridZoom.resetsAdjustedKey, NumberButtons.scalesKey,
         HeaderPerformance.freezeKey, HeaderPerformance.layoutKey, HeaderPerformance.perStockKey,
-        Swiping.zoomsAllKey, ViewSync.key, ZoomAnchor.keepsLatestKey,
+        Swiping.zoomsAllKey, Swiping.locksPanKey, ViewSync.key, ZoomAnchor.keepsLatestKey,
     ] + LineDashes.keys + LineDashes.dotsKeys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.

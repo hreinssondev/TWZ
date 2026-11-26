@@ -758,6 +758,7 @@ private struct AppearanceSettings: View {
     @AppStorage(HeaderPerformance.layoutKey) private var headerLayoutByWidth = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.perStockKey) private var headerPerStock = HeaderPerformance.defaultOn
     @AppStorage(Swiping.zoomsAllKey) private var swipeZoomsAll = Swiping.defaultZoomsAll
+    @AppStorage(Swiping.locksPanKey) private var swipeLocksPan = Swiping.defaultLocksPan
     @AppStorage(ViewSync.key) private var viewSync = ViewSync.defaultOn
     @AppStorage(ZoomAnchor.keepsLatestKey) private var zoomKeepsLatest = ZoomAnchor.defaultKeepsLatest
 
@@ -1018,6 +1019,12 @@ private struct AppearanceSettings: View {
                 Text(zoomKeepsLatest
                      ? "Zooming (a swipe, pinch or wheel, the Zoom slider) leaves the latest candle where it is; the bars before it spread out or close up to its left."
                      : "A chart zooms around the pointer, and zooming every chart keeps the Space slider's bars right of the latest candle, so the candles move sideways as they widen or narrow.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Pan locks once swiped sideways", isOn: $swipeLocksPan)
+                Text(swipeLocksPan
+                     ? "Swiping up or down zooms the chart as usual, but once a two-finger swipe goes left or right it only pans, until the fingers lift (and through its glide after)."
+                     : "A nearly straight swipe only pans or only zooms; a clearly diagonal one does both.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -1120,6 +1120,9 @@ private struct ScrollCatcher: NSViewRepresentable {
         private var gesture = Gesture.chart
         /// The chart gesture going on was begun (or taken over) with ⇧, ⌘ or ⌥ on a trackpad: Swiping on, this chart only.
         private var solo = false
+        /// Settings › Appearance › Pan locks once swiped sideways: this swipe went sideways, so it only pans until
+        /// the fingers lift (and through its momentum).
+        private var panLocked = false
 
         static func gesture(for flags: NSEvent.ModifierFlags, precise: Bool) -> Gesture {
             let command = flags.contains(.command), option = flags.contains(.option)
@@ -1196,6 +1199,14 @@ private struct ScrollCatcher: NSViewRepresentable {
                 if abs(dy) < abs(dx) * 0.35 { dy = 0 } else if abs(dx) < abs(dy) * 0.35 { dx = 0 }
             }
             if event.isDirectionInvertedFromDevice { dy = -dy }
+            if event.hasPreciseScrollingDeltas, Swiping.locksPan {
+                if event.phase.contains(.began) || event.phase.contains(.mayBegin) { panLocked = false }
+                if !panLocked, event.momentumPhase.isEmpty, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
+                    panLocked = true
+                }
+            } else {
+                panLocked = false
+            }
             // What the gesture does follows the keys held while the fingers are on the trackpad: pressing or
             // letting go of one mid-swipe switches it at once (⌃ let go, back to plain swiping). Its momentum
             // keeps doing what it did as the fingers lifted, keys let go or not.
@@ -1223,7 +1234,8 @@ private struct ScrollCatcher: NSViewRepresentable {
             case .gridZoom where onShiftScroll != nil:
                 if d != 0 { onShiftScroll?(d) }
             case .gridZoom, .chart:
-                onScroll?(dx, dy, location, solo)
+                // Locked to panning: every bit sideways pans, none zooms.
+                if panLocked { onScroll?(event.scrollingDeltaX, 0, location, solo) } else { onScroll?(dx, dy, location, solo) }
             }
         }
     }
