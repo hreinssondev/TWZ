@@ -3,7 +3,7 @@
 //  TWZ
 //
 //  Settings › Appearance › Performance › Frame meter: how fast the charts redraw while zooming or panning,
-//  against the screen's refresh rate, in a small badge at the bottom left of every window.
+//  against the screen's refresh rate, in the top bar.
 //
 
 import AppKit
@@ -102,7 +102,8 @@ final class FrameMeter {
     }
 }
 
-/// The meter's badge, while it's on in Settings.
+/// The meter in the top bar (the main window's and the Charts windows'), while it's on in Settings: frames per
+/// second / the screen's refresh rate, the average and slowest frame's chart drawing in ms, input events a second.
 struct FrameMeterBadge: View {
     @AppStorage(FrameMeter.enabledKey) private var on = false
     @State private var screenHz = NSScreen.main?.maximumFramesPerSecond ?? 60
@@ -112,23 +113,23 @@ struct FrameMeterBadge: View {
             TimelineView(.periodic(from: .now, by: 0.5)) { _ in
                 let s = FrameMeter.shared.snapshot(refreshRate: screenHz)
                 let budget = 1000 / Double(max(1, screenHz))
-                HStack(spacing: 6) {
-                    Text("\(s.fps) fps")
-                        .foregroundStyle(s.fps >= screenHz - 5 ? Color.green : s.fps >= screenHz / 2 ? Color.yellow : Color.primary)
-                    Text("/ \(screenHz) Hz").foregroundStyle(.secondary)
-                    Text("draw \(ms(s.averageMs)) · slowest \(ms(s.slowestMs)) ms")
-                        .foregroundStyle(s.slowestMs > budget ? Color.orange : Color.primary)
-                    Text("budget \(ms(budget))").foregroundStyle(.secondary)
-                    if s.overBudget > 0 { Text("\(s.overBudget) over").foregroundStyle(.orange) }
-                    Text("\(s.charts) charts · input \(s.inputPerSecond)/s").foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Text("\(s.fps)")
+                        .foregroundStyle(s.fps >= screenHz - 5 ? Color.green : s.fps >= screenHz / 2 ? Color.yellow : Color.primary.opacity(0.8))
+                    Text("/ \(screenHz) fps").foregroundStyle(Color.secondary.opacity(0.7))
+                    Text("\(ms(s.averageMs)) / \(ms(s.slowestMs)) ms")
+                        .foregroundStyle(s.slowestMs > budget ? Color.orange : Color.primary.opacity(0.8))
+                    Text("in \(s.inputPerSecond)/s").foregroundStyle(Color.secondary.opacity(0.7))
                 }
-                .font(.system(size: 10, weight: .medium).monospacedDigit())
-                .padding(.horizontal, 7).padding(.vertical, 3)
-                .background(Capsule().fill(Color.black.opacity(0.7)))
-                .padding(6)
+                .font(.system(size: 10).monospacedDigit())
+                .offset(y: 1)
+                .fixedSize()
+                .help("Frame meter (Settings › Appearance › Performance), the last second: chart frames per second / the screen's refresh rate; "
+                      + "the main thread's time to draw a frame's charts, average / slowest (orange: over one refresh's \(ms(budget)) ms"
+                      + (s.overBudget > 0 ? ", \(s.overBudget) frames over" : "") + "; \(s.charts) charts a frame); "
+                      + "scroll, swipe, pinch and drag events per second. Zoom or pan to read it.")
                 .background(ScreenRate(hz: $screenHz))
             }
-            .allowsHitTesting(false)
         }
     }
 

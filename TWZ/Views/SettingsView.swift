@@ -1030,7 +1030,7 @@ private struct AppearanceSettings: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Frame meter", isOn: $frameMeter)
-                Text("A badge at the bottom left of each window: chart frames per second over the last second against the screen's refresh rate, the main thread's time to draw a frame's charts (average and slowest, against one refresh's budget), the charts in a frame, and scroll / swipe / pinch / drag events per second. Zoom or pan to read it: still charts only redraw on new prices.")
+                Text("In the top bar (and the Charts windows'), over the last second: chart frames per second / the screen's refresh rate, the main thread's time to draw a frame's charts in ms (average / slowest; orange past one refresh's budget), and scroll / swipe / pinch / drag events per second. Hover it for more. Zoom or pan to read it: still charts only redraw on new prices.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -81,6 +81,8 @@ struct AccountBar: View {
             Spacer(minLength: 10)
 
             HStack(spacing: 18) {
+                FrameMeterBadge()
+
                 IndicatorToggles()
 
                 // The status text (e.g. why it disconnected) shows on hover; a click reconnects, as Settings ›

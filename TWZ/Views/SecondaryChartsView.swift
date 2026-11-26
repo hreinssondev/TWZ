@@ -484,6 +484,7 @@ struct SecondaryChartsView: View {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
             }
             Spacer()
+            FrameMeterBadge()
             Button {
                 isPaused.toggle()
             } label: {
