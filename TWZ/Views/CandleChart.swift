@@ -223,7 +223,9 @@ struct CandleChart: View {
         GeometryReader { geo in
             let plotWidth = max(1, geo.size.width - axisWidth)
             Canvas(rendersAsynchronously: false) { ctx, size in
+                let started = FrameMeter.shared.chartBegan()
                 draw(in: &ctx, size: size)
+                FrameMeter.shared.chartEnded(started)
             }
             .overlay(alignment: .topTrailing) {
                 // No trade today (a US market holiday, or before the first one): the price is yesterday's close.
@@ -411,6 +413,7 @@ struct CandleChart: View {
     private func panGesture(plotWidth: CGFloat, plotHeight: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 2)
             .onChanged { value in
+                FrameMeter.shared.input()
                 let start = dragStart ?? (chart.scrollBack, chart.priceShift)
                 dragStart = start
                 // The shift is a fraction of the unscaled range; scaled, the content still follows the pointer.
@@ -1163,6 +1166,7 @@ private struct ScrollCatcher: NSViewRepresentable {
                     return event
                 }
                 guard let location = self.location(of: event) else { return event }
+                if event.type == .scrollWheel || event.type == .magnify { FrameMeter.shared.input() }
                 switch event.type {
                 case .magnify:
                     self.onMagnify?(event.magnification, location)

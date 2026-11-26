@@ -26,6 +26,7 @@ struct TWZApp: App {
                 .modifier(ChartsWindowShortcut())
                 .modifier(SideColorsFromSettings())
                 .modifier(AppBackgroundFromSettings())
+                .overlay(alignment: .bottomLeading) { FrameMeterBadge() }
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)
@@ -56,6 +57,7 @@ struct TWZApp: App {
             SecondaryChartsView(win: .first)
                 .modifier(SideColorsFromSettings())
                 .modifier(AppBackgroundFromSettings())
+                .overlay(alignment: .bottomLeading) { FrameMeterBadge() }
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)
@@ -69,6 +71,7 @@ struct TWZApp: App {
             SecondaryChartsView(win: .second)
                 .modifier(SideColorsFromSettings())
                 .modifier(AppBackgroundFromSettings())
+                .overlay(alignment: .bottomLeading) { FrameMeterBadge() }
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)
@@ -81,6 +84,7 @@ struct TWZApp: App {
             OptionsView()
                 .modifier(SideColorsFromSettings())
                 .modifier(AppBackgroundFromSettings())
+                .overlay(alignment: .bottomLeading) { FrameMeterBadge() }
                 .environment(broker)
                 .environment(workspace)
                 .preferredColorScheme(.dark)

@@ -761,6 +761,7 @@ private struct AppearanceSettings: View {
     @AppStorage(HeaderPerformance.freezeKey) private var headersFrozen = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.layoutKey) private var headerLayoutByWidth = HeaderPerformance.defaultOn
     @AppStorage(HeaderPerformance.perStockKey) private var headerPerStock = HeaderPerformance.defaultOn
+    @AppStorage(FrameMeter.enabledKey) private var frameMeter = false
     @AppStorage(Swiping.zoomsAllKey) private var swipeZoomsAll = Swiping.defaultZoomsAll
     @AppStorage(Swiping.locksPanKey) private var swipeLocksPan = Swiping.defaultLocksPan
     @AppStorage(ViewSync.key) private var viewSync = ViewSync.defaultOn
@@ -1026,6 +1027,10 @@ private struct AppearanceSettings: View {
                 Text(headerPerStock
                      ? "A fill, position or margin change redraws only the headers of that stock."
                      : "Any stock's fill, position or margin change redraws every header.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Frame meter", isOn: $frameMeter)
+                Text("A badge at the bottom left of each window: chart frames per second over the last second against the screen's refresh rate, the main thread's time to draw a frame's charts (average and slowest, against one refresh's budget), the charts in a frame, and scroll / swipe / pinch / drag events per second. Zoom or pan to read it: still charts only redraw on new prices.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
