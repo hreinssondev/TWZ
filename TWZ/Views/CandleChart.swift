@@ -550,7 +550,8 @@ struct CandleChart: View {
 
         // Grid lines switched off in Settings: drawn clear, the labels stay.
         let gridColor = scene.map { $0.grid.opacity(showGrid ? 0.14 : 0) } ?? Color.primary.opacity(showGrid ? 0.07 : 0)
-        let labelColor = scene.map { AnyShapeStyle($0.label) } ?? AnyShapeStyle(.secondary)
+        // The axis labels' color, for Core Text (see `AxisLabels`).
+        let labelNSColor = scene.map { NSColor($0.label) } ?? AxisLabels.secondary
         let (up, down) = candleTheme.colors(customUp: customUp, customDown: customDown)
 
         // Session shading, one band per run of bars from the same session.
@@ -600,20 +601,22 @@ struct CandleChart: View {
         let minDecimals = forex.map { $0.decimals - 1 } ?? (hi < 1 ? 4 : 2)
         let ticks = Self.niceTicks(lo: lo, hi: hi, count: max(2, Int(priceRect.height / labelSpacing)), minStep: minStep)
         let decimals = ticks.count > 1 ? Self.decimals(forStep: ticks[1] - ticks[0], atLeast: minDecimals) : minDecimals
+        var priceLabels: [AxisLabels.Item] = []
         for tick in ticks {
             let yy = y(tick)
             var path = Path()
             path.move(to: CGPoint(x: plot.minX, y: yy))
             path.addLine(to: CGPoint(x: plot.maxX, y: yy))
             ctx.stroke(path, with: .color(gridColor), lineWidth: 1)
-            ctx.draw(Text(tick.formatted(.number.precision(.fractionLength(decimals))))
-                        .font(.system(size: axisFontSize).monospacedDigit()).foregroundStyle(labelColor),
-                     at: CGPoint(x: plot.maxX + 6, y: yy), anchor: .leading)
+            priceLabels.append(.init(text: tick.formatted(.number.precision(.fractionLength(decimals))),
+                                     point: CGPoint(x: plot.maxX + 6, y: yy), anchor: .leading))
         }
+        AxisLabels.draw(priceLabels, size: axisFontSize, color: labelNSColor, in: ctx)
 
         // Vertical grid + time labels, roughly every 90px.
         let labelEvery = max(1, Int((90 / barWidth).rounded(.up)))
         let timeLabelSpan = Double(labelEvery) * (chart.timeframe.barSeconds ?? 86_400)
+        var timeLabels: [AxisLabels.Item] = []
         for i in start..<end where i % labelEvery == 0 {
             let xx = x(i)
             var path = Path()
@@ -621,8 +624,8 @@ struct CandleChart: View {
             path.addLine(to: CGPoint(x: xx, y: plot.maxY))
             plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
             let previous = i >= labelEvery ? bars[i - labelEvery].time : nil
-            plotCtx.draw(Text(timeLabel(bars[i].time, previous: previous, spacing: timeLabelSpan)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
-                     at: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1))
+            timeLabels.append(.init(text: timeLabel(bars[i].time, previous: previous, spacing: timeLabelSpan),
+                                    point: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1), anchor: .center))
         }
         if let rest = v.rest {
             for k in 0..<rest.slots where (bars.count + k) % labelEvery == 0 {
@@ -633,10 +636,11 @@ struct CandleChart: View {
                 path.addLine(to: CGPoint(x: xx, y: plot.maxY))
                 plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
                 let time = rest.from.addingTimeInterval(Double(k) * rest.barSeconds)
-                plotCtx.draw(Text(timeLabel(time, previous: time.addingTimeInterval(-timeLabelSpan), spacing: timeLabelSpan)).font(.system(size: 9).monospacedDigit()).foregroundStyle(labelColor),
-                             at: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1))
+                timeLabels.append(.init(text: timeLabel(time, previous: time.addingTimeInterval(-timeLabelSpan), spacing: timeLabelSpan),
+                                        point: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1), anchor: .center))
             }
         }
+        AxisLabels.draw(timeLabels, size: 9, color: labelNSColor, in: plotCtx)
 
         // Volume, at Settings' opacity.
         let maxVolume = visible.map(\.volume).max() ?? 0

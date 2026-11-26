@@ -433,6 +433,14 @@ struct SecondaryChartsView: View {
         .onChange(of: customZoom) { zoomMoved(to: $1) }
     }
 
+    /// The Zoom slider: a swipe's zoom while it's held unsaved (see `Workspace.holdZoom`), else the stored one.
+    private var liveZoomBinding: Binding<Double> {
+        let key = win.key(layout == .all ? SecondaryCharts.allZoomKey : SecondaryCharts.customZoomKey)
+        let stored = layout == .all ? $allZoom : $customZoom
+        return Binding(get: { workspace.liveZooms[key] ?? stored.wrappedValue },
+                       set: { workspace.dropLiveZoom(key); stored.wrappedValue = $0 })
+    }
+
     private var header: some View {
         HStack {
             Button {
@@ -451,7 +459,7 @@ struct SecondaryChartsView: View {
             .fixedSize()
             .help("The list these charts follow (the main window's stay on theirs). With this window in front: "
                   + ScannerKind.shortcutHelp.replacingOccurrences(of: "shows the list and loads it into the chart grid", with: "switches it"))
-            GridSliders(columns: $customColumns, rows: $customRows, zoom: layout == .all ? $allZoom : $customZoom,
+            GridSliders(columns: $customColumns, rows: $customRows, zoom: liveZoomBinding,
                         columnRange: 1...win.maxColumns, rowRange: 1...win.maxRows,
                         showsSize: layout == .custom)
             // Every chart's timeframe here, right of the sliders as in the main window's top bar.
@@ -618,16 +626,12 @@ struct SecondaryChartPane: View {
 
     @AppStorage private var layout: SecondaryCharts.Layout
     @AppStorage(HeaderPerformance.freezeKey) private var freezesHeaders = HeaderPerformance.defaultOn
-    @AppStorage private var allZoom: Double
-    @AppStorage private var customZoom: Double
 
     init(win: ChartsWin, chart: ChartModel, cell: Int?) {
         self.win = win
         self.chart = chart
         self.cell = cell
         _layout = AppStorage(wrappedValue: win == .first ? .all : .custom, win.key(SecondaryCharts.layoutKey))
-        _allZoom = AppStorage(wrappedValue: ChartModel.initialVisibleBars, win.key(SecondaryCharts.allZoomKey))
-        _customZoom = AppStorage(wrappedValue: ChartModel.initialVisibleBars, win.key(SecondaryCharts.customZoomKey))
     }
 
     private var state: ChartsWindowState { workspace.chartsWindow(win) }
@@ -641,11 +645,10 @@ struct SecondaryChartPane: View {
             Divider().opacity(0.5)
             TradingChart(chart: chart, onTrade: { workspace.selectedChartID = chart.id }) { factor in
                 // Every chart in this window, from the zoom on screen; the header's Zoom slider follows.
-                if layout == .all {
-                    allZoom = workspace.zoomChartsWindow(by: factor, from: chart, sliderZoom: allZoom, broker: broker)
-                } else {
-                    customZoom = workspace.zoomChartsWindow(by: factor, from: chart, sliderZoom: customZoom, broker: broker)
-                }
+                // Saved once the zooming pauses (see `Workspace.holdZoom`).
+                let key = win.key(layout == .all ? SecondaryCharts.allZoomKey : SecondaryCharts.customZoomKey)
+                workspace.holdZoom(workspace.zoomChartsWindow(by: factor, from: chart, sliderZoom: workspace.currentZoom(key), broker: broker),
+                                   key: key)
             }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))

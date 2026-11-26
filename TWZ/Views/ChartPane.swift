@@ -234,7 +234,6 @@ struct ChartPane: View {
     @Environment(\.sideColors) private var sideColors
     let chart: ChartModel
 
-    @AppStorage(MainGrid.zoomKey) private var gridZoom: Double = ChartModel.initialVisibleBars
     @State private var symbolText = ""
     /// The symbol box is being edited: only a click on it starts that (see `SymbolField`).
     @State private var symbolFocused = false
@@ -245,8 +244,10 @@ struct ChartPane: View {
             Divider().opacity(0.5)
             TradingChart(chart: chart, onTrade: { workspace.selectedChartID = chart.id }) { factor in
                 // Every main chart, from the zoom on screen; the top bar's Zoom slider follows.
-                gridZoom = workspace.zoomGrid(by: factor, from: chart, sliderZoom: gridZoom, broker: broker)
-                workspace.manualZoom = gridZoom
+                // Saved once the zooming pauses (see `Workspace.holdZoom`).
+                let key = MainGrid.zoomKey
+                let zoom = workspace.zoomGrid(by: factor, from: chart, sliderZoom: workspace.currentZoom(key), broker: broker)
+                workspace.holdZoom(zoom, key: key) { [workspace] in workspace.manualZoom = zoom }
             }
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))

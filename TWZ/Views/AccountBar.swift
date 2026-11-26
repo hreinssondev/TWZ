@@ -46,7 +46,8 @@ struct AccountBar: View {
                 // The chart grid's size, its charts' zoom and timeframe (see `ChartGrid`).
                 // Zoom moved by hand trumps the lit scale's (see `Workspace.manualZoom`).
                 GridSliders(columns: $gridColumns, rows: $gridRows,
-                            zoom: Binding(get: { gridZoom }, set: { gridZoom = $0; workspace.manualZoom = $0 }),
+                            zoom: Binding(get: { workspace.liveZooms[MainGrid.zoomKey] ?? gridZoom },
+                                          set: { workspace.dropLiveZoom(MainGrid.zoomKey); gridZoom = $0; workspace.manualZoom = $0 }),
                             columnRange: 2...MainGrid.maxColumns, rowRange: 2...MainGrid.maxRows)
                     .background(NoWindowDrag())
 

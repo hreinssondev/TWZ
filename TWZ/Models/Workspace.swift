@@ -433,6 +433,37 @@ final class Workspace {
     /// The grid's zoom a swipe has just put the main charts at (see `zoomGrid`), so the Zoom slider
     /// following it doesn't zoom them again.
     @ObservationIgnored var swipedGridZoom: Double?
+
+    /// A swipe's (or wheel's, pinch's) zoom of every chart in a window, by the zoom's settings key, until it's saved:
+    /// written once the zooming pauses, so the views watching the stored zoom (the grid, every chart pane) update
+    /// once rather than on every scroll event. The Zoom sliders show it meanwhile.
+    private(set) var liveZooms: [String: Double] = [:]
+    @ObservationIgnored private var zoomSaves: [String: Task<Void, Never>] = [:]
+
+    /// The zoom stored under `key`, or the one a swipe is still holding.
+    func currentZoom(_ key: String) -> Double {
+        liveZooms[key] ?? UserDefaults.standard.object(forKey: key) as? Double ?? ChartModel.initialVisibleBars
+    }
+
+    /// Holds `zoom` as `key`'s and saves it (then `then`) once no other comes for a moment.
+    func holdZoom(_ zoom: Double, key: String, then: @escaping () -> Void = {}) {
+        if liveZooms[key] != zoom { liveZooms[key] = zoom }
+        zoomSaves[key]?.cancel()
+        zoomSaves[key] = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let self else { return }
+            UserDefaults.standard.set(zoom, forKey: key)
+            then()
+            self.liveZooms[key] = nil
+            self.zoomSaves[key] = nil
+        }
+    }
+
+    /// A Zoom slider moved by hand: a held zoom is dropped, unsaved.
+    func dropLiveZoom(_ key: String) {
+        zoomSaves.removeValue(forKey: key)?.cancel()
+        liveZooms[key] = nil
+    }
     /// Colors given to stocks with ⌥⇧ and a color's letter, by symbol (see `StockColor`). Saved, so a
     /// stock that leaves the charts has its color again when it comes back. Set with `setColor`.
     private(set) var stockColors: [String: StockColor] {
