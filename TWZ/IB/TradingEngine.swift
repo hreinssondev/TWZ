@@ -780,6 +780,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// trade stream at all). A changed price (`isTrade`) in a new period starts its candle; the first
     /// quote after subscribing doesn't, as that trade may be from long before.
     private func followLast(_ symbol: String, price: Double, isTrade: Bool) {
+        guard price > 0 else { return }
         let now = Date()
         for c in charts.values where c.symbol == symbol && !c.isLoading {
             guard let i = c.bars.indices.last else { continue }
@@ -1013,6 +1014,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// Folds a trade into the live candle of every loaded chart showing `symbol`, starting a new
     /// candle when the trade opens the next bar. Daily charts count regular-hours trades only.
     private func applyTrade(_ symbol: String, price: Double, size: Double, time: Date) {
+        guard price > 0 else { return }
         for c in charts.values where c.symbol == symbol && !c.isLoading {
             guard let lastIndex = c.bars.indices.last else { continue }
             let start: Date
@@ -3327,8 +3329,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         var i = 5
         for _ in 0..<count {
             guard i + 7 < f.count, let time = Self.parseBarTime(f[i]) else { break }
-            bars.append(Bar(time: time, open: f.double(i + 1), high: f.double(i + 2), low: f.double(i + 3),
-                            close: f.double(i + 4), volume: max(0, f.double(i + 5))))
+            let bar = Bar(time: time, open: f.double(i + 1), high: f.double(i + 2), low: f.double(i + 3),
+                          close: f.double(i + 4), volume: max(0, f.double(i + 5)))
+            bars.append(bar.repaired() ?? bar)      // an option's worthless bar stays
             i += 8
         }
         if let id = olderChartByReq.removeValue(forKey: reqId) {
@@ -3434,8 +3437,10 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         // reqId, barCount, date, open, close, high, low, average, volume
         guard let id = chartByReq[f.int(1)] ?? overnightChartByReq[f.int(1)], let c = charts[id], !c.isLoading,
               let time = Self.parseBarTime(f.str(3)) else { return }
-        var bar = Bar(time: time, open: f.double(4), high: f.double(6), low: f.double(7),
+        let raw = Bar(time: time, open: f.double(4), high: f.double(6), low: f.double(7),
                       close: f.double(5), volume: max(0, f.double(9)))
+        // A price of 0 or -1 in IB's update isn't one (see `Bar.repaired`).
+        guard var bar = raw.repaired() ?? (OptionContract.isOption(c.symbol) ? raw : nil) else { return }
         guard let lastIndex = c.bars.indices.last else {
             c.bars.append(bar)
             chartChanged(c, from: time)

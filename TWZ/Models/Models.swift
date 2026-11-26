@@ -27,6 +27,21 @@ nonisolated struct Bar: Equatable {
         phase = MarketSession.phase(time)
         vwapDay = MarketSession.vwapDay(time)
     }
+
+    /// IB now and then sends a bar with a price of 0 (or -1) among real ones, most often in its live bar
+    /// updates: drawn, its wick runs to 0 and squashes every other candle into a flat line. The bar with
+    /// those prices taken from its others; nil when it has no real price at all.
+    func repaired() -> Bar? {
+        guard min(open, high, low, close) <= 0 else { return self }
+        let real = [open, high, low, close].filter { $0 > 0 }
+        guard let fill = close > 0 ? close : real.last else { return nil }
+        var bar = self
+        bar.open = open > 0 ? open : fill
+        bar.close = close > 0 ? close : fill
+        bar.high = max(bar.open, bar.close, real.max() ?? fill)
+        bar.low = min(bar.open, bar.close, real.min() ?? fill)
+        return bar
+    }
 }
 
 nonisolated struct Quote: Equatable {
