@@ -533,10 +533,7 @@ struct CandleChart: View {
         OlderBars.check(chart, broker: broker)
         // A chart theme: its own background behind everything, axes included.
         let scene = candleTheme.scene
-        if let scene {
-            ctx.fill(Path(CGRect(origin: .zero, size: size)),
-                     with: .linearGradient(scene.background, startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)))
-        }
+        if let scene { ctx.fillVerticalGradient(CGRect(origin: .zero, size: size), top: scene.top, bottom: scene.bottom) }
         guard let v = viewport(size: size) else {
             let plot = plotRect(size: size)
             guard plot.width > 20, plot.height > 20 else { return }
@@ -574,7 +571,7 @@ struct CandleChart: View {
                 if let tint = Self.sessionTint(phase, scene: scene) {
                     let band = CGRect(x: x(i) - barWidth / 2, y: plot.minY,
                                       width: CGFloat(j - i + 1) * barWidth, height: plot.height)
-                    plotCtx.fill(Path(band), with: .color(tint))
+                    plotCtx.fillRects([band], color: tint)
                 }
                 i = j + 1
             }
@@ -586,21 +583,19 @@ struct CandleChart: View {
                 for session in rest.sessions {
                     guard let tint = Self.sessionTint(session.phase, scene: scene) else { continue }
                     let left = edge(session.start)
-                    plotCtx.fill(Path(CGRect(x: left, y: plot.minY, width: edge(session.end) - left, height: plot.height)),
-                                 with: .color(tint))
+                    plotCtx.fillRects([CGRect(x: left, y: plot.minY, width: edge(session.end) - left, height: plot.height)], color: tint)
                 }
             }
         }
 
         // Forex: a thin line where each trading day starts (17:00 New York, the FX rollover).
         if chart.timeframe.isIntraday, forex != nil {
-            var separators = Path()
+            var separators: [(CGPoint, CGPoint)] = []
             for i in max(start, 1)..<end where Self.forexDay(bars[i].time) != Self.forexDay(bars[i - 1].time) {
                 let xx = x(i) - barWidth / 2
-                separators.move(to: CGPoint(x: xx, y: plot.minY))
-                separators.addLine(to: CGPoint(x: xx, y: plot.maxY))
+                separators.append((CGPoint(x: xx, y: plot.minY), CGPoint(x: xx, y: plot.maxY)))
             }
-            plotCtx.stroke(separators, with: .color(scene?.label.opacity(0.3) ?? Color.primary.opacity(0.25)), lineWidth: 0.5)
+            plotCtx.strokeSegments(separators, color: scene?.label.opacity(0.3) ?? Color.primary.opacity(0.25), width: 0.5)
         }
 
         // Horizontal grid + price labels.
@@ -611,27 +606,25 @@ struct CandleChart: View {
         let ticks = Self.niceTicks(lo: lo, hi: hi, count: max(2, Int(priceRect.height / labelSpacing)), minStep: minStep)
         let decimals = ticks.count > 1 ? Self.decimals(forStep: ticks[1] - ticks[0], atLeast: minDecimals) : minDecimals
         var priceLabels: [AxisLabels.Item] = []
+        // Grid lines only with them on in Settings (the labels show either way).
+        var hGrid: [(CGPoint, CGPoint)] = []
         for tick in ticks {
             let yy = y(tick)
-            var path = Path()
-            path.move(to: CGPoint(x: plot.minX, y: yy))
-            path.addLine(to: CGPoint(x: plot.maxX, y: yy))
-            ctx.stroke(path, with: .color(gridColor), lineWidth: 1)
+            if showGrid { hGrid.append((CGPoint(x: plot.minX, y: yy), CGPoint(x: plot.maxX, y: yy))) }
             priceLabels.append(.init(text: tick.formatted(.number.precision(.fractionLength(decimals))),
                                      point: CGPoint(x: plot.maxX + 6, y: yy), anchor: .leading))
         }
+        ctx.strokeSegments(hGrid, color: gridColor, width: 1)
         AxisLabels.draw(priceLabels, size: axisFontSize, color: labelNSColor, in: ctx)
 
         // Vertical grid + time labels, roughly every 90px.
         let labelEvery = max(1, Int((90 / barWidth).rounded(.up)))
         let timeLabelSpan = Double(labelEvery) * (chart.timeframe.barSeconds ?? 86_400)
         var timeLabels: [AxisLabels.Item] = []
+        var vGrid: [(CGPoint, CGPoint)] = []
         for i in start..<end where i % labelEvery == 0 {
             let xx = x(i)
-            var path = Path()
-            path.move(to: CGPoint(x: xx, y: plot.minY))
-            path.addLine(to: CGPoint(x: xx, y: plot.maxY))
-            plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
+            if showGrid { vGrid.append((CGPoint(x: xx, y: plot.minY), CGPoint(x: xx, y: plot.maxY))) }
             let previous = i >= labelEvery ? bars[i - labelEvery].time : nil
             timeLabels.append(.init(text: timeLabel(bars[i].time, previous: previous, spacing: timeLabelSpan),
                                     point: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1), anchor: .center))
@@ -640,33 +633,34 @@ struct CandleChart: View {
             for k in 0..<rest.slots where (bars.count + k) % labelEvery == 0 {
                 let xx = x(bars.count + k)
                 guard xx > plot.minX, xx < plot.maxX else { continue }
-                var path = Path()
-                path.move(to: CGPoint(x: xx, y: plot.minY))
-                path.addLine(to: CGPoint(x: xx, y: plot.maxY))
-                plotCtx.stroke(path, with: .color(gridColor), lineWidth: 1)
+                if showGrid { vGrid.append((CGPoint(x: xx, y: plot.minY), CGPoint(x: xx, y: plot.maxY))) }
                 let time = rest.from.addingTimeInterval(Double(k) * rest.barSeconds)
                 timeLabels.append(.init(text: timeLabel(time, previous: time.addingTimeInterval(-timeLabelSpan), spacing: timeLabelSpan),
                                         point: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1), anchor: .center))
             }
         }
+        plotCtx.strokeSegments(vGrid, color: gridColor, width: 1)
         AxisLabels.draw(timeLabels, size: 9, color: labelNSColor, in: plotCtx)
 
         // Volume, at Settings' opacity.
         let maxVolume = visible.map(\.volume).max() ?? 0
         if maxVolume > 0, volumeOpacity > 0 {
-            var upVol = Path(), downVol = Path()
+            var upVol: [CGRect] = [], downVol: [CGRect] = []
             for i in start..<end {
                 let b = bars[i]
                 let h = CGFloat(b.volume / maxVolume) * volumeHeight
                 let rect = CGRect(x: x(i) - barWidth * 0.35, y: plot.maxY - h, width: max(1, barWidth * 0.7), height: h)
-                if b.close >= b.open { upVol.addRect(rect) } else { downVol.addRect(rect) }
+                if b.close >= b.open { upVol.append(rect) } else { downVol.append(rect) }
             }
-            plotCtx.fill(upVol, with: .color(up.opacity(volumeOpacity)))
-            plotCtx.fill(downVol, with: .color(down.opacity(volumeOpacity)))
+            plotCtx.fillRects(upVol, color: up.opacity(volumeOpacity))
+            plotCtx.fillRects(downVol, color: down.opacity(volumeOpacity))
         }
 
-        // Candles: batch into two paths per color for speed.
-        var upWicks = Path(), downWicks = Path(), upBodies = Path(), downBodies = Path()
+        // Candles: wicks and bodies, each color in one batch.
+        var upWicks: [(CGPoint, CGPoint)] = [], downWicks: [(CGPoint, CGPoint)] = []
+        var upBodies: [CGRect] = [], downBodies: [CGRect] = []
+        upWicks.reserveCapacity(end - start)
+        upBodies.reserveCapacity(end - start)
         let bodyWidth = max(1, barWidth * 0.7)
         for i in start..<end {
             let b = bars[i]
@@ -674,18 +668,19 @@ struct CandleChart: View {
             let isUp = b.close >= b.open
             let top = y(max(b.open, b.close))
             let body = CGRect(x: xx - bodyWidth / 2, y: top, width: bodyWidth, height: max(1, y(min(b.open, b.close)) - top))
+            let wick = (CGPoint(x: xx, y: y(b.high)), CGPoint(x: xx, y: y(b.low)))
             if isUp {
-                upWicks.move(to: CGPoint(x: xx, y: y(b.high))); upWicks.addLine(to: CGPoint(x: xx, y: y(b.low)))
-                upBodies.addRect(body)
+                upWicks.append(wick)
+                upBodies.append(body)
             } else {
-                downWicks.move(to: CGPoint(x: xx, y: y(b.high))); downWicks.addLine(to: CGPoint(x: xx, y: y(b.low)))
-                downBodies.addRect(body)
+                downWicks.append(wick)
+                downBodies.append(body)
             }
         }
-        plotCtx.stroke(upWicks, with: .color(up), lineWidth: 1)
-        plotCtx.stroke(downWicks, with: .color(down), lineWidth: 1)
-        plotCtx.fill(upBodies, with: .color(up))
-        plotCtx.fill(downBodies, with: .color(down))
+        plotCtx.strokeSegments(upWicks, color: up, width: 1)
+        plotCtx.strokeSegments(downWicks, color: down, width: 1)
+        plotCtx.fillRects(upBodies, color: up)
+        plotCtx.fillRects(downBodies, color: down)
 
         drawIndicators(in: &plotCtx, bars: bars, start: start, end: end, x: x, y: y)
         if showTrades || !shownFillIds.isEmpty {
@@ -800,15 +795,16 @@ struct CandleChart: View {
     private func drawIndicators(in ctx: inout ChartPainter, bars: [Bar], start: Int, end: Int,
                                 x: (Int) -> CGFloat, y: (Double) -> CGFloat) {
         func stroke(_ values: [Double?], color: Color, breakBefore: (Int) -> Bool = { _ in false }) {
-            var path = Path()
-            var drawing = false
+            var segments: [(CGPoint, CGPoint)] = []
+            var previous: CGPoint?
             for (offset, value) in values.enumerated() {
-                guard let value else { drawing = false; continue }
-                if breakBefore(start + offset) { drawing = false }
+                guard let value else { previous = nil; continue }
+                if breakBefore(start + offset) { previous = nil }
                 let point = CGPoint(x: x(start + offset), y: y(value))
-                if drawing { path.addLine(to: point) } else { path.move(to: point); drawing = true }
+                if let previous { segments.append((previous, point)) }
+                previous = point
             }
-            ctx.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: indicatorWidth, lineJoin: .round))
+            ctx.strokeSegments(segments, color: color, width: indicatorWidth)
         }
 
         if showVWAP, chart.timeframe.isIntraday {

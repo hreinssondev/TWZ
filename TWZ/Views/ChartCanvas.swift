@@ -17,16 +17,77 @@ import SwiftUI
 /// A copy keeps its own clip, as a `GraphicsContext` does.
 struct ChartPainter {
     let cg: CGContext
+    /// The frame's GPU shapes (see `MetalCharts`): the bulk calls below go there when it's set.
+    let gpu: GPUBatch?
     private var clips: [Path] = []
+    /// The clips' bounds, the GPU's clip.
+    private var clipRect: CGRect?
 
-    init(_ cg: CGContext) { self.cg = cg }
+    init(_ cg: CGContext, gpu: GPUBatch? = nil) {
+        self.cg = cg
+        self.gpu = gpu
+    }
+
+    // MARK: The bulk of a chart: on the GPU when there's one, else Core Graphics.
+
+    func fillRects(_ rects: [CGRect], color: Color) {
+        guard !rects.isEmpty else { return }
+        if let gpu {
+            let c = GPUBatch.rgba(color)
+            gpu.add(rects: rects, top: c, bottom: c, clip: clipRect)
+            return
+        }
+        let path = CGMutablePath()
+        path.addRects(rects)
+        inState {
+            cg.addPath(path)
+            cg.setFillColor(Self.cgColor(color))
+            cg.fillPath()
+        }
+    }
+
+    /// A rectangle shaded from `top` to `bottom`.
+    func fillVerticalGradient(_ rect: CGRect, top: Color, bottom: Color) {
+        if let gpu {
+            gpu.add(rects: [rect], top: GPUBatch.rgba(top), bottom: GPUBatch.rgba(bottom), clip: clipRect)
+            return
+        }
+        fill(Path(rect), with: .linearGradient(Gradient(colors: [top, bottom]),
+                                               startPoint: CGPoint(x: rect.minX, y: rect.minY), endPoint: CGPoint(x: rect.minX, y: rect.maxY)))
+    }
+
+    /// Straight lines, cut square at their ends.
+    func strokeSegments(_ segments: [(CGPoint, CGPoint)], color: Color, width: CGFloat) {
+        guard !segments.isEmpty else { return }
+        if let gpu {
+            gpu.add(segments: segments, color: GPUBatch.rgba(color), width: width, clip: clipRect)
+            return
+        }
+        let path = CGMutablePath()
+        for (a, b) in segments {
+            path.move(to: a)
+            path.addLine(to: b)
+        }
+        inState {
+            cg.addPath(path)
+            cg.setStrokeColor(Self.cgColor(color))
+            cg.setLineWidth(width)
+            cg.strokePath()
+        }
+    }
+
+    // MARK: Everything else: Core Graphics.
 
     enum Shading {
         case color(Color)
         case linearGradient(Gradient, startPoint: CGPoint, endPoint: CGPoint)
     }
 
-    mutating func clip(to path: Path) { clips.append(path) }
+    mutating func clip(to path: Path) {
+        clips.append(path)
+        let bounds = path.boundingRect
+        clipRect = clipRect.map { $0.intersection(bounds) } ?? bounds
+    }
 
     func fill(_ path: Path, with shading: Shading) {
         inState {
@@ -112,13 +173,28 @@ final class ChartCanvasView: NSView {
         set { chartLayer.drawChart = newValue }
     }
     private let chartLayer = ChartLayer()
+    private let container = ChartContainerLayer()
+    /// The GPU's layer, under the chart's Core Graphics one (none without Metal).
+    private let metalLayer: ChartMetalLayer? = MetalCharts.shared.map { metal in
+        let layer = ChartMetalLayer()
+        metal.configure(layer)
+        return layer
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        // Hosts a plain layer (set before `wantsLayer`): unlike a view's own layer it draws off the main thread and in
-        // 8-bit color as asked (see `ChartLayer`).
-        layer = chartLayer
+        // Hosts plain layers (set before `wantsLayer`): the GPU's, and over it one that, unlike a view's own layer,
+        // draws off the main thread and in 8-bit color as asked (see `ChartLayer`).
+        if let metalLayer { container.addSublayer(metalLayer) }
+        container.addSublayer(chartLayer)
+        chartLayer.metalLayer = metalLayer
+        layer = container
         wantsLayer = true
+    }
+
+    override func layout() {
+        super.layout()
+        container.setNeedsLayout()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -136,13 +212,29 @@ final class ChartCanvasView: NSView {
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        chartLayer.contentsScale = window?.backingScaleFactor ?? 2
+        let scale = window?.backingScaleFactor ?? 2
+        chartLayer.contentsScale = scale
+        metalLayer?.contentsScale = scale
         chartLayer.setNeedsDisplay()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        container.setNeedsLayout()
         chartLayer.setNeedsDisplay()
+    }
+}
+
+/// Holds the chart's two layers, each the size of the view.
+final class ChartContainerLayer: CALayer {
+    override func action(forKey event: String) -> (any CAAction)? { NSNull() }
+
+    override func layoutSublayers() {
+        super.layoutSublayers()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for sublayer in sublayers ?? [] where sublayer.frame != bounds { sublayer.frame = bounds }
+        CATransaction.commit()
     }
 }
 
@@ -150,6 +242,8 @@ final class ChartCanvasView: NSView {
 /// (a view's own layer on an HDR-capable screen draws in 16-bit floats, twice the memory to fill).
 final class ChartLayer: CALayer {
     var drawChart: ((inout ChartPainter, CGSize) -> Void)?
+    /// The GPU's layer under this one: the bulk of the chart goes there (see `MetalCharts`).
+    weak var metalLayer: CAMetalLayer?
     private static let dark = NSAppearance(named: .darkAqua)
 
     override init() {
@@ -179,9 +273,10 @@ final class ChartLayer: CALayer {
         }
         // Anything observable read while drawing (the chart's zoom, place and bars, prices, fills, settings) redraws
         // it on change.
+        let batch = metalLayer != nil ? GPUBatch() : nil
         withObservationTracking {
             let draw = {
-                var painter = ChartPainter(cg)
+                var painter = ChartPainter(cg, gpu: batch)
                 drawChart(&painter, size)
             }
             if let dark = Self.dark { dark.performAsCurrentDrawingAppearance(draw) } else { draw() }
@@ -191,6 +286,9 @@ final class ChartLayer: CALayer {
             } else {
                 DispatchQueue.main.async { self?.setNeedsDisplay() }
             }
+        }
+        if let batch, let metalLayer {
+            MetalCharts.shared?.render(batch, into: metalLayer, size: size, scale: metalLayer.contentsScale)
         }
         FrameMeter.shared.chartEnded(started)
     }
