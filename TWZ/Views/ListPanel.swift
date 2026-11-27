@@ -30,6 +30,8 @@ struct ListPanel: View {
     let chartsWin: ChartsWin?
     /// A row clicked: where it loads (the main window's selected chart without this).
     let onPick: ((String) -> Void)?
+    /// The list it shows follows this one as it changes (a Charts window's: see `ChartsWindowSidePanel`).
+    let follows: ScannerKind?
     @AppStorage private var scanner: ScannerKind
     @AppStorage private var tab: ListTab
     @AppStorage private var newsScope: NewsScope
@@ -58,10 +60,12 @@ struct ListPanel: View {
         var recentIsPartial = false
     }
 
-    init(panelId: String, defaultScanner: ScannerKind, chartsWin: ChartsWin? = nil, onPick: ((String) -> Void)? = nil) {
+    init(panelId: String, defaultScanner: ScannerKind, chartsWin: ChartsWin? = nil, onPick: ((String) -> Void)? = nil,
+         follows: ScannerKind? = nil) {
         self.panelId = panelId
         self.chartsWin = chartsWin
         self.onPick = onPick
+        self.follows = follows
         _scanner = AppStorage(wrappedValue: defaultScanner, "scanner.\(panelId)")
         _tab = AppStorage(wrappedValue: .list, "listTab.\(panelId)")
         _newsScope = AppStorage(wrappedValue: .stock, "newsScope.\(panelId)")
@@ -187,6 +191,9 @@ struct ListPanel: View {
         .onChange(of: workspace.targetSymbol) { syncNews() }
         .onChange(of: scanSpec) { _, new in broker.setScanner(new, owner: panelId) }
         .onChange(of: scanner) { _, new in workspace.shownLists[panelId] = new }
+        .onChange(of: follows, initial: true) { _, kind in
+            if let kind, scanner != kind { scanner = kind }
+        }
         .onChange(of: workspace.listShortcut) { _, request in takeUp(request) }
         .onChange(of: symbols) { _, new in
             broker.setQuoteSymbols(new, owner: panelId)
