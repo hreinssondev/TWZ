@@ -60,6 +60,7 @@ extension Broker {
         NSSound(named: "Glass")?.play()
         TrendAlertNotifier.shared.post(title: "\(symbol) at \(line)",
                                        body: "\(rising ? "Rose" : "Fell") to its trend line at \(line)")
+        onTrendAlert?(symbol)
     }
 }
 
