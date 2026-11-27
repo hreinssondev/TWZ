@@ -528,10 +528,18 @@ extension Workspace {
     /// ⌘R: every chart in the window in front (`win`, nil: the main window) takes the selected chart's view, its zoom,
     /// place and prices, as view sync does (on Forex + Active the pairs or the stocks, on Colored the charts or the
     /// close-ups, as it's one; see `zoomSide`). False with no chart selected in that window.
+    /// On Colored, with the pointer over a chart in that window: only the charts or only the close-ups, as that one is,
+    /// at the selected chart's view if it's one of them, else at the one under the pointer's.
     func matchSelectedView(in win: ChartsWin?) -> Bool {
-        guard isChartSelected, ChartsWin.of(chartID: selectedChartID) == win, let chart = chart(id: selectedChartID),
-              !chart.symbol.isEmpty else { return false }
-        matchViews(to: chart, sameWindow: win != nil)
+        let list = win.map { chartsWindow($0).list } ?? gridScan?.kind
+        let selected = isChartSelected && ChartsWin.of(chartID: selectedChartID) == win ? chart(id: selectedChartID) : nil
+        var source = selected
+        if list == .colored, let id = hoveredChartID, ChartsWin.of(chartID: id) == win, let hovered = chart(id: id),
+           !hovered.symbol.isEmpty, selected.map({ closeUpChartIDs.contains($0.id) }) != closeUpChartIDs.contains(id) {
+            source = hovered
+        }
+        guard let source, !source.symbol.isEmpty else { return false }
+        matchViews(to: source, sameWindow: win != nil)
         return true
     }
 

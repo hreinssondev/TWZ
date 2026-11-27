@@ -189,7 +189,7 @@ struct TradingShortcuts: ViewModifier {
                        event.window?.attachedSheet == nil, inMainWindow || chartsWin != nil {
                         if !event.isARepeat {
                             if workspace.matchSelectedView(in: chartsWin) {
-                                broker.say("Every chart \(chartsWin.map { "in \($0.name)" } ?? "here") at \(workspace.selectedChart.symbol)'s view (⌘⇧R resets them)")
+                                broker.say("Every chart \(chartsWin.map { "in \($0.name)" } ?? "here") matched (⌘⇧R resets them)")
                             } else {
                                 NSSound.beep()
                                 broker.say("⌘R: select a chart in this window first; its view goes to every chart here")
