@@ -231,8 +231,8 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    // ⌘ and an arrow key on the Forex list (in a Charts window, on Forex + Active too): ⌘↓ / ⌘↑ the pairs'
-                    // order, the list's own → 1D → 5D → % and round, ⌘↑ back; ⌘← / ⌘→ its first page (1/2) or the second (2/2).
+                    // ⌘ and an arrow key on the Forex list (in a Charts window, on Forex + Active too): ⌘→ / ⌘← the pairs'
+                    // order, the list's own → 1D → 5D → % and round, ⌘← back; ⌘↑ / ⌘↓ its first page (1/2) or the second (2/2).
                     if modifiers == .command, [123, 124, 125, 126].contains(event.keyCode), event.window?.attachedSheet == nil,
                        !(event.window?.firstResponder is NSTextView) {
                         var forex: (rangeKey: String, dayKey: String, volKey: String, name: String, setRest: (Bool) -> Void)?
@@ -247,17 +247,17 @@ struct TradingShortcuts: ViewModifier {
                             if !event.isARepeat {
                                 let d = UserDefaults.standard
                                 switch event.keyCode {
-                                case 123:
+                                case 126:
                                     forex.setRest(false)
                                     broker.say("\(forex.name): 1/2")
-                                case 124:
+                                case 125:
                                     forex.setRest(true)
                                     broker.say("\(forex.name): 2/2")
                                 default:
                                     let modes = ["list order", "1D", "5D", "%"]
                                     let current = d.bool(forKey: forex.dayKey) ? 1 : d.bool(forKey: forex.rangeKey) ? 2
                                         : d.bool(forKey: forex.volKey) ? 3 : 0
-                                    let next = (current + (event.keyCode == 125 ? 1 : modes.count - 1)) % modes.count
+                                    let next = (current + (event.keyCode == 124 ? 1 : modes.count - 1)) % modes.count
                                     d.set(next == 1, forKey: forex.dayKey)
                                     d.set(next == 2, forKey: forex.rangeKey)
                                     d.set(next == 3, forKey: forex.volKey)
