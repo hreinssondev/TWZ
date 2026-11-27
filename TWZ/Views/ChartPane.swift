@@ -555,6 +555,13 @@ struct ChartOutline: View {
     private var isSelected: Bool { workspace.isChartSelected && workspace.selectedChartID == chart.id }
     /// Shows the selected chart's stock (in another chart).
     private var showsTarget: Bool { !chart.symbol.isEmpty && chart.symbol == workspace.targetSymbol }
+    /// On the Colored list, the selected ticker's charts in the same window (the chart and its close-up): both in the
+    /// selection blue, as thick as the selected one, instead of the ticker's color, which comes back once it isn't selected.
+    private var coloredSelected: Bool {
+        let win = ChartsWin.of(chartID: chart.id)
+        let colored = win.map { workspace.chartsWindow($0).list == .colored } ?? (workspace.gridScan?.kind == .colored)
+        return colored && showsTarget && ChartsWin.of(chartID: workspace.selectedChartID) == win
+    }
 
     var body: some View { outline }
 
@@ -565,7 +572,9 @@ struct ChartOutline: View {
         let fade = isSelected || !showsTarget ? 1 : 0.6
         let thick = outlineWidth * SelectedOutline.selectedMultiple
         let color: Color, width: Double
-        if let mark = workspace.stockColors[chart.symbol]?.color {
+        if coloredSelected {
+            (color, width) = (Color.accentColor, thick)
+        } else if let mark = workspace.stockColors[chart.symbol]?.color {
             (color, width) = (mark.opacity(fade), selected ? thick : outlineWidth)
         } else if selected {
             (color, width) = (Color.accentColor.opacity(fade), thick)
