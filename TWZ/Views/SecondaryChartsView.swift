@@ -376,6 +376,8 @@ struct SecondaryChartsView: View {
     @State private var showsRest = false
     /// The Forex list by each pair's range over its last 5 finished days, widest first (see `TradingEngine.setForexByRange`).
     @AppStorage private var forexByRange: Bool
+    /// … or over the last finished day alone (the 1D button; one of the two at a time).
+    @AppStorage private var forexByDay: Bool
     @AppStorage private var masterTimeframe: Timeframe
     @AppStorage private var headerHeight: Double
     /// P: the main window's right side (the lists, Orders, Positions, Round trips) beside the charts. Saved.
@@ -395,6 +397,7 @@ struct SecondaryChartsView: View {
     init(win: ChartsWin) {
         self.win = win
         _forexByRange = AppStorage(wrappedValue: false, win.key("secondaryChartsForexByRange"))
+        _forexByDay = AppStorage(wrappedValue: false, win.key("secondaryChartsForexByDay"))
         _masterTimeframe = AppStorage(wrappedValue: .m1, win.key(SecondaryCharts.timeframeKey))
         _headerHeight = AppStorage(wrappedValue: 28, win.key("secondaryHeaderHeight"))
         _showsSidePanel = AppStorage(wrappedValue: false, win.key("chartsWindowSidePanel"))
@@ -533,7 +536,7 @@ struct SecondaryChartsView: View {
                 ScaleButtons(window: win.layoutWindow)
                 GridLayoutButtons(window: win.layoutWindow, showsIcon: false)
             }
-            if state.list == .forex { forexButtons }
+            if state.list == .forex || state.list == .forexActive { forexButtons }
             ColoredColorsButton(list: state.list)
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if let error = broker.scans[win.scannerOwner]?.error {
@@ -594,13 +597,26 @@ struct SecondaryChartsView: View {
                 showsRest.toggle()
                 lastGainers = []; syncWithGainers()
             }
+            forexButton("1D", lit: forexByDay,
+                        help: forexByDay ? "Back to the Forex list's fixed order"
+                            : "The pairs by their range over the last finished day, (high − low) / low, widest first; set once a day, after 17:00 ET") {
+                forexByDay.toggle()
+                if forexByDay { forexByRange = false }
+                syncForexRange()
+            }
             forexButton("5D", lit: forexByRange,
                         help: forexByRange ? "Back to the Forex list's fixed order"
                             : "The pairs by their range over the last 5 finished days, (high − low) / low, widest first; set once a day, after 17:00 ET") {
                 forexByRange.toggle()
-                broker.setForexByRange(forexByRange, owner: win.scannerOwner)
+                if forexByRange { forexByDay = false }
+                syncForexRange()
             }
         }
+    }
+
+    /// The engine orders this window's pairs by 1D's or 5D's range, or neither (on Forex + Active too: its pairs only).
+    private func syncForexRange() {
+        broker.setForexByRange(forexByRange || forexByDay, days: forexByDay ? 1 : 5, owner: win.scannerOwner)
     }
 
     private func forexButton(_ title: String, lit: Bool, help: String, action: @escaping () -> Void) -> some View {
@@ -627,6 +643,7 @@ struct SecondaryChartsView: View {
         if old == .colored { workspace.leaveColored(state.charts, timeframe: masterTimeframe, broker: broker) }
         if new == .colored { workspace.closeUpZoom = workspace.closeUpStartZoom(fallback: layout == .all ? allZoom : customZoom) }
         coloredOrder = []
+        showsRest = false
         start()
         // Charts that kept their stock: on the new timeframe now.
         for chart in state.charts where !chart.symbol.isEmpty && retimed[chart.id] == chart.symbol {
@@ -680,7 +697,7 @@ struct SecondaryChartsView: View {
 
     private func start() {
         lastGainers = []
-        broker.setForexByRange(forexByRange, owner: win.scannerOwner)
+        syncForexRange()
         broker.setScanner(SecondaryCharts.scan(state.list), owner: win.scannerOwner)
         syncWithGainers()
     }
@@ -727,7 +744,9 @@ struct SecondaryChartsView: View {
         if state.list == .forexActive {
             let active = ScannerKind.activeCells(of: slots)
             let stocks = gainers.filter { !ForexPair.isForex($0) }.prefix(active)
-            gainers = Array(gainers.filter(ForexPair.isForex).prefix(slots - stocks.count)) + stocks
+            // 2/2: the pairs past those the pairs' cells have room for; the stocks stay as they are.
+            let pairs = gainers.filter(ForexPair.isForex).dropFirst(showsRest ? slots - stocks.count : 0)
+            gainers = Array(pairs.prefix(slots - stocks.count)) + stocks
         }
         guard !gainers.isEmpty, gainers != lastGainers else { return }
         lastGainers = gainers
@@ -873,7 +892,8 @@ struct ForexListButton: View {
                 .foregroundStyle(lit ? Color.primary : Color.secondary)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(lit ? 0.16 : 0.08)))
+                // No background until lit, as the number buttons.
+                .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(lit ? 0.16 : 0)))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -459,9 +459,10 @@ final class Broker {
         engine.perform { $0.setScanner(spec, owner: owner) }
     }
 
-    /// A list showing the Forex list: by each pair's 5-day range (see `TradingEngine.setForexByRange`) or in its fixed order.
-    func setForexByRange(_ on: Bool, owner: String) {
-        engine.perform { $0.setForexByRange(on, owner: owner) }
+    /// A list showing the Forex list: by each pair's range over its last `days` finished days, 5 or 1 (see
+    /// `TradingEngine.setForexByRange`), or in its fixed order.
+    func setForexByRange(_ on: Bool, days: Int = 5, owner: String) {
+        engine.perform { $0.setForexByRange(on, days: days, owner: owner) }
     }
 
     func registerCharts(_ charts: [ChartModel]) {
