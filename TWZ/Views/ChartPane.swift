@@ -550,6 +550,7 @@ struct ChartHeaderInfo: View {
 struct ChartOutline: View {
     @Environment(Workspace.self) private var workspace
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
+    @AppStorage(ColoredColorsButton.hidesKey) private var coloredHidesColors = false
     let chart: ChartModel
 
     private var isSelected: Bool { workspace.isChartSelected && workspace.selectedChartID == chart.id }
@@ -563,6 +564,17 @@ struct ChartOutline: View {
         return colored && showsTarget && ChartsWin.of(chartID: workspace.selectedChartID) == win
     }
 
+    /// Its ticker's color, if it's outlined in it: on the Colored list only the ticker's own chart is, not its
+    /// close-up, and none while the top bar's Colors is off.
+    private var mark: Color? {
+        let win = ChartsWin.of(chartID: chart.id)
+        if win.map({ workspace.chartsWindow($0).list == .colored }) ?? (workspace.gridScan?.kind == .colored),
+           coloredHidesColors || workspace.closeUpChartIDs.contains(chart.id) {
+            return nil
+        }
+        return workspace.stockColors[chart.symbol]?.color
+    }
+
     var body: some View { outline }
 
     /// The thick selection outline (fainter on another chart of the same stock), else the plain border.
@@ -574,7 +586,7 @@ struct ChartOutline: View {
         let color: Color, width: Double
         if coloredSelected {
             (color, width) = (Color.accentColor, thick)
-        } else if let mark = workspace.stockColors[chart.symbol]?.color {
+        } else if let mark {
             (color, width) = (mark.opacity(fade), selected ? thick : outlineWidth)
         } else if selected {
             (color, width) = (Color.accentColor.opacity(fade), thick)
