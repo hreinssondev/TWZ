@@ -80,7 +80,9 @@ nonisolated struct ChartFrame {
     var lastPriceOpacity: Double { settings.lastPriceOpacity }
 
     /// Widens with the axis text so larger prices still fit.
-    var axisWidth: CGFloat { Self.axisWidth(fontSize: axisFontSize) }
+    var axisWidth: CGFloat { Self.axisWidth(fontSize: settings.axisWidthFontSize) }
+    /// The axis labels' size: a Charts window's own (see `ChartsAxisText`), else Settings' price axis size.
+    var axisLabelSize: Double { settings.axisLabelSize ?? axisFontSize }
     static func axisWidth(fontSize: Double) -> CGFloat { max(58, (fontSize * 5.8).rounded()) }
     /// Height of the price boxes on the axis.
     var tagHeight: CGFloat { axisFontSize + 6 }
@@ -193,7 +195,9 @@ extension ChartFrame {
         // Grid lines switched off in Settings: drawn clear, the labels stay.
         let gridColor = scene.map { $0.grid.opacity(showGrid ? 0.14 : 0) } ?? Color.primary.opacity(showGrid ? 0.07 : 0)
         // The axis labels' color, for Core Text (see `AxisLabels`).
-        let labelNSColor = scene.map { NSColor($0.label) } ?? AxisLabels.secondary
+        // A Charts window's own brightness (see `ChartsAxisText`): white at that opacity.
+        let labelNSColor = settings.axisLabelBrightness.map { NSColor.white.withAlphaComponent($0) }
+            ?? scene.map { NSColor($0.label) } ?? AxisLabels.secondary
         let (up, down) = candleTheme.colors(customUp: customUp, customDown: customDown)
 
         // Session shading, one band per run of bars from the same session.
@@ -253,10 +257,10 @@ extension ChartFrame {
             priceLabels.append(.init(text: tick.formatted(.number.precision(.fractionLength(decimals))),
                                      point: CGPoint(x: plot.maxX + 6, y: yy), anchor: .leading))
         }
-        AxisLabels.draw(priceLabels, size: axisFontSize, color: labelNSColor, in: ctx)
+        AxisLabels.draw(priceLabels, size: axisLabelSize, color: labelNSColor, in: ctx)
 
-        // Vertical grid + time labels, roughly every 90px.
-        let labelEvery = max(1, Int((90 / barWidth).rounded(.up)))
+        // Vertical grid + time labels, roughly every 90px (twice the price labels' spacing).
+        let labelEvery = max(1, Int((labelSpacing * 2 / barWidth).rounded(.up)))
         let timeLabelSpan = Double(labelEvery) * (chart.timeframe.barSeconds ?? 86_400)
         var timeLabels: [AxisLabels.Item] = []
         for i in start..<end where i % labelEvery == 0 {
@@ -282,7 +286,7 @@ extension ChartFrame {
                                         point: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1), anchor: .center))
             }
         }
-        AxisLabels.draw(timeLabels, size: 9, color: labelNSColor, in: plotCtx)
+        AxisLabels.draw(timeLabels, size: min(12, axisLabelSize - 1), color: labelNSColor, in: plotCtx)
 
         // Volume, at Settings' opacity.
         let maxVolume = visible.map(\.volume).max() ?? 0

@@ -265,7 +265,9 @@ struct CandleChart: View {
     @State private var pendingReset: Task<Void, Never>?
     @State private var tripleClickAt = Date.distantPast
 
-    private var axisWidth: CGFloat { ChartFrame.axisWidth(fontSize: axisFontSize) }
+    private var axisWidth: CGFloat {
+        ChartFrame.axisWidth(fontSize: ChartSettings.shared.values.forWindow(chart.windowIndex).axisWidthFontSize)
+    }
     private var timeAxisHeight: CGFloat { ChartFrame.timeAxisHeight }
 
     var body: some View {
@@ -455,7 +457,7 @@ struct CandleChart: View {
     /// What the chart's drawn from, copied for its renderer (see `ChartFrame`): read here on the main thread, so a
     /// change in any of it draws the chart again.
     private func baseFrame() -> ChartFrame {
-        let settings = ChartSettings.shared.values
+        let settings = ChartSettings.shared.values.forWindow(chart.windowIndex)
         let rest = restOfDay
         let fills = settings.showTrades || !shownFillIds.isEmpty
             ? broker.fills.values.filter { $0.symbol == chart.symbol && (settings.showTrades || shownFillIds.contains($0.id)) }
