@@ -232,6 +232,40 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
+                    // ⌘ and an arrow key on the Forex list (in a Charts window, on Forex + Active too): ⌘↓ / ⌘↑ the pairs'
+                    // order, the list's own → 1D → 5D and round, ⌘↑ back; ⌘← / ⌘→ its first page (1/2) or the second (2/2).
+                    if modifiers == .command, [123, 124, 125, 126].contains(event.keyCode), event.window?.attachedSheet == nil,
+                       !(event.window?.firstResponder is NSTextView) {
+                        var forex: (rangeKey: String, dayKey: String, name: String, setRest: (Bool) -> Void)?
+                        if let chartsWin, [.forex, .forexActive].contains(workspace.chartsWindow(chartsWin).list) {
+                            let window = workspace.chartsWindow(chartsWin)
+                            forex = (chartsWin.key("secondaryChartsForexByRange"), chartsWin.key("secondaryChartsForexByDay"),
+                                     chartsWin.name, { window.forexShowsRest = $0 })
+                        } else if chartsWin == nil, inMainWindow, workspace.gridScan?.kind == .forex {
+                            forex = (MainGrid.forexByRangeKey, MainGrid.forexByDayKey, "Forex", { workspace.mainForexShowsRest = $0 })
+                        }
+                        if let forex {
+                            if !event.isARepeat {
+                                let d = UserDefaults.standard
+                                switch event.keyCode {
+                                case 123:
+                                    forex.setRest(false)
+                                    broker.say("\(forex.name): 1/2")
+                                case 124:
+                                    forex.setRest(true)
+                                    broker.say("\(forex.name): 2/2")
+                                default:
+                                    let modes = ["list order", "1D", "5D"]
+                                    let current = d.bool(forKey: forex.dayKey) ? 1 : d.bool(forKey: forex.rangeKey) ? 2 : 0
+                                    let next = (current + (event.keyCode == 125 ? 1 : 2)) % 3
+                                    d.set(next == 1, forKey: forex.dayKey)
+                                    d.set(next == 2, forKey: forex.rangeKey)
+                                    broker.say("\(forex.name): \(modes[next])")
+                                }
+                            }
+                            return nil
+                        }
+                    }
                     // ⌘ and an arrow key on the Colored list: the selected chart's ticker (else the one under the pointer)
                     // moves up, down, or to the column left or right (see `Workspace.moveColored`).
                     if modifiers == .command, [123, 124, 125, 126].contains(event.keyCode), event.window?.attachedSheet == nil,

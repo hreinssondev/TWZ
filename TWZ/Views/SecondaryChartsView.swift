@@ -130,6 +130,8 @@ final class ChartsWindowState {
     /// The next Reset on the Colored list: only the close-ups (true) or only the other charts (false), as the pointer
     /// was over one or the other when it was asked for; nil: all of them.
     @ObservationIgnored var resetsCloseUps: Bool?
+    /// The Forex list's second page (its top bar's 2/2, or ⌘→): the pairs past those the grid has room for.
+    var forexShowsRest = false
     /// The list and timeframe shown before, which ´ goes back to (see `noteView`).
     @ObservationIgnored var previousView: Workspace.GridView?
     /// ´ pressed: the switch on its way, so arriving there keeps the view left as the one to go back to.
@@ -373,7 +375,10 @@ struct SecondaryChartsView: View {
     /// On the Colored list: the charts' ids in cell order (see `ColoredLayout`).
     @State private var coloredOrder: [Int] = []
     /// The Forex list's second page: the pairs past those the grid has room for, in its cells instead.
-    @State private var showsRest = false
+    private var showsRest: Bool {
+        get { state.forexShowsRest }
+        nonmutating set { state.forexShowsRest = newValue }
+    }
     /// The Forex list by each pair's range over its last 5 finished days, widest first (see `TradingEngine.setForexByRange`).
     @AppStorage private var forexByRange: Bool
     /// … or over the last finished day alone (the 1D button; one of the two at a time).
@@ -567,6 +572,9 @@ struct SecondaryChartsView: View {
         .padding(.vertical, 6)
         // Whole points, so the charts under it start on a whole pixel (see `SplitGrid`).
         .frame(height: headerHeight.rounded())
+        // 1/2 ↔ 2/2, from its button or ⌘← / ⌘→; 1D / 5D, from theirs or ⌘↑ / ⌘↓.
+        .onChange(of: state.forexShowsRest) { lastGainers = []; syncWithGainers() }
+        .onChange(of: [forexByRange, forexByDay]) { syncForexRange() }
         // A ticker given a color or its color taken off: the Colored list follows.
         .onChange(of: workspace.coloredSymbols) {
             if state.list == .colored { syncWithGainers() }
@@ -599,7 +607,6 @@ struct SecondaryChartsView: View {
             forexButton(showsRest ? "2/2" : "1/2", lit: showsRest,
                         help: showsRest ? "Back to the first pairs of the Forex list" : "The Forex list's pairs past those the grid has room for") {
                 showsRest.toggle()
-                lastGainers = []; syncWithGainers()
             }
             forexButton("1D", lit: forexByDay,
                         help: forexByDay ? "Back to the Forex list's fixed order"
