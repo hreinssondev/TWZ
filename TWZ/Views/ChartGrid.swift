@@ -316,7 +316,7 @@ extension Workspace {
         if kind == .colored { return coloredSymbols }
         if kind == .alerts { return alertSymbols }
         guard kind == .forexActive else { return rows }
-        let colored = StockColor.allCases.compactMap { color in stockColors.first { $0.value == color }?.key }
+        let colored = StockColor.allCases.flatMap { color in stockColors.filter { $0.value == color }.keys.sorted() }
         return colored + rows.filter { !ForexPair.isForex($0) && !colored.contains($0) }
     }
 
