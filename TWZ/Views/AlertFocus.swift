@@ -5,7 +5,8 @@
 //  A trend line alert takes the charts to its stock: an open Charts window's (the first, then Charts 2), else the main
 //  window's. They go to the Alerts, Colored, Forex + Active and Forex lists that may show it, in that order (as ⌘⇧X,
 //  ⌘⇧C, ⌘⇧D, ⌘⇧F do there); a list that doesn't show it within a few seconds gives way to the next. Nothing is selected:
-//  the stock's charts pulse white until one of them is (see `Workspace.firedAlerts`).
+//  the stock's charts pulse white until one of them is (see `Workspace.firedAlerts`). A stock already shown in the window
+//  in front (or the one the alert would go to), on the list it's on, stays there, pulsing the same.
 //
 
 import AppKit
@@ -18,6 +19,14 @@ extension Workspace {
 
     func focusAlert(_ symbol: String, broker: Broker) {
         firedAlerts.insert(symbol)
+        // Already on screen in the window in front, or the one the alert would go to, on the list it shows: it stays
+        // there, its charts pulsing as they would on the alert's list.
+        let key = NSApp.keyWindow.flatMap { OptionsWindow.isWindow($0) ? nil : $0 }
+        let shown = (key.map { [ChartsWin.of($0)] } ?? []) + [Self.alertWindow()]
+        if shown.contains(where: { alertChart(showing: symbol, in: $0) != nil }) {
+            alertFocusToken = UUID()                     // a focus still under way for an earlier alert gives up
+            return
+        }
         let win = Self.alertWindow()
         let lists = Self.alertLists.filter { alertListMayShow(symbol, $0, in: win, broker: broker) }
         let token = UUID()
