@@ -290,6 +290,28 @@ struct TradingShortcuts: ViewModifier {
                     if modifiers.isEmpty, inMainWindow, isAcute {
                         if event.window?.firstResponder is NSTextView { return event }
                         if event.isARepeat { return nil }
+                        // In a Charts window: its own list and timeframe shown before.
+                        if let chartsWin {
+                            let window = workspace.chartsWindow(chartsWin)
+                            let timeframeKey = chartsWin.key(SecondaryCharts.timeframeKey)
+                            let shownTimeframe = UserDefaults.standard.string(forKey: timeframeKey).flatMap(Timeframe.init(rawValue:)) ?? .m1
+                            let current = Workspace.GridView(list: window.list, timeframe: shownTimeframe)
+                            guard let target = window.previousView, target != current else {
+                                NSSound.beep()
+                                broker.say("No view to go back to yet: ´ goes back once you've switched list or timeframe")
+                                return nil
+                            }
+                            window.viewSwitch = (current, target, Date())
+                            if target.list != current.list {
+                                // The list comes back on its timeframe: the one gone back to.
+                                UserDefaults.standard.set(target.timeframe.rawValue, forKey: chartsWin.listTimeframeKey(target.list))
+                                window.list = target.list
+                            } else {
+                                UserDefaults.standard.set(target.timeframe.rawValue, forKey: timeframeKey)
+                            }
+                            broker.say("\(chartsWin.name): back to \(target.list.rawValue), \(target.timeframe.rawValue) (´ again: \(current.list.rawValue), \(current.timeframe.rawValue))")
+                            return nil
+                        }
                         guard let target = workspace.previousGrid else {
                             NSSound.beep()
                             broker.say("No grid to go back to yet: ´ goes back once you've switched list or timeframe")
