@@ -491,7 +491,16 @@ struct TradingShortcuts: ViewModifier {
                             if typing { return event }
                             // KEYS ON: the real position; SIM (KEYS off): the what-if trade.
                             let s = symbol.uppercased()
-                            if symbol.isEmpty {
+                            // A working order in it (a stop loss or take profit aside), or no position to close: as ⌘A,
+                            // its orders cancelled; the position, if any, stays.
+                            let working = broker.orders.values.contains {
+                                $0.isActive && $0.symbol == s && broker.protectiveOrders[$0.id] == nil
+                            }
+                            let holding = workspace.orderShortcutsOn
+                                ? (broker.positions[s]?.quantity ?? 0) != 0 : broker.simPositions[s] != nil
+                            if !symbol.isEmpty, working || !holding {
+                                cancelSymbolOrders()
+                            } else if symbol.isEmpty {
                                 NSSound.beep()
                             } else if workspace.orderShortcutsOn {
                                 workspace.whatIfs[symbol] = nil
@@ -601,7 +610,7 @@ extension KeyShortcut {
                 return shift ? "⌘⇧↩ sends the selected hotkey" : "⌘↩ keeps the selected chart's tick-by-tick on or off"
             }
             if k == "a" { return "⌘A cancels the symbol's orders" }
-            if keyCode == 51 { return shift ? "⌘⇧⌫ cancels the symbol's orders, as ⌘A" : "⌘⌫ closes the position" }
+            if keyCode == 51 { return shift ? "⌘⇧⌫ cancels the symbol's orders, as ⌘A" : "⌘⌫ closes the position (with a working order or no position, cancels its orders)" }
             if k == "z" { return "⌘Z cancels the last order" }
             if k == "r" { return "⌘R gives every chart the selected chart's view" }
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
