@@ -5,7 +5,7 @@
 //  The Colored list (⌘⇧C, in the main window and the Charts windows): only the tickers given a color (⌥⇧ and a
 //  color's letter, see `StockColor`), two charts each side by side: the ticker's chart on the grid's timeframe, and
 //  right of it a close-up on 5m. Forex pairs take the left side of the grid, stocks the right (a column of pairs
-//  at a time, from the right). In the grid as the sliders have it: when the pairs don't all fit, every ticker gets
+//  at a time, from the right); each side in order down a column, then down the next. In the grid as the sliders have it: when the pairs don't all fit, every ticker gets
 //  its chart and none a close-up.
 //  The charts zoom and pan together, and so do the close-ups, apart from them. The close-ups start at the zoom
 //  the Charts window's forex charts have (see `Workspace.closeUpStartZoom`); the Zoom slider and Reset leave them
@@ -37,7 +37,10 @@ enum ColoredLayout {
             }
             let stockPairs = Set(rightmost.prefix(stocks.count))
             var stockQueue = stocks[...], forexQueue = forex[...]
-            for (i, p) in pairs.enumerated() {
+            // Each side fills a column of pairs top to bottom, then the next column.
+            let columnOrder = pairs.indices.sorted { (pairs[$0].pair, pairs[$0].row) < (pairs[$1].pair, pairs[$1].row) }
+            for i in columnOrder {
+                let p = pairs[i]
                 guard let symbol = stockPairs.contains(i) ? stockQueue.popFirst() : forexQueue.popFirst() else { continue }
                 let cell = starts[p.row] + p.pair * 2
                 cells[cell] = ColoredCell(symbol: symbol, closeUp: false)
@@ -55,7 +58,9 @@ enum ColoredLayout {
         }
         let stockCells = Set(rightmost.prefix(s))
         var stockQueue = stocks.prefix(s)[...], forexQueue = forex[...]
-        for i in places.indices {
+        // Each side fills a column top to bottom, then the next column.
+        let columnOrder = places.indices.sorted { (places[$0].column, places[$0].row) < (places[$1].column, places[$1].row) }
+        for i in columnOrder {
             guard let symbol = stockCells.contains(i) ? stockQueue.popFirst() : forexQueue.popFirst() else { continue }
             cells[i] = ColoredCell(symbol: symbol, closeUp: false)
         }
