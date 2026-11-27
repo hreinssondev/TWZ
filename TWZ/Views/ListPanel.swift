@@ -25,6 +25,11 @@ struct ListPanel: View {
     @AppStorage(Dimmed.opacityKey) private var dimmedOpacity = Dimmed.defaultOpacity
 
     let panelId: String
+    /// In a Charts window's side panel (see `ChartsWindowSidePanel`): its load button switches that window's list, and
+    /// ⌘⇧ and a list's letter are the main window's lists' only.
+    let chartsWin: ChartsWin?
+    /// A row clicked: where it loads (the main window's selected chart without this).
+    let onPick: ((String) -> Void)?
     @AppStorage private var scanner: ScannerKind
     @AppStorage private var tab: ListTab
     @AppStorage private var newsScope: NewsScope
@@ -53,8 +58,10 @@ struct ListPanel: View {
         var recentIsPartial = false
     }
 
-    init(panelId: String, defaultScanner: ScannerKind) {
+    init(panelId: String, defaultScanner: ScannerKind, chartsWin: ChartsWin? = nil, onPick: ((String) -> Void)? = nil) {
         self.panelId = panelId
+        self.chartsWin = chartsWin
+        self.onPick = onPick
         _scanner = AppStorage(wrappedValue: defaultScanner, "scanner.\(panelId)")
         _tab = AppStorage(wrappedValue: .list, "listTab.\(panelId)")
         _newsScope = AppStorage(wrappedValue: .stock, "newsScope.\(panelId)")
@@ -110,7 +117,11 @@ struct ListPanel: View {
                     }
 
                     Button {
-                        workspace.loadList(symbols, scan: scanSpec, timeframe: gridTimeframe, broker: broker)
+                        if let chartsWin {
+                            workspace.chartsWindow(chartsWin).list = scanner
+                        } else {
+                            workspace.loadList(symbols, scan: scanSpec, timeframe: gridTimeframe, broker: broker)
+                        }
                     } label: {
                         Image(systemName: "arrow.down")
                             .font(.system(size: 10))
@@ -120,7 +131,8 @@ struct ListPanel: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .disabled(symbols.isEmpty)
-                    .help("The chart grid follows this list, top first, as it changes (until Reset)")
+                    .help(chartsWin == nil ? "The chart grid follows this list, top first, as it changes (until Reset)"
+                          : "This window's charts follow this list")
                 } else {
                     tabLabel(workspace.targetSymbol.isEmpty ? "Chart" : workspace.targetSymbol, isOpen: newsScope == .stock) {
                         newsScope = .stock
@@ -192,8 +204,8 @@ struct ListPanel: View {
     /// ⌘⇧ + a list's letter: a list already showing it loads into the chart grid, as its load button
     /// does; with none, the left list (the one list while they're merged) switches to it and loads.
     private func takeUp(_ request: Workspace.ListShortcut?) {
-        guard let kind = request?.kind else { return }
-        let shown = workspace.shownLists
+        guard chartsWin == nil, let kind = request?.kind else { return }
+        let shown = workspace.shownLists.filter { !ChartsWin.isSidePanelList($0.key) }
         let target = shown.filter { $0.value == kind }.keys.sorted().first
             ?? (shown["list-single"] != nil ? "list-single" : "list-left")
         guard target == panelId else { return }
@@ -342,7 +354,7 @@ struct ListPanel: View {
         .help(unavailable.map { "No real-time data: \($0)" } ?? "")
         .contentShape(Rectangle())
         .onTapGesture {
-            workspace.loadIntoSelectedChart(symbol, broker: broker)
+            if let onPick { onPick(symbol) } else { workspace.loadIntoSelectedChart(symbol, broker: broker) }
         }
         .contextMenu {
             // The grid's charts in reading order.
