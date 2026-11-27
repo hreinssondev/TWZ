@@ -24,24 +24,7 @@ struct AccountBar: View {
         // in a narrow window before anything in it is squeezed.
         HStack(spacing: 0) {
             HStack(spacing: 18) {
-                // LIVE (red) or PAPER (blue).
-                // A click switches KEYS ON and SIM, as ⌘🌐 does.
-                AccountBadge(isLive: broker.isLivePort, isLit: workspace.orderShortcutsOn) {
-                    workspace.orderShortcutsOn.toggle()
-                    workspace.launchModeChosen = true
-                    broker.say(workspace.orderShortcutsOn ? "KEYS ON: order shortcuts go to IB, for real (⌘🌐: SIM)"
-                                                          : "SIM: order shortcuts trade what-if positions, nothing goes to IB (⌘🌐: KEYS ON)")
-                }
-
-                OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
-
-                // Account values are in the base currency (NOK), shown as bare numbers.
-                HStack(spacing: 12) {
-                    stat("Equity", Fmt.amount(broker.netLiquidation))
-                    stat("P/L Today", Fmt.amount(broker.dailyPnL, signed: true))
-                    stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true))
-                    stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
-                }
+                AccountSummary()
 
                 // The chart grid's size, its charts' zoom and timeframe (see `ChartGrid`).
                 // Zoom moved by hand trumps the lit scale's (see `Workspace.manualZoom`).
@@ -84,27 +67,7 @@ struct AccountBar: View {
 
             HStack(spacing: 18) {
                 FrameMeterBadge()
-
-                IndicatorToggles()
-
-                // The status text (e.g. why it disconnected) shows on hover; a click reconnects, as Settings ›
-                // Connection's Reconnect does.
-                Circle().fill(statusColor).frame(width: 8, height: 8)
-                    .padding(4)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        broker.disconnect()
-                        broker.connect()
-                    }
-                    .help("\(broker.statusText) · click to reconnect")
-
-                Button {
-                    workspace.showsSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .buttonStyle(.borderless)
-                .help("Settings")
+                AccountStatusControls()
             }
         }
         // At the top, beside the window controls and centered on them, so the stats line up with them;
@@ -116,11 +79,34 @@ struct AccountBar: View {
         .background(WindowControlsProbe { controlsCenterY = $0 })
     }
 
-    private var statusColor: Color {
-        switch broker.state {
-        case .connected: .green
-        case .connecting: .yellow
-        case .disconnected: .red
+}
+
+/// The account bar's account side: LIVE / PAPER (a click switches KEYS ON and SIM), KEYS ON / SIM, and the account's
+/// values. Also in the Charts windows' title bar (see `ChartsWindowTitleBar`).
+struct AccountSummary: View {
+    @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
+
+    var body: some View {
+        HStack(spacing: 18) {
+            // LIVE (red) or PAPER (blue).
+            // A click switches KEYS ON and SIM, as ⌘🌐 does.
+            AccountBadge(isLive: broker.isLivePort, isLit: workspace.orderShortcutsOn) {
+                workspace.orderShortcutsOn.toggle()
+                workspace.launchModeChosen = true
+                broker.say(workspace.orderShortcutsOn ? "KEYS ON: order shortcuts go to IB, for real (⌘🌐: SIM)"
+                                                      : "SIM: order shortcuts trade what-if positions, nothing goes to IB (⌘🌐: KEYS ON)")
+            }
+
+            OrderShortcutsBadge(isOn: workspace.orderShortcutsOn)
+
+            // Account values are in the base currency (NOK), shown as bare numbers.
+            HStack(spacing: 12) {
+                stat("Equity", Fmt.amount(broker.netLiquidation))
+                stat("P/L Today", Fmt.amount(broker.dailyPnL, signed: true))
+                stat("Unrealized", Fmt.amount(broker.unrealizedPnL, signed: true))
+                stat("Positions", Fmt.amount(broker.totalPositionValueNOK))
+            }
         }
     }
 
@@ -133,6 +119,68 @@ struct AccountBar: View {
         }
         .font(.system(size: 10).monospacedDigit())
         .offset(y: 1)
+    }
+}
+
+/// The account bar's right end: the indicator switches, the connection dot (a click reconnects) and Settings. Also
+/// in the Charts windows' title bar, where Settings brings the main window, its sheet's, to the front.
+struct AccountStatusControls: View {
+    @Environment(Broker.self) private var broker
+    @Environment(Workspace.self) private var workspace
+
+    var body: some View {
+        HStack(spacing: 18) {
+            IndicatorToggles()
+
+            // The status text (e.g. why it disconnected) shows on hover; a click reconnects, as Settings ›
+            // Connection's Reconnect does.
+            Circle().fill(statusColor).frame(width: 8, height: 8)
+                .padding(4)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    broker.disconnect()
+                    broker.connect()
+                }
+                .help("\(broker.statusText) · click to reconnect")
+
+            Button {
+                workspace.showsSettings = true
+                NSApp.windows.first { ChartsWin.of($0) == nil && !OptionsWindow.isWindow($0) && $0.isVisible && $0.canBecomeMain }?
+                    .makeKeyAndOrderFront(nil)
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.borderless)
+            .help("Settings")
+        }
+    }
+
+    private var statusColor: Color {
+        switch broker.state {
+        case .connected: .green
+        case .connecting: .yellow
+        case .disconnected: .red
+        }
+    }
+}
+
+/// A Charts window's title bar row, beside the window controls: what the main window's account bar has that the
+/// window's own top bar hasn't (see `AccountSummary`, `AccountStatusControls`).
+struct ChartsWindowTitleBar: View {
+    @State private var controlsCenterY: CGFloat = 14
+
+    var body: some View {
+        HStack(spacing: 0) {
+            AccountSummary()
+                .fixedSize()
+            Spacer(minLength: 10)
+            AccountStatusControls()
+                .fixedSize()
+        }
+        .padding(.leading, 80)
+        .padding(.trailing, 12)
+        .frame(height: max(28, controlsCenterY * 2))
+        .background(WindowControlsProbe { controlsCenterY = $0 })
     }
 }
 
@@ -343,7 +391,7 @@ private struct NoWindowDrag: NSViewRepresentable {
 }
 
 /// Reports how far below the window's top edge the window controls are centered.
-private struct WindowControlsProbe: NSViewRepresentable {
+struct WindowControlsProbe: NSViewRepresentable {
     var onChange: (CGFloat) -> Void
 
     func makeNSView(context: Context) -> Probe { Probe(onChange: onChange) }
