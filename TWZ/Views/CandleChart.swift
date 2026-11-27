@@ -230,7 +230,7 @@ struct CandleChart: View {
     private var showSlowSMA: Bool { ChartSettings.shared.values.showSlowSMA }
     private var showTrades: Bool { ChartSettings.shared.values.showTrades }
     private var indicatorWidth: Double { ChartSettings.shared.values.indicatorWidth }
-    private var axisFontSize: Double { ChartSettings.shared.values.axisFontSize }
+    private var axisFontSize: Double { windowValues.axisFontSize }
     /// This chart's window's own axis text (see `ChartsAxisText`).
     private var windowValues: ChartSettings.Values { ChartSettings.shared.values.forWindow(chart.windowIndex) }
     private var labelSpacing: Double { windowValues.labelSpacing }
@@ -251,7 +251,8 @@ struct CandleChart: View {
     @State private var tripleClickAt = Date.distantPast
 
     /// Widens with the axis text so larger prices still fit.
-    private var axisWidth: CGFloat { max(58, (windowValues.axisWidthFontSize * 5.8).rounded()) }
+    /// As wide as the text on it needs: narrower with smaller text, down to 30 pt.
+    private var axisWidth: CGFloat { max(30, (windowValues.axisWidthFontSize * 5.8).rounded()) }
     /// Height of the price boxes on the axis.
     private var tagHeight: CGFloat { axisFontSize + 6 }
     private let timeAxisHeight: CGFloat = 16
