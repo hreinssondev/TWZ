@@ -380,6 +380,8 @@ struct SecondaryChartsView: View {
     @AppStorage private var headerHeight: Double
     /// P: the main window's right side (the lists, Orders, Positions, Round trips) beside the charts. Saved.
     @AppStorage private var showsSidePanel: Bool
+    /// Its UI's brightness, the charts' candles aside (see `ChartsUIBrightness`).
+    @AppStorage private var uiBrightness: Double
     @AppStorage private var sidePanelWidth: Double
     @AppStorage private var layout: SecondaryCharts.Layout
     @AppStorage private var customColumns: Int
@@ -396,6 +398,7 @@ struct SecondaryChartsView: View {
         _masterTimeframe = AppStorage(wrappedValue: .m1, win.key(SecondaryCharts.timeframeKey))
         _headerHeight = AppStorage(wrappedValue: 28, win.key("secondaryHeaderHeight"))
         _showsSidePanel = AppStorage(wrappedValue: false, win.key("chartsWindowSidePanel"))
+        _uiBrightness = AppStorage(wrappedValue: 0, win.key(ChartsUIBrightness.key))
         _sidePanelWidth = AppStorage(wrappedValue: 420, win.key("chartsWindowSidePanelWidth"))
         _layout = AppStorage(wrappedValue: win == .first ? .all : .custom, win.key(SecondaryCharts.layoutKey))
         _customColumns = AppStorage(wrappedValue: win.defaultColumns, win.key(SecondaryCharts.columnsKey))
@@ -414,7 +417,9 @@ struct SecondaryChartsView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .uiBrightness(uiBrightness)
             Divider()
+                .uiBrightness(uiBrightness)
             HStack(spacing: 0) {
                 let items = self.items
                 SplitGrid(columns: columns, rows: rows, items: items,
@@ -426,6 +431,7 @@ struct SecondaryChartsView: View {
                     ResizeHandle(resizes: .horizontal, thickness: Self.gap, current: sidePanelWidth, range: 240...1200,
                                  inverted: true, onChange: { sidePanelWidth = $0 }, onReset: { sidePanelWidth = 420 })
                     ChartsWindowSidePanel(win: win, onPick: pick)
+                        .uiBrightness(uiBrightness)
                         .frame(width: sidePanelWidth)
                         .padding([.vertical, .trailing], Self.gap)
                 }
@@ -535,6 +541,7 @@ struct SecondaryChartsView: View {
             }
             Spacer()
             ChartsAxisTextSliders(win: win)
+            ChartsUIBrightnessSlider(win: win)
             SharpnessToggles()
             FrameMeterBadge()
             Button {
@@ -767,11 +774,14 @@ struct SecondaryChartPane: View {
 
     @AppStorage private var layout: SecondaryCharts.Layout
     @AppStorage(HeaderPerformance.freezeKey) private var freezesHeaders = HeaderPerformance.defaultOn
+    /// Its window's UI brightness: its header and outline, not the chart (see `ChartsUIBrightness`).
+    @AppStorage private var uiBrightness: Double
 
     init(win: ChartsWin, chart: ChartModel, cell: Int?) {
         self.win = win
         self.chart = chart
         self.cell = cell
+        _uiBrightness = AppStorage(wrappedValue: 0, win.key(ChartsUIBrightness.key))
         _layout = AppStorage(wrappedValue: win == .first ? .all : .custom, win.key(SecondaryCharts.layoutKey))
     }
 
@@ -783,7 +793,9 @@ struct SecondaryChartPane: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                .uiBrightness(uiBrightness)
             Divider().opacity(0.5)
+                .uiBrightness(uiBrightness)
             TradingChart(chart: chart, onTrade: { workspace.selectedChartID = chart.id }) { factor in
                 // Every chart in this window, from the zoom on screen; the header's Zoom slider follows.
                 // Saved once the zooming pauses (see `Workspace.holdZoom`).
@@ -794,7 +806,7 @@ struct SecondaryChartPane: View {
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay { ChartOutline(chart: chart) }
+        .overlay { ChartOutline(chart: chart).uiBrightness(uiBrightness) }
         .simultaneousGesture(TapGesture().onEnded { workspace.selectedChartID = chart.id })
         // The header's buying and short selling power, kept current while selected (as every main chart's is;
         // a whole grid of them here would ask IB too often).
