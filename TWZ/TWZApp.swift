@@ -24,6 +24,7 @@ struct TWZApp: App {
                 .modifier(TradingShortcuts())
                 .modifier(ClickToUnfocus())
                 .modifier(ChartsWindowShortcut())
+                .modifier(ChartsWindowOnSecondScreen())
                 .modifier(SideColorsFromSettings())
                 .modifier(AppBackgroundFromSettings())                .environment(broker)
                 .environment(workspace)
