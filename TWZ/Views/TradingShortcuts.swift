@@ -25,8 +25,9 @@
 //  ⌃⌥⇧1 / 2 / 3 / 4 sells (shorts) a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 /
 //  $3,000 / 85% of the buying power in the selected chart's symbol (⌥⇧1–4 doesn't buy one: ⌥⇧1–5 picks the
 //  top bar's view set or scale under that number, as a click on it, in the main window). Matched by key, number row or keypad, whatever the keyboard layout types there.
-//  ⌘R, ⇧R (outside a text field), ⌥R, ⌃R or ⌘⇧R does what the top bar's Reset does, and so does the extra Reset
-//  shortcut set in Settings › Order Keys (see `Workspace.resetShortcut`).
+//  ⌘⇧R, ⇧R (outside a text field), ⌥R or ⌃R does what the top bar's Reset does, and so does the extra Reset
+//  shortcut set in Settings › Order Keys (see `Workspace.resetShortcut`). ⌘R gives every chart in the window in front
+//  the selected chart's view (see `Workspace.matchSelectedView`).
 //  ⌘⇧M switches the order numbers between dollars and a percent of the buying power (see `SizeMode`): KEYS $ or
 //  KEYS % in the top bar.
 //  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex, D Forex + Active, C Colored, X Alerts)
@@ -179,11 +180,25 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    // In the Charts window, the Reset keys (⌘R, ⇧R outside a text field, ⌥R, ⌃R, ⌘⇧R, Settings' extra one)
+                    // In the Charts window, the Reset keys (⌘⇧R, ⇧R outside a text field, ⌥R, ⌃R, Settings' extra one)
                     // reset that window alone (see `Workspace.resetChartsWindow`).
                     let chartsWin = ChartsWin.of(event.window)
+                    // ⌘R, main window or a Charts window: every chart there takes the selected chart's view (see
+                    // `Workspace.matchSelectedView`); the Reset is ⌘⇧R.
+                    if modifiers == .command, event.charactersIgnoringModifiers?.lowercased() == "r",
+                       event.window?.attachedSheet == nil, inMainWindow || chartsWin != nil {
+                        if !event.isARepeat {
+                            if workspace.matchSelectedView(in: chartsWin) {
+                                broker.say("Every chart \(chartsWin.map { "in \($0.name)" } ?? "here") at \(workspace.selectedChart.symbol)'s view (⌘⇧R resets them)")
+                            } else {
+                                NSSound.beep()
+                                broker.say("⌘R: select a chart in this window first; its view goes to every chart here")
+                            }
+                        }
+                        return nil
+                    }
                     if let chartsWin, event.window?.attachedSheet == nil,
-                       (modifiers == .command || modifiers == .shift || modifiers == .option || modifiers == .control || modifiers == [.command, .shift])
+                       (modifiers == .shift || modifiers == .option || modifiers == .control || modifiers == [.command, .shift])
                         && event.charactersIgnoringModifiers?.lowercased() == "r"
                         || workspace.resetShortcut.map({ KeyShortcut(event) == $0 }) == true {
                         if event.window?.firstResponder is NSTextView, modifiers == .shift || KeyShortcut(event).isPlain { return event }
@@ -452,9 +467,6 @@ struct TradingShortcuts: ViewModifier {
                         case "z":
                             if typing { return event }
                             broker.cancelLastOrder()
-                        case "r":
-                            // The top bar's Reset.
-                            workspace.resetToGainers()
                         default: return event
                         }
                         return nil
@@ -549,7 +561,7 @@ extension KeyShortcut {
             if k == "a" { return "⌘A cancels the symbol's orders" }
             if keyCode == 51 { return shift ? "⌘⇧⌫ removes the what-if" : "⌘⌫ closes the position" }
             if k == "z" { return "⌘Z cancels the last order" }
-            if k == "r" { return "⌘R resets the chart grid, as the top bar's Reset" }
+            if k == "r" { return "⌘R gives every chart the selected chart's view" }
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
         }
         if option, !command, !control, k == "z" || k == "<" { return "\(display) cancels orders" }

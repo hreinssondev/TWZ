@@ -525,6 +525,16 @@ extension Workspace {
     /// it goes, and loads older ones.
     /// `sameWindow`: the other charts in `source`'s own window instead, those adjusted by hand as `source` is (see
     /// `ViewSync`).
+    /// ⌘R: every chart in the window in front (`win`, nil: the main window) takes the selected chart's view, its zoom,
+    /// place and prices, as view sync does (on Forex + Active the pairs or the stocks, on Colored the charts or the
+    /// close-ups, as it's one; see `zoomSide`). False with no chart selected in that window.
+    func matchSelectedView(in win: ChartsWin?) -> Bool {
+        guard isChartSelected, ChartsWin.of(chartID: selectedChartID) == win, let chart = chart(id: selectedChartID),
+              !chart.symbol.isEmpty else { return false }
+        matchViews(to: chart, sameWindow: win != nil)
+        return true
+    }
+
     func matchViews(to source: ChartModel, sameWindow: Bool = false) {
         let bars = source.bars
         // The time of the last bar on screen, while scrolled back.
