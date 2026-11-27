@@ -766,7 +766,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                     self.updateQuote(symbol)
                 }
                 if now == .overnight {
-                    for c in self.charts.values where self.overnightReqByChart[c.id] == nil
+                    for c in self.charts.values where self.overnightReqByChart[c.id] == nil && c.leader == nil
                         && !c.symbol.isEmpty && !c.isLoading && c.timeframe.isIntraday && !ForexPair.isForex(c.symbol) {
                         self.requestOvernightBars(c)
                     }
@@ -1315,6 +1315,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     func reloadChart(_ id: Int) {
         guard let c = charts[id], !c.symbol.isEmpty else { return }
         c.fullHistory = false
+        // Sharing another chart's history: that one loads it again from IB, and this one takes the fresh bars.
+        if let lead = c.leader.flatMap({ charts[$0] }) {
+            c.bars = []
+            c.keepsOlder = false
+            c.isLoading = apiReady
+            chartChanged(c, all: true)
+            lead.fullHistory = false
+            return requestChart(lead.id)
+        }
         requestChart(id)
     }
 
@@ -1322,6 +1331,16 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// until the new ones replace them.
     private func requestChart(_ id: Int, keepingBars: Bool = false) {
         guard let c = charts[id] else { return }
+        // Charts sharing this one's history that show something else now: the first asks IB for its own, the
+        // others share that one's. Those still showing the same follow this request.
+        let leaving = charts.values.filter { $0.leader == id && ($0.symbol != c.symbol || $0.timeframe != c.timeframe) }
+            .sorted { $0.id < $1.id }
+        c.leader = nil
+        if let heir = leaving.first {
+            for f in leaving.dropFirst() { f.leader = heir.id }
+            heir.leader = nil
+            requestChart(heir.id, keepingBars: !heir.bars.isEmpty)
+        }
         if let old = reqByChart.removeValue(forKey: id) {
             if apiReady { send(25, 1, old) }                                      // cancelHistoricalData
             chartByReq[old] = nil
@@ -1346,6 +1365,22 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         }
         guard apiReady, !c.symbol.isEmpty, c.isLoading || keepingBars else { return }
         requestSSRBars(c.symbol)
+        // Another chart already gets this stock and timeframe from IB: this one shares its history and live bars
+        // instead of asking again (one request and one live stream however many charts show them). A full history
+        // wanted here that it doesn't have: it asks for it, for both.
+        if let lead = charts.values.filter({ $0 !== c && $0.leader == nil && $0.symbol == c.symbol && $0.timeframe == c.timeframe
+            && reqByChart[$0.id] != nil }).min(by: { $0.id < $1.id }) {
+            c.leader = lead.id
+            if c.fullHistory, !lead.fullHistory {
+                lead.fullHistory = true
+                requestChart(lead.id, keepingBars: !lead.bars.isEmpty)
+            } else if !lead.isLoading {
+                follow(c, lead)
+            }
+            let barSize = c.timeframe.barSize
+            Self.log.notice("\(c.symbol, privacy: .public) \(barSize, privacy: .public): shares another chart's history")
+            return
+        }
         let reqId = makeReqId()
         chartByReq[reqId] = id
         reqByChart[id] = reqId
@@ -1362,6 +1397,30 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         ])
         guard tf.isIntraday, !forex, c.fullHistory || phase == .overnight else { return }
         requestOvernightBars(c)
+    }
+
+    /// `f` takes `lead`'s bars (the history they share), keeping its own older ones before them.
+    private func follow(_ f: ChartState, _ lead: ChartState) {
+        let first = lead.bars.first?.time ?? .distantFuture
+        let older = f.bars.last.map { $0.time >= first } == true || f.keepsOlder ? f.bars.prefix { $0.time < first } : []
+        f.bars = Array(older) + lead.bars
+        f.keepsOlder = false
+        f.isLoading = lead.isLoading
+        f.error = lead.error
+        f.fullHistoryIn = lead.fullHistoryIn
+        chartChanged(f, all: true)
+        if f.launchSeeded, !lead.isLoading {
+            f.launchSeeded = false
+            if f.olderWanted {
+                f.olderWanted = false
+                loadOlderBars(f.id, generation: f.generation)
+            }
+        }
+    }
+
+    /// The charts sharing `lead`'s history take its bars again (its history came in, or changed as a whole).
+    private func syncFollowers(of lead: ChartState) {
+        for f in charts.values where f.leader == lead.id { follow(f, lead) }
     }
 
     /// The chart's bars from the OVERNIGHT venue (20:00–03:50 ET), merged into its own as they come;
@@ -3331,6 +3390,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             c.isLoading = false
             c.error = text
             chartChanged(c)
+            syncFollowers(of: c)
             return
         }
         if let symbol = quoteSymbolByReq[reqId] {
@@ -3452,6 +3512,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
                 c.overnightStandIns = false
                 c.bars = Self.merge(base, bars)
                 chartChanged(c, all: true)
+                syncFollowers(of: c)
             }
             return
         }
@@ -3480,6 +3541,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         c.isLoading = false
         c.error = c.bars.isEmpty ? "No data" : nil
         chartChanged(c, all: true)
+        syncFollowers(of: c)
         if c.launchSeeded {
             c.launchSeeded = false
             if c.olderWanted {
@@ -3534,12 +3596,20 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// candle, and the latest trade stays the close.
     private func historicalDataUpdate(_ f: [String]) {
         // reqId, barCount, date, open, close, high, low, average, volume
-        guard let id = chartByReq[f.int(1)] ?? overnightChartByReq[f.int(1)], let c = charts[id], !c.isLoading,
+        guard let id = chartByReq[f.int(1)] ?? overnightChartByReq[f.int(1)], let lead = charts[id], !lead.isLoading,
               let time = Self.parseBarTime(f.str(3)) else { return }
         let raw = Bar(time: time, open: f.double(4), high: f.double(6), low: f.double(7),
                       close: f.double(5), volume: max(0, f.double(9)))
         // A price of 0 or -1 in IB's update isn't one (see `Bar.repaired`).
-        guard var bar = raw.repaired() ?? (OptionContract.isOption(c.symbol) ? raw : nil) else { return }
+        guard let bar = raw.repaired() ?? (OptionContract.isOption(lead.symbol) ? raw : nil) else { return }
+        // The charts sharing its history get the update too.
+        for c in [lead] + charts.values.filter({ $0.leader == id && !$0.isLoading }) { applyBarUpdate(bar, to: c) }
+    }
+
+    /// IB's update of the bar at `bar.time`: a new latest bar, or one of the last few again.
+    private func applyBarUpdate(_ update: Bar, to c: ChartState) {
+        var bar = update
+        let time = bar.time
         guard let lastIndex = c.bars.indices.last else {
             c.bars.append(bar)
             chartChanged(c, from: time)
@@ -3794,6 +3864,9 @@ nonisolated private final class ChartState {
     var olderWanted = false
     /// The overnight bars shown are kept from before, standing in for the overnight history on its way.
     var overnightStandIns = false
+    /// Another chart showing the same stock and timeframe whose IB history and live bar updates this one shares
+    /// instead of asking for its own (see `requestChart`); nil: it has its own.
+    var leader: Int?
     var generation = 0
     var bars: [Bar] = []
     var isLoading = false
