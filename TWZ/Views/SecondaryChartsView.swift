@@ -35,7 +35,6 @@ enum SecondaryCharts {
     static let maxRows = 4
     static let count = maxColumns * maxRows
     static let timeframeKey = "secondaryChartsTimeframe"
-    static let pausedKey = "secondaryChartsPaused"
     static let layoutKey = "secondaryChartsLayout"
     static let columnsKey = "secondaryChartsColumns"
     static let rowsKey = "secondaryChartsRows"
@@ -100,7 +99,7 @@ final class ChartsWindowState {
     let win: ChartsWin
     /// Rows in its grid now, for ⌘← / ⌘→ on the Colored list (see `Workspace.moveColored`).
     @ObservationIgnored var gridRows = 2
-    /// One chart for each cell of its largest grid, empty until the window's open and not paused.
+    /// One chart for each cell of its largest grid, empty until the window's open.
     let charts: [ChartModel]
     /// Charts given a stock by hand (their symbol field), by chart id, with the cell each keeps: the gainers fill
     /// the other cells around them, until the Reset button, an emptied field, or a smaller grid without that cell.
@@ -351,7 +350,9 @@ struct SecondaryChartsView: View {
     @AppStorage private var forexByRange: Bool
     @AppStorage private var masterTimeframe: Timeframe
     @AppStorage private var headerHeight: Double
-    @AppStorage private var isPaused: Bool
+    /// P: the main window's right side (the lists, Orders, Positions, Round trips) beside the charts. Saved.
+    @AppStorage private var showsSidePanel: Bool
+    @AppStorage private var sidePanelWidth: Double
     @AppStorage private var layout: SecondaryCharts.Layout
     @AppStorage private var customColumns: Int
     @AppStorage private var customRows: Int
@@ -366,7 +367,8 @@ struct SecondaryChartsView: View {
         _forexByRange = AppStorage(wrappedValue: false, win.key("secondaryChartsForexByRange"))
         _masterTimeframe = AppStorage(wrappedValue: .m1, win.key(SecondaryCharts.timeframeKey))
         _headerHeight = AppStorage(wrappedValue: 28, win.key("secondaryHeaderHeight"))
-        _isPaused = AppStorage(wrappedValue: false, win.key(SecondaryCharts.pausedKey))
+        _showsSidePanel = AppStorage(wrappedValue: false, win.key("chartsWindowSidePanel"))
+        _sidePanelWidth = AppStorage(wrappedValue: 420, win.key("chartsWindowSidePanelWidth"))
         _layout = AppStorage(wrappedValue: win == .first ? .all : .custom, win.key(SecondaryCharts.layoutKey))
         _customColumns = AppStorage(wrappedValue: win.defaultColumns, win.key(SecondaryCharts.columnsKey))
         _customRows = AppStorage(wrappedValue: win.defaultRows, win.key(SecondaryCharts.rowsKey))
@@ -385,17 +387,19 @@ struct SecondaryChartsView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            if isPaused {
-                Text("Paused")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            HStack(spacing: 0) {
                 let items = self.items
                 SplitGrid(columns: columns, rows: rows, items: items,
                           gap: Self.gap, inset: Self.gap,
                           columnSplits: $columnSplits, rowSplits: $rowSplits) { chart in
                     SecondaryChartPane(win: win, chart: chart, cell: items.firstIndex { $0.id == chart.id })
+                }
+                if showsSidePanel {
+                    ResizeHandle(resizes: .horizontal, thickness: Self.gap, current: sidePanelWidth, range: 240...1200,
+                                 inverted: true, onChange: { sidePanelWidth = $0 }, onReset: { sidePanelWidth = 420 })
+                    ChartsWindowSidePanel(win: win, onPick: pick)
+                        .frame(width: sidePanelWidth)
+                        .padding([.vertical, .trailing], Self.gap)
                 }
             }
         }
@@ -403,31 +407,26 @@ struct SecondaryChartsView: View {
         .onAppear {
             applyZoom()
             workspace.syncChartsWindowScale(to: broker)
-            if !isPaused { start() }
+            start()
         }
         // On close only: hiding the window (ordering it out) keeps the charts live.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
             if ChartsWin.of(note.object as? NSWindow) == win { stop() }
         }
-        // Fills the charts as soon as the scanner answers, e.g. right after P is turned off.
-        .onChange(of: broker.scans[win.scannerOwner]?.symbols) {
-            if !isPaused { syncWithGainers() }
-        }
+        // Fills the charts as soon as the scanner answers.
+        .onChange(of: broker.scans[win.scannerOwner]?.symbols) { syncWithGainers() }
         .onChange(of: masterTimeframe) { _, new in
             workspace.setTimeframe(new, of: workspace.gridCharts(state.charts, list: state.list), broker: broker)
-        }
-        .onChange(of: isPaused) { _, paused in
-            if paused { stop() } else { start() }
         }
         // Charts still in the new top N stay put; the rest are emptied (smaller grid) or filled (larger).
         // A chart set by hand whose cell is gone lets go of its stock.
         .onChange(of: count) {
             state.pins = state.pins.filter { $0.value < count }
-            if !isPaused { lastGainers = []; syncWithGainers() }
+            lastGainers = []; syncWithGainers()
         }
         // A chart set or let go by hand, or Reset: the gainers fill the cells around the ones set by hand.
         .onChange(of: state.pins) {
-            if !isPaused { lastGainers = []; syncWithGainers() }
+            lastGainers = []; syncWithGainers()
         }
         // Another list: the charts still in its top N stay, the rest load its stocks.
         .onChange(of: state.list) { old, new in listChanged(from: old, to: new) }
@@ -498,35 +497,35 @@ struct SecondaryChartsView: View {
             if state.list == .forex { forexButtons }
             if state.list == .colored { ColoredColorsButton() }
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
-            if !isPaused, let error = broker.scans[win.scannerOwner]?.error {
+            if let error = broker.scans[win.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)
             }
             Spacer()
             SharpnessToggles()
             FrameMeterBadge()
             Button {
-                isPaused.toggle()
+                showsSidePanel.toggle()
             } label: {
                 Text("P")
                     .font(.system(size: 10, weight: .regular).monospacedDigit())
-                    .foregroundStyle(isPaused ? Color.primary : Color.secondary.opacity(0.7))
+                    .foregroundStyle(showsSidePanel ? Color.primary : Color.secondary.opacity(0.7))
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(isPaused ? 0.12 : 0)))
+                    .background(RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(showsSidePanel ? 0.12 : 0)))
             }
             .buttonStyle(.plain)
-            .help(isPaused ? "Turn the charts back on" : "Turn the charts off: no scanner, history or quotes until P is off again")
+            .help(showsSidePanel ? "Hide the lists, Orders and Positions" : "The lists, Orders, Positions and Round trips beside the charts, as in the main window")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(height: headerHeight)
         // A ticker given a color or its color taken off: the Colored list follows.
         .onChange(of: workspace.coloredSymbols) {
-            if !isPaused, state.list == .colored { syncWithGainers() }
+            if state.list == .colored { syncWithGainers() }
         }
         // A stock given its first trend line or its last taken off: the Alerts list follows.
         .onChange(of: workspace.alertSymbols) {
-            if !isPaused, state.list == .alerts { syncWithGainers() }
+            if state.list == .alerts { syncWithGainers() }
         }
         // The height drag sits behind the controls so it never takes a slider's drag; a click there
         // deselects the chart, as a click on empty space in Orders or Positions does.
@@ -552,7 +551,7 @@ struct SecondaryChartsView: View {
             forexButton(showsRest ? "2/2" : "1/2", lit: showsRest,
                         help: showsRest ? "Back to the first pairs of the Forex list" : "The Forex list's pairs past those the grid has room for") {
                 showsRest.toggle()
-                if !isPaused { lastGainers = []; syncWithGainers() }
+                lastGainers = []; syncWithGainers()
             }
             forexButton("5D", lit: forexByRange,
                         help: forexByRange ? "Back to the Forex list's fixed order"
@@ -573,7 +572,20 @@ struct SecondaryChartsView: View {
         if old == .colored { workspace.leaveColored(state.charts, timeframe: masterTimeframe, broker: broker) }
         if new == .colored { workspace.closeUpZoom = workspace.closeUpStartZoom(fallback: layout == .all ? allZoom : customZoom) }
         coloredOrder = []
-        if !isPaused { start() }
+        start()
+    }
+
+    /// A row clicked in the side panel's lists: into the selected chart when it's one of this window's, which keeps it
+    /// and its cell as if typed in its symbol field; else into the main window's selected chart, as there.
+    private func pick(_ symbol: String) {
+        let s = ForexPair.normalize(symbol)
+        guard !s.isEmpty else { return }
+        guard workspace.isChartSelected, let chart = state.charts.first(where: { $0.id == workspace.selectedChartID }) else {
+            return workspace.loadIntoSelectedChart(s, broker: broker)
+        }
+        if state.pins[chart.id] == nil, !chart.symbol.isEmpty { state.displaced[chart.id] = chart.symbol }
+        if s != chart.symbol { workspace.load(s, into: chart, broker: broker) }
+        if let cell = items.firstIndex(where: { $0.id == chart.id }) { state.pins[chart.id] = cell }
     }
 
     /// Reset: every chart back to the Zoom slider's zoom; on the Colored list, the close-ups to theirs.

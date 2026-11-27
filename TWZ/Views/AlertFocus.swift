@@ -44,11 +44,10 @@ extension Workspace {
         if alertFocusToken == token, let id = alertChart(showing: symbol, in: win) { selectedChartID = id }
     }
 
-    /// The first open Charts window (not paused), nil for none: the main window then.
+    /// The first open Charts window, nil for none: the main window then.
     private static func alertWindow() -> ChartsWin? {
         ChartsWin.allCases.first { win in
-            !UserDefaults.standard.bool(forKey: win.key(SecondaryCharts.pausedKey))
-                && NSApp.windows.contains { ChartsWin.of($0) == win && $0.isVisible && !$0.isMiniaturized }
+            NSApp.windows.contains { ChartsWin.of($0) == win && $0.isVisible && !$0.isMiniaturized }
         }
     }
 
