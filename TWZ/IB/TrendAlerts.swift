@@ -57,7 +57,11 @@ extension Broker {
     private func alertTrendLine(symbol: String, price: Double, rising: Bool) {
         let line = Fmt.price(price, for: symbol)
         logMessage("\(symbol) reached its trend line at \(line) \(rising ? "↑" : "↓")")
-        NSSound(named: "Glass")?.play()
+        // At half volume.
+        if let sound = NSSound(named: "Glass") {
+            sound.volume = 0.5
+            sound.play()
+        }
         TrendAlertNotifier.shared.post(title: "\(symbol) at \(line)",
                                        body: "\(rising ? "Rose" : "Fell") to its trend line at \(line)")
         onTrendAlert?(symbol)
