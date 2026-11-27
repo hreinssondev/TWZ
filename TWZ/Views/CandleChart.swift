@@ -64,6 +64,9 @@ struct PriceLine {
     var followsLastPrice = false
     /// Across the whole chart even with an `orderId`, its price box on the axis (a trend line).
     var drawnAcross = false
+    /// With `drawnAcross`, on intraday charts only from where today starts (the line where the previous day ends)
+    /// to the axis (a trend line).
+    var fromDayStart = false
     var lineWidth: CGFloat = 1
     /// Off: just the line, no price box.
     var showsTag = true
@@ -705,13 +708,26 @@ struct CandleChart: View {
         }
         // Order lines run from the latest candle to the axis, not across the whole chart.
         let orderLineStart = min(max(x(bars.count - 1), plot.minX), plot.maxX)
+        // Trend lines on intraday charts: from where today starts (the previous day's end) to the axis.
+        lazy var dayStart: CGFloat? = {
+            guard chart.timeframe.isIntraday, let lastBar = bars.last else { return nil }
+            var i = bars.count - 1
+            if forex != nil {
+                let day = Self.forexDay(lastBar.time)
+                while i > 0, Self.forexDay(bars[i - 1].time) == day { i -= 1 }
+            } else {
+                while i > 0, bars[i - 1].vwapDay == lastBar.vwapDay { i -= 1 }
+            }
+            return min(max(x(i) - barWidth / 2, plot.minX), plot.maxX)
+        }()
         func draw(_ line: PriceLine) {
             let lineY = y(line.price)
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed, dotted: line.dotted,
                      tag: line.label.isEmpty ? Fmt.price(line.price, for: chart.symbol) : "\(line.label) \(Fmt.price(line.price, for: chart.symbol))",
                      tagInside: covered || isOrder(line), chartTag: line.chartText, showsTag: line.showsTag,
-                     lineStart: isOrder(line) ? orderLineStart : nil, progress: line.fillProgress, lineWidth: line.lineWidth)
+                     lineStart: isOrder(line) ? orderLineStart : line.fromDayStart ? dayStart : nil,
+                     progress: line.fillProgress, lineWidth: line.lineWidth)
         }
         let visibleLines = placedLines.filter { $0.price > lo && $0.price < hi }
         visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)

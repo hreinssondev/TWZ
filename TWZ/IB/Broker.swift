@@ -180,6 +180,12 @@ final class Broker {
     // MARK: Private
 
     @ObservationIgnored private let defaults = UserDefaults.standard
+    /// Trend lines that alert, by symbol: `Workspace.trendLines` (see `setTrendLines`).
+    @ObservationIgnored var trendAlertLines: [String: [Double]] = [:]
+    /// Each trend line symbol's last price at the previous check, to see the price cross a line.
+    @ObservationIgnored var trendAlertLast: [String: Double] = [:]
+    /// The lines that have alerted, until the price moves `TrendLines.rearmShare` away from them.
+    @ObservationIgnored var trendAlertsFired: [String: Set<Double>] = [:]
     @ObservationIgnored private let engine = TradingEngine()
     @ObservationIgnored private var charts: [ChartModel] = []
     /// Bumped on every chart load, so bars still on their way from the previous load are dropped.
@@ -837,6 +843,7 @@ final class Broker {
             quotes = v
             for (symbol, box) in quoteBoxes where box.quote != v[symbol] { box.quote = v[symbol] }
             if !simPositions.isEmpty { checkSimExits() }
+            if !trendAlertLines.isEmpty { checkTrendAlerts() }
         }
         if let v = s.unavailableQuotes { update(\.unavailableQuotes, v) }
         if let v = s.news { update(\.news, v) }
@@ -879,6 +886,12 @@ final class Broker {
             || s.tickLimitedSymbols != nil || s.shortability != nil {
             refreshHeaderBoxes()
         }
+    }
+
+    /// Adds a message of the app's own to the floating message tab.
+    func logMessage(_ text: String) {
+        messageHistory.append(LoggedMessage(time: Date(), text: text))
+        if messageHistory.count > 50 { messageHistory.removeFirst(messageHistory.count - 50) }
     }
 
     /// The stocks the registered charts show.

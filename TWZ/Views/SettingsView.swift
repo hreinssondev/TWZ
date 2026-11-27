@@ -732,6 +732,7 @@ private struct AppearanceSettings: View {
     @AppStorage(LineColors.trendKey) private var trendHex = ""
     @AppStorage(TrendLines.widthKey) private var trendWidth = TrendLines.defaultWidth
     @AppStorage(TrendLines.priceBoxKey) private var trendPriceBox = TrendLines.defaultPriceBox
+    @AppStorage(TrendLines.alertKey) private var trendAlerts = TrendLines.defaultAlert
     @Environment(Workspace.self) private var workspace
     @Environment(\.sideColors) private var sideColors
     @AppStorage(LineColors.ordersKey) private var ordersHex = ""
@@ -881,15 +882,16 @@ private struct AppearanceSettings: View {
                              dashedKey: LineDashes.trendKey, dashedDefault: LineDashes.defaultTrend)
                 LabeledContent("Trend line width") {
                     HStack {
-                        Slider(value: $trendWidth, in: TrendLines.widthRange, step: 0.5)
-                        Text(trendWidth.formatted(.number.precision(.fractionLength(1))) + " pt")
+                        Slider(value: $trendWidth, in: TrendLines.widthRange, step: 0.25)
+                        Text(trendWidth.formatted(.number.precision(.fractionLength(2))) + " pt")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
                     }
                 }
                 Toggle("Show trend lines' price on the axis", isOn: $trendPriceBox)
+                Toggle("Alert when the price reaches a trend line", isOn: $trendAlerts)
                 HStack {
-                    Text("⌘⇧-click a chart for a horizontal trend line at that price; double-click the line to remove it. Kept per stock.")
+                    Text("⌘⇧-click a chart for a horizontal trend line at that price; double-click the line to remove it. Kept per stock. Alerts with a sound, a message and a notification, also for stocks not on a chart.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
