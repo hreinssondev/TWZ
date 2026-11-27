@@ -1374,9 +1374,9 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             if c.fullHistory, !lead.fullHistory {
                 lead.fullHistory = true
                 requestChart(lead.id, keepingBars: !lead.bars.isEmpty)
-            } else if !lead.isLoading {
-                follow(c, lead)
             }
+            // The bars it has now, at once (a full history asked for comes later, for both).
+            if !lead.isLoading { follow(c, lead) }
             let barSize = c.timeframe.barSize
             Self.log.notice("\(c.symbol, privacy: .public) \(barSize, privacy: .public): shares another chart's history")
             return
