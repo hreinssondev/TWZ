@@ -157,6 +157,10 @@ final class Workspace {
         didSet {
             isChartSelected = true
             if !ChartModel.isChartsWindow(selectedChartID) { lastMainChartID = selectedChartID }
+            // Selecting a chart of a stock whose alarm went off stops its charts pulsing.
+            if !firedAlerts.isEmpty, let symbol = chart(id: selectedChartID)?.symbol, firedAlerts.contains(symbol) {
+                firedAlerts.remove(symbol)
+            }
         }
     }
     /// The main-window chart selected last, which a list's rows load into (see `loadIntoSelectedChart`).
@@ -492,7 +496,36 @@ final class Workspace {
             for symbol in trendLines.keys where oldValue[symbol] == nil { times[symbol] = Date().timeIntervalSince1970 }
             for symbol in times.keys where trendLines[symbol] == nil { times[symbol] = nil }
             if times != trendLineTimes { trendLineTimes = times }
+            // When each line was placed: a line kept keeps its time, a new one is placed now, and one from before
+            // times were kept has none (0).
+            var placed: [String: [Double]] = [:]
+            let now = Date().timeIntervalSince1970
+            for (symbol, prices) in trendLines {
+                var kept = Array(zip(oldValue[symbol] ?? [], trendLinePlacedTimes[symbol] ?? []))
+                placed[symbol] = prices.map { price in
+                    if let i = kept.firstIndex(where: { $0.0 == price }) { return kept.remove(at: i).1 }
+                    return oldValue[symbol]?.contains(price) == true ? 0 : now
+                }
+            }
+            if placed != trendLinePlacedTimes { trendLinePlacedTimes = placed }
+            // An alarm taken off stops pulsing.
+            let fired = firedAlerts.filter { trendLines[$0] != nil }
+            if fired != firedAlerts { firedAlerts = fired }
         }
+    }
+    /// When each trend line was placed (seconds since 1970, in `trendLines`' order); 0 for one from before this was
+    /// kept. Saved.
+    @ObservationIgnored private var trendLinePlacedTimes: [String: [Double]] {
+        didSet { defaults.set(trendLinePlacedTimes, forKey: "trendLinePlaced") }
+    }
+    /// When each of `symbol`'s trend lines was placed, in `trendLines`' order; nil for one from before this was kept.
+    func trendLinePlaced(_ symbol: String) -> [Date?] {
+        (trendLinePlacedTimes[symbol] ?? []).map { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+    }
+    /// Stocks whose trend line alarm has gone off: their charts' edges pulse white until one of them is selected
+    /// (see `ChartOutline`). Saved.
+    var firedAlerts: Set<String> {
+        didSet { defaults.set(Array(firedAlerts), forKey: "firedAlerts") }
     }
     /// When each stock with trend lines got its first (seconds since 1970); none for those from before this was kept. Saved.
     private(set) var trendLineTimes: [String: Double] {
@@ -607,6 +640,8 @@ final class Workspace {
             .compactMapValues(StockColor.init(rawValue:))
         coloredOrder = defaults.stringArray(forKey: "coloredOrder") ?? []
         trendLineTimes = defaults.dictionary(forKey: "trendLineTimes") as? [String: Double] ?? [:]
+        trendLinePlacedTimes = defaults.dictionary(forKey: "trendLinePlaced") as? [String: [Double]] ?? [:]
+        firedAlerts = Set(defaults.stringArray(forKey: "firedAlerts") ?? [])
         trendLines = defaults.dictionary(forKey: TrendLines.storageKey) as? [String: [Double]] ?? [:]
 
         layouts = defaults.data(forKey: Layouts.storageKey)

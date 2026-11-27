@@ -3,20 +3,21 @@
 //  TWZ
 //
 //  A trend line alert takes the charts to its stock: an open Charts window's (the first, then Charts 2), else the main
-//  window's. They go to the Colored, Forex + Active and Forex lists that may show it, in that order (as ⌘⇧C, ⌘⇧D, ⌘⇧F
-//  do there), and once a chart there shows the stock, it's selected; a list that doesn't show it within a few seconds
-//  gives way to the next. On none of them: its chart there is selected if one shows it.
+//  window's. They go to the Alerts, Colored, Forex + Active and Forex lists that may show it, in that order (as ⌘⇧X,
+//  ⌘⇧C, ⌘⇧D, ⌘⇧F do there); a list that doesn't show it within a few seconds gives way to the next. Nothing is selected:
+//  the stock's charts pulse white until one of them is (see `Workspace.firedAlerts`).
 //
 
 import AppKit
 
 extension Workspace {
     /// The lists an alert's stock goes to, first one first.
-    static let alertLists: [ScannerKind] = [.colored, .forexActive, .forex]
+    static let alertLists: [ScannerKind] = [.alerts, .colored, .forexActive, .forex]
     /// How long a list has to show the stock before the next is tried.
     private static let alertListWait: Duration = .seconds(5)
 
     func focusAlert(_ symbol: String, broker: Broker) {
+        firedAlerts.insert(symbol)
         let win = Self.alertWindow()
         let lists = Self.alertLists.filter { alertListMayShow(symbol, $0, in: win, broker: broker) }
         let token = UUID()
@@ -33,15 +34,11 @@ extension Workspace {
             if alertList(in: win) != list { showAlertList(list, in: win) }
             let deadline = clock.now + Self.alertListWait
             while clock.now < deadline {
-                if let id = alertChart(showing: symbol, in: win) {
-                    selectedChartID = id
-                    return
-                }
+                if alertChart(showing: symbol, in: win) != nil { return }
                 try? await Task.sleep(for: .milliseconds(200))
                 guard alertFocusToken == token else { return }
             }
         }
-        if alertFocusToken == token, let id = alertChart(showing: symbol, in: win) { selectedChartID = id }
     }
 
     /// The first open Charts window, nil for none: the main window then.
@@ -68,6 +65,8 @@ extension Workspace {
     private func alertListMayShow(_ symbol: String, _ list: ScannerKind, in win: ChartsWin?, broker: Broker) -> Bool {
         let forex = ForexPair.isForex(symbol)
         switch list {
+        case .alerts:
+            return alertSymbols.contains(symbol)
         case .colored:
             return coloredSymbols.contains(symbol)
         case .forexActive:
