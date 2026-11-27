@@ -86,6 +86,8 @@ enum ChartsWin: Int, CaseIterable, Codable, Hashable {
     var allLabel: String { "All Charts (\(allColumns)×\(allRows))" }
 
     static func of(chartID: Int) -> ChartsWin? { ChartsWin(rawValue: chartID / 100) }
+    /// Each list's own timeframe in this window, as it was left (see `SecondaryChartsView.listChanged`).
+    func listTimeframeKey(_ list: ScannerKind) -> String { key(SecondaryCharts.timeframeKey) + "." + list.rawValue }
     static func of(_ window: NSWindow?) -> ChartsWin? {
         guard let window else { return nil }
         let id = window.identifier?.rawValue ?? ""
@@ -125,6 +127,29 @@ final class ChartsWindowState {
     /// The zoom a swipe has just put its charts at (see `Workspace.zoomChartsWindow`), so its Zoom slider following
     /// it doesn't zoom them again.
     @ObservationIgnored var swipedZoom: Double?
+    /// The list and timeframe shown before, which ´ goes back to (see `noteView`).
+    @ObservationIgnored var previousView: Workspace.GridView?
+    /// ´ pressed: the switch on its way, so arriving there keeps the view left as the one to go back to.
+    @ObservationIgnored var viewSwitch: (from: Workspace.GridView, to: Workspace.GridView, at: Date)?
+    @ObservationIgnored private var listSwitchedAt: Date?
+
+    /// The list or timeframe changed: the view left is the one ´ goes back to. A list brings its own timeframe a moment
+    /// after it (see `SecondaryChartsView.listChanged`): that's the same switch.
+    func noteView(from old: Workspace.GridView, to new: Workspace.GridView) {
+        if let pending = viewSwitch, Date().timeIntervalSince(pending.at) < 3 {
+            if new == pending.to {
+                previousView = pending.from
+                viewSwitch = nil
+            }
+            return
+        }
+        viewSwitch = nil
+        guard old != new else { return }
+        if old.list == new.list, let at = listSwitchedAt, Date().timeIntervalSince(at) < 1 { return }
+        if old.list != new.list { listSwitchedAt = Date() }
+        previousView = old
+    }
+
     /// The list its charts follow (⌘⇧ and a list's letter there, or its header's menu). Saved.
     var list: ScannerKind {
         didSet { defaults.set(list.rawValue, forKey: win.key(SecondaryCharts.listKey)) }
@@ -433,6 +458,8 @@ struct SecondaryChartsView: View {
         }
         // Another list: the charts still in its top N stay, the rest load its stocks.
         .onChange(of: state.list) { old, new in listChanged(from: old, to: new) }
+        // The view left (list or timeframe) is the one ´ goes back to.
+        .onChange(of: Workspace.GridView(list: state.list, timeframe: masterTimeframe)) { old, new in state.noteView(from: old, to: new) }
         .onChange(of: state.resets) { reset() }
         .onChange(of: layout) { applyZoom() }
         // A chart layout loaded: its lines (see `GridLayout`).
@@ -597,8 +624,7 @@ struct SecondaryChartsView: View {
         broker.adoptChartsWindowList(win, charts: workspace.gridCharts(state.charts, list: new))
     }
 
-    /// Each list's own timeframe here.
-    private func listTimeframeKey(_ list: ScannerKind) -> String { win.key(SecondaryCharts.timeframeKey) + "." + list.rawValue }
+    private func listTimeframeKey(_ list: ScannerKind) -> String { win.listTimeframeKey(list) }
 
     /// A row clicked in the side panel's lists: into the selected chart when it's one of this window's, which keeps it
     /// and its cell as if typed in its symbol field; else into the main window's selected chart, as there.
