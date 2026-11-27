@@ -15,15 +15,24 @@
 import SwiftUI
 
 /// The top bar's Colors button (main window and Charts windows, on every list): the charts outlined in their tickers'
-/// colors, or not, everywhere at once. Saved.
+/// colors, or not, each view (list) on its own. Saved.
 struct ColoredColorsButton: View {
-    static let hidesKey = "coloredHidesColors"
-    @AppStorage(Self.hidesKey) private var hides = false
+    /// The lists (views) whose charts hide their colors, by name, comma-separated.
+    static let hiddenKey = "colorsHiddenLists"
+    @AppStorage(Self.hiddenKey) private var hidden = ""
+    /// The view it's for: each has its own, the main window's and the Charts windows' on the same list alike.
+    let list: ScannerKind
+
+    static func hides(_ list: ScannerKind, in hidden: String) -> Bool { hidden.split(separator: ",").contains { $0 == list.rawValue } }
 
     var body: some View {
+        let hides = Self.hides(list, in: hidden)
         ForexListButton(title: "Colors", lit: !hides,
-                        help: hides ? "Outline the charts in their tickers' colors again" : "Hide the tickers' colors on every chart (they stay given, for when they're back)") {
-            hides.toggle()
+                        help: hides ? "Outline the charts on \(list.rawValue) in their tickers' colors again"
+                            : "Hide the tickers' colors on \(list.rawValue) (the other views keep theirs)") {
+            var lists = hidden.split(separator: ",").map(String.init).filter { $0 != list.rawValue }
+            if !hides { lists.append(list.rawValue) }
+            hidden = lists.joined(separator: ",")
         }
     }
 }
