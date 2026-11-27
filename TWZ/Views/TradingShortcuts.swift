@@ -29,7 +29,7 @@
 //  shortcut set in Settings › Order Keys (see `Workspace.resetShortcut`).
 //  ⌘⇧M switches the order numbers between dollars and a percent of the buying power (see `SizeMode`): KEYS $ or
 //  KEYS % in the top bar.
-//  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex)
+//  ⌘⇧ and a list's letter (S Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex, D Forex + Active)
 //  shows that list and loads it into the chart grid (see `ListPanel.takeUp`); with the Charts window in front,
 //  its charts follow that list instead, the main window's staying as they are; there the Reset keys reset that
 //  window alone.

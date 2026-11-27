@@ -719,7 +719,15 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
     case dollarVolume = "Most Active $"
     /// Not an IB scan: the engine ranks `ForexPair.listed` itself, by % change.
     case forex = "Forex"
+    /// The Forex list's pairs, then Most Active $'s stocks (IB's scan of those). A Charts window shows pairs with the
+    /// top `activeCount` stocks in its last charts; the main window, the stocks given a color, then the stocks
+    /// (see `SecondaryChartsView.syncWithGainers`, `Workspace.mainGridSymbols`).
+    case forexActive = "Forex + Active"
     var id: String { rawValue }
+
+    /// Charts a Charts window gives Most Active $'s stocks on Forex + Active: its last 9, never more than half
+    /// of them (a grid of 15 charts gets 7, of 8 gets 4).
+    static func activeCells(of slots: Int) -> Int { min(9, slots / 2) }
 
     /// Rows a list panel's scanner returns; a chart grid's asks for IB's maximum, 50, to fill 8×4.
     static let rowCount = 25
@@ -732,7 +740,7 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
         case .gainers: "TOP_PERC_GAIN"
         case .losers: "TOP_PERC_LOSE"
         case .afterHours: "TOP_AFTER_HOURS_PERC_GAIN"
-        case .dollarVolume: "MOST_ACTIVE_USD"
+        case .dollarVolume, .forexActive: "MOST_ACTIVE_USD"
         case .forex: ""
         }
     }

@@ -595,6 +595,12 @@ struct SecondaryChartsView: View {
             let pinned = Set(state.charts.filter { pins[$0.id] != nil }.map(\.symbol))
             gainers = Array(gainers.filter { !pinned.contains($0) }.dropFirst(slots))
         }
+        // Forex + Active: the pairs, then the top stocks in the last charts (see `ScannerKind.activeCells`).
+        if state.list == .forexActive {
+            let active = ScannerKind.activeCells(of: slots)
+            let stocks = gainers.filter { !ForexPair.isForex($0) }.prefix(active)
+            gainers = Array(gainers.filter(ForexPair.isForex).prefix(slots - stocks.count)) + stocks
+        }
         guard !gainers.isEmpty, gainers != lastGainers else { return }
         lastGainers = gainers
         workspace.fill(state.charts.filter { pins[$0.id] == nil },

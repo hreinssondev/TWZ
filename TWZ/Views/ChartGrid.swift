@@ -97,7 +97,7 @@ struct ChartGrid: View {
     /// The symbols the grid follows: the top gainers, or the list loaded with a list's load button; the Forex
     /// list's second page (the top bar's 2/2): the pairs past the cells left around those set by hand, less theirs.
     private var gainers: [String] {
-        let symbols = broker.scans[MainGrid.scannerOwner]?.symbols ?? []
+        let symbols = workspace.mainGridSymbols(broker.scans[MainGrid.scannerOwner]?.symbols ?? [], kind: workspace.gridScan?.kind)
         guard workspace.mainForexShowsRest, workspace.gridScan?.kind == .forex else { return symbols }
         let manual = workspace.mainCells.filter { workspace.manualChartIDs.contains($0) }
         let pinned = Set(manual.compactMap { workspace.chart(id: $0)?.symbol })
@@ -292,7 +292,15 @@ extension Workspace {
         broker.setScanner(spec, owner: MainGrid.scannerOwner)
         manualChartIDs = []
         handDisplaced = [:]
-        followGainers(symbols, timeframe: timeframe, broker: broker)
+        followGainers(mainGridSymbols(symbols, kind: spec.kind), timeframe: timeframe, broker: broker)
+    }
+
+    /// The symbols the main grid follows from its list's rows: on Forex + Active, the stocks and pairs given a color
+    /// (in the colors' order), then the list's stocks; any other list's rows as they are.
+    func mainGridSymbols(_ rows: [String], kind: ScannerKind?) -> [String] {
+        guard kind == .forexActive else { return rows }
+        let colored = StockColor.allCases.compactMap { color in stockColors.first { $0.value == color }?.key }
+        return colored + rows.filter { !ForexPair.isForex($0) && !colored.contains($0) }
     }
 
     /// The timeframe for `chart` about to show `symbol`: where another chart in the grid already

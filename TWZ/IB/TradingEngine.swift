@@ -632,6 +632,21 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             let symbols = Array(forexOrder(for: owner).prefix(spec.rows))
             if scans[owner]?.symbols != symbols { scans[owner] = ScanResult(symbols: symbols, updated: Date()) }
         }
+        for (owner, spec) in scanSpecs where spec.kind == .forexActive {
+            guard var stocks = scans[owner] else { continue }
+            stocks.symbols = stocks.symbols.filter { !ForexPair.isForex($0) }
+            let mixed = mixed(stocks, owner: owner)
+            if scans[owner] != mixed { scans[owner] = mixed }
+        }
+    }
+
+    /// Forex + Active's rows: the pairs (in the owner's order, see `forexOrder`), then the scan's stocks. Any
+    /// other list's as they are.
+    private func mixed(_ stocks: ScanResult, owner: String) -> ScanResult {
+        guard scanSpecs[owner]?.kind == .forexActive else { return stocks }
+        var result = stocks
+        result.symbols = forexOrder(for: owner) + stocks.symbols
+        return result
     }
 
     /// Every listed pair's last two weeks of daily bars, unless this forex day's ranges are in (or on their way).
@@ -1048,7 +1063,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         scanSpecs[owner] = spec
         // A list shown before (by any owner) shows its last rows until its own scan comes in.
         scans[owner] = spec.flatMap { spec in
-            lastScans[ScanKey(spec)].map { ScanResult(symbols: Array($0.symbols.prefix(spec.rows)), updated: $0.updated) }
+            lastScans[ScanKey(spec)].map { mixed(ScanResult(symbols: Array($0.symbols.prefix(spec.rows)), updated: $0.updated), owner: owner) }
         }
         startScan(owner)
     }
@@ -1083,7 +1098,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         var filter: ScannerFilter
 
         init(_ spec: ScanSpec) {
-            kind = spec.kind
+            // Forex + Active's stocks are Most Active $'s.
+            kind = spec.kind == .forexActive ? .dollarVolume : spec.kind
             filter = spec.filter
         }
     }
@@ -3418,12 +3434,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if symbols.isEmpty, MarketSession.regularClose() == nil, let spec = scanSpecs[owner],
            let last = lastScans[ScanKey(spec)], !last.symbols.isEmpty {
             // No US session today (a holiday or weekend): the scan comes back empty; the last session's rows stay.
-            scans[owner] = ScanResult(symbols: Array(last.symbols.prefix(spec.rows)), updated: last.updated, isLastSession: true)
+            scans[owner] = mixed(ScanResult(symbols: Array(last.symbols.prefix(spec.rows)), updated: last.updated, isLastSession: true), owner: owner)
             return
         }
-        scans[owner] = ScanResult(symbols: symbols, updated: Date())
+        let result = ScanResult(symbols: symbols, updated: Date())
+        scans[owner] = mixed(result, owner: owner)
         if let spec = scanSpecs[owner], !symbols.isEmpty {
-            lastScans[ScanKey(spec)] = scans[owner]
+            lastScans[ScanKey(spec)] = result
             let saved = lastScans.map { SavedScan(key: $0.key, result: ScanResult(symbols: $0.value.symbols, updated: $0.value.updated)) }
             if let data = try? JSONEncoder().encode(saved) { defaults.set(data, forKey: Self.lastScansKey) }
         }
