@@ -765,6 +765,7 @@ private struct AppearanceSettings: View {
     @AppStorage(FrameMeter.enabledKey) private var frameMeter = FrameMeter.defaultOn
     @AppStorage(Swiping.zoomsAllKey) private var swipeZoomsAll = Swiping.defaultZoomsAll
     @AppStorage(Swiping.locksPanKey) private var swipeLocksPan = Swiping.defaultLocksPan
+    @AppStorage(Swiping.reversedKey) private var swipeReversed = Swiping.defaultReversed
     @AppStorage(ViewSync.key) private var viewSync = ViewSync.defaultOn
     @AppStorage(ZoomAnchor.keepsLatestKey) private var zoomKeepsLatest = ZoomAnchor.defaultKeepsLatest
 
@@ -1053,6 +1054,12 @@ private struct AppearanceSettings: View {
                 Text(swipeLocksPan
                      ? "Swiping up or down zooms as usual (every chart, with Swipe zooms every chart on), but once a two-finger swipe goes left or right it only pans the chart under the pointer, until the fingers lift (and through its glide after)."
                      : "A nearly straight swipe only pans or only zooms; a clearly diagonal one does both.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Reverse swiping", isOn: $swipeReversed)
+                Text(swipeReversed
+                     ? "Regular: a two-finger swipe moves the charts the other way round from natural, panning, zooming and the ⌃ / ⌥⇧⌘ swipes alike. The mouse wheel stays as it is."
+                     : "Natural: the charts follow the fingers, as macOS scrolls (the default).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
