@@ -78,10 +78,11 @@ struct ChartsAxisTextSliders: View {
 }
 
 /// A Charts window's UI brightness (a slider in its top bar): its top bar, the charts' headers and outlines and the
-/// side panel, darker below 0, brighter above; the charts themselves (candles, lines, axes) as they are. 0: unchanged.
+/// side panel fade toward the window's background below 0, brighter above; the charts themselves (candles, lines,
+/// axes) as they are. 0: unchanged.
 enum ChartsUIBrightness {
     static let key = "chartsUIBrightness"
-    static let range = -0.5...0.5
+    static let range = -0.8...0.5
 }
 
 struct ChartsUIBrightnessSlider: View {
@@ -92,7 +93,7 @@ struct ChartsUIBrightnessSlider: View {
     }
 
     var body: some View {
-        let shown = Int((brightness * 200).rounded())
+        let shown = Int((brightness * 100).rounded())
         MiniSlider(label: "UI", valueText: shown > 0 ? "+\(shown)" : "\(shown)",
                    value: Binding(get: { brightness }, set: { brightness = ($0 * 40).rounded() / 40 }),
                    range: ChartsUIBrightness.range)
@@ -103,8 +104,10 @@ struct ChartsUIBrightnessSlider: View {
 }
 
 extension View {
-    /// `.brightness(amount)`, but nothing at all at 0, so the UI is exactly as it was there.
-    @ViewBuilder func uiBrightness(_ amount: Double) -> some View {
-        if amount == 0 { self } else { brightness(amount) }
+    /// Below 0 faded toward what's behind it (the window's background, not black), above 0 brighter. The same
+    /// modifiers at every value, so views under it (the side panel's lists) aren't rebuilt as the slider moves.
+    func uiBrightness(_ amount: Double) -> some View {
+        opacity(amount < 0 ? 1 + amount : 1)
+            .brightness(max(0, amount))
     }
 }
