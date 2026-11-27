@@ -564,7 +564,7 @@ enum TrendLines {
     static let rearmShare = 0.005
     /// The price in a box on the axis.
     static let priceBoxKey = "trendLinePriceBox"
-    static let defaultPriceBox = true
+    static let defaultPriceBox = false
     /// Stand in for order ids on the lines (below the what-if and SIM ones), so double-clicking one removes it.
     static func lineId(_ index: Int) -> Int { -100 - index }
     static func index(ofLineId id: Int) -> Int? { id <= -100 ? -100 - id : nil }
