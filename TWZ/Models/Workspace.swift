@@ -535,7 +535,8 @@ final class Workspace {
     /// Gives `symbol` a color, or takes its color off (nil). A color marks one stock: the stock that
     /// had it before loses it, on the charts or not.
     func setColor(_ color: StockColor?, of symbol: String) {
-        var colors = color.map { color in stockColors.filter { $0.value != color } } ?? stockColors
+        // A color but red is one stock's: the stock that had it loses it.
+        var colors = color.map { color in color.isShared ? stockColors : stockColors.filter { $0.value != color } } ?? stockColors
         colors[symbol] = color
         stockColors = colors
     }
@@ -636,8 +637,15 @@ final class Workspace {
 
         fastChartIDs = Set(defaults.array(forKey: "fastChartIDs") as? [Int] ?? Array(0..<4))
 
-        stockColors = (defaults.dictionary(forKey: StockColor.storageKey) as? [String: String] ?? [:])
+        var colors = (defaults.dictionary(forKey: StockColor.storageKey) as? [String: String] ?? [:])
             .compactMapValues(StockColor.init(rawValue:))
+        // Once: every stock given a color takes red, the color any number of them can have (2026-11-27).
+        if !defaults.bool(forKey: "stockColorsAllRed") {
+            colors = colors.mapValues { _ in .red }
+            defaults.set(colors.mapValues(\.rawValue), forKey: StockColor.storageKey)
+            defaults.set(true, forKey: "stockColorsAllRed")
+        }
+        stockColors = colors
         coloredOrder = defaults.stringArray(forKey: "coloredOrder") ?? []
         trendLineTimes = defaults.dictionary(forKey: "trendLineTimes") as? [String: Double] ?? [:]
         trendLinePlacedTimes = defaults.dictionary(forKey: "trendLinePlaced") as? [String: [Double]] ?? [:]

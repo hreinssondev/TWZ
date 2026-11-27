@@ -6,8 +6,8 @@
 //  stock, ⌥⇧⌫ takes its color off (see `TradingShortcuts`). Every chart showing the stock is
 //  outlined in its color, as thick as the selection outline in its place while it's selected, a third
 //  of that otherwise.
-//  One stock per color: giving a color to another stock takes it from the first. Kept per stock, also
-//  while it's off the charts and across relaunches.
+//  One stock per color: giving a color to another stock takes it from the first; but red (⌥⇧K, or ⌥⇧N), which any
+//  number of stocks can have at once. Kept per stock, also while it's off the charts and across relaunches.
 //
 
 import SwiftUI
@@ -17,11 +17,15 @@ nonisolated enum StockColor: String, CaseIterable, Sendable {
 
     static let storageKey = "stockColors"
 
-    /// The letter giving it with ⌥⇧: its first, but for red's N (⌥⇧R reloads the chart under the pointer),
-    /// pink's I, brown's U and turquoise's F (B is blue's, P purple's).
+    /// Any number of stocks can have it at once; every other color is one stock's.
+    var isShared: Bool { self == .red }
+
+    /// The letter giving it with ⌥⇧: its first, but for red's K (⌥⇧R reloads the chart under the pointer; its N works
+    /// too), khaki's H, pink's I, brown's U and turquoise's F (B is blue's, P purple's).
     var key: String {
         switch self {
-        case .red: "n"
+        case .red: "k"
+        case .khaki: "h"
         case .pink: "i"
         case .brown: "u"
         case .turquoise: "f"
@@ -31,6 +35,10 @@ nonisolated enum StockColor: String, CaseIterable, Sendable {
 
     /// The color whose letter is `key` (lowercase).
     init?(key: String) {
+        if key == "n" {
+            self = .red
+            return
+        }
         guard let color = Self.allCases.first(where: { $0.key == key }) else { return nil }
         self = color
     }

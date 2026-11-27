@@ -121,7 +121,8 @@ extension Workspace {
 
     /// The tickers given a color, pairs first, each in the colors' order.
     var coloredSymbols: [String] {
-        let byColor = StockColor.allCases.compactMap { color in stockColors.first { $0.value == color }?.key }
+        // Red's any number of stocks by symbol.
+        let byColor = StockColor.allCases.flatMap { color in stockColors.filter { $0.value == color }.keys.sorted() }
         // Where ⌘ and the arrow keys put them; ones not moved yet after those, in the colors' order.
         let rank = Dictionary(coloredOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         let all = byColor.enumerated().sorted { (rank[$0.element] ?? .max, $0.offset) < (rank[$1.element] ?? .max, $1.offset) }.map(\.element)

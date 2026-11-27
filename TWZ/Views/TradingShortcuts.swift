@@ -19,7 +19,7 @@
 //  cancels every order in the symbol, stop loss and take profit included (with no chart selected, the last
 //  order placed, as ⌘Z); ⌘⌫ does too, then closes
 //  the whole position at market; both also remove the symbol's ⌃-click what-if, and ⌘⇧⌫ removes just that; ⌘Z, like ⌥Z, cancels the last order placed; ⌥⇧ and a color's letter
-//  (N red, G, B, Y, O, P, M, W, K khaki, I pink, U brown, F turquoise, L lime) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
+//  (K or N red, any number of stocks; G, B, Y, O, P, M, W, H khaki, I pink, U brown, F turquoise, L lime, one stock each) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  ⌃⌥⇧1 / 2 / 3 / 4 sells (shorts) a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 /
@@ -256,7 +256,7 @@ struct TradingShortcuts: ViewModifier {
                             let symbol = workspace.targetSymbol
                             if symbol.isEmpty {
                                 NSSound.beep()
-                            } else if let color, let owner = workspace.stockColors.first(where: { $0.value == color && $0.key != symbol })?.key {
+                            } else if let color, !color.isShared, let owner = workspace.stockColors.first(where: { $0.value == color && $0.key != symbol })?.key {
                                 // The color is another ticker's: asks first (↩ moves it here, Esc keeps it there).
                                 DispatchQueue.main.async {
                                     let alert = NSAlert()
