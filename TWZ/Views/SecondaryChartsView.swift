@@ -127,6 +127,9 @@ final class ChartsWindowState {
     /// The zoom a swipe has just put its charts at (see `Workspace.zoomChartsWindow`), so its Zoom slider following
     /// it doesn't zoom them again.
     @ObservationIgnored var swipedZoom: Double?
+    /// The next Reset on the Colored list: only the close-ups (true) or only the other charts (false), as the pointer
+    /// was over one or the other when it was asked for; nil: all of them.
+    @ObservationIgnored var resetsCloseUps: Bool?
     /// The list and timeframe shown before, which ´ goes back to (see `noteView`).
     @ObservationIgnored var previousView: Workspace.GridView?
     /// ´ pressed: the switch on its way, so arriving there keeps the view left as the one to go back to.
@@ -641,10 +644,15 @@ struct SecondaryChartsView: View {
     }
 
     /// Reset: every chart back to the Zoom slider's zoom; on the Colored list, the close-ups to theirs.
+    /// On the Colored list, only the close-ups or only the other charts when the pointer was over one (see `resetsCloseUps`).
     private func reset() {
+        let closeUpsOnly = state.list == .colored ? state.resetsCloseUps : nil
+        state.resetsCloseUps = nil
         workspace.syncChartsWindowScale(to: broker)
-        workspace.resetViews(of: workspace.gridCharts(state.charts, list: state.list), zoom: layout == .all ? allZoom : customZoom, broker: broker)
-        if state.list == .colored, let closeUpZoom = workspace.closeUpZoom {
+        if closeUpsOnly != true {
+            workspace.resetViews(of: workspace.gridCharts(state.charts, list: state.list), zoom: layout == .all ? allZoom : customZoom, broker: broker)
+        }
+        if closeUpsOnly != false, state.list == .colored, let closeUpZoom = workspace.closeUpZoom {
             workspace.resetViews(of: state.charts.filter { workspace.closeUpChartIDs.contains($0.id) }, zoom: closeUpZoom, broker: broker)
         }
     }
