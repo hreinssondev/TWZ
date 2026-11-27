@@ -316,9 +316,7 @@ final class Broker {
 
     /// Quitting: keeps where every chart is, and the bars they show (see `BarStore`), then saves it all.
     func saveChartViews() {
-        for chart in charts where !chart.symbol.isEmpty && !chart.isLoading {
-            barCache.keep(chart.bars, for: loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe))
-        }
+        saveBars()
         BarStore.shared.flush()
         for chart in charts where !chart.symbol.isEmpty {
             let key = loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe)
@@ -403,9 +401,35 @@ final class Broker {
 
     func registerCharts(_ charts: [ChartModel]) {
         self.charts = charts
-        for chart in charts { loadedBars[chart.id] = BarCache.Key(symbol: chart.symbol, timeframe: chart.timeframe) }
-        let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe) }
+        var specs: [ChartSpec] = []
+        for chart in charts {
+            let key = BarCache.Key(symbol: chart.symbol, timeframe: chart.timeframe)
+            loadedBars[chart.id] = key
+            var spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe)
+            // At launch: the bars kept on disk (see `BarCache`) show at once, until IB's are in (see
+            // `TradingEngine.registerCharts`).
+            if chart.bars.isEmpty, !chart.isLoading {
+                let seed = barCache.stored(key)
+                if !seed.isEmpty {
+                    chart.bars = seed
+                    spec.bars = seed
+                    // From a while ago, or with the overnight session in them: the full history, as `loadChart` asks.
+                    let stale = seed.last.map { $0.time < Date().addingTimeInterval(-6 * 3600) } ?? false
+                    let overnight = key.timeframe.isIntraday && !ForexPair.isForex(key.symbol) && seed.contains { $0.phase == .overnight }
+                    spec.fullHistory = stale || overnight
+                }
+            }
+            specs.append(spec)
+        }
         engine.perform { $0.registerCharts(specs) }
+    }
+
+    /// Keeps the bars every chart shows on disk (see `BarStore`), for the next launch: when the app goes to the
+    /// background and every few minutes, since a rebuild from Xcode stops the app without quitting it.
+    func saveBars() {
+        for chart in charts where !chart.symbol.isEmpty && !chart.isLoading && !chart.bars.isEmpty {
+            barCache.keep(chart.bars, for: loadedBars[chart.id] ?? .init(symbol: chart.symbol, timeframe: chart.timeframe))
+        }
     }
 
     /// These charts get tick-by-tick trades, as does the selected one; the others keep IB's regular bar updates.

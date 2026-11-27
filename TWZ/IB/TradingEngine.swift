@@ -567,7 +567,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         syncQuoteSubscriptions()
         watchSessionPhase()
         subscribeUsdNok()
-        for id in charts.keys.sorted() { requestChart(id) }
+        for id in charts.keys.sorted() { requestChart(id, keepingBars: charts[id]?.launchSeeded == true) }
         syncTickByTick()
         for owner in scanSpecs.keys { startScan(owner) }
         scheduleRestrictionCheck()
@@ -1202,7 +1202,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     func registerCharts(_ specs: [ChartSpec]) {
         for spec in specs where charts[spec.id] == nil {
-            charts[spec.id] = ChartState(spec)
+            let c = ChartState(spec)
+            // Kept on disk from before the launch: shown until IB's bars are in, older ones staying in front of them
+            // (see `historicalData`); their older pages wait for those (see `loadOlderBars`).
+            if !spec.bars.isEmpty {
+                c.bars = spec.bars
+                c.keepsOlder = true
+                c.launchSeeded = true
+            }
+            charts[spec.id] = c
         }
     }
 
@@ -1212,6 +1220,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         let c = charts[spec.id] ?? ChartState(spec)
         charts[spec.id] = c
         let symbolChanged = c.symbol != spec.symbol
+        c.launchSeeded = false
+        c.olderWanted = false
         c.symbol = spec.symbol
         c.timeframe = spec.timeframe
         c.fullHistory = spec.fullHistory
@@ -1236,6 +1246,11 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// (`generation`).
     func loadOlderBars(_ id: Int, generation: Int) {
         guard apiReady, let c = charts[id], c.generation == generation, !c.symbol.isEmpty, !c.isLoading else { return }
+        // The bars kept from before the launch on screen, IB's still on their way: once they're in.
+        if c.launchSeeded {
+            c.olderWanted = true
+            return
+        }
         if !c.fullHistory {
             c.fullHistory = true
             requestChart(id, keepingBars: true)
@@ -3271,6 +3286,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             return
         }
         if let id = chartByReq[reqId], let c = charts[id] {
+            c.launchSeeded = false
+            c.olderWanted = false
             // The full history failed behind the bars on screen: back to the short one, so they stay live.
             if c.fullHistory, !c.bars.isEmpty {
                 Self.log.notice("Full history refused for \(c.symbol, privacy: .public): \(code) \(text, privacy: .public)")
@@ -3417,6 +3434,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         c.isLoading = false
         c.error = c.bars.isEmpty ? "No data" : nil
         chartChanged(c, all: true)
+        if c.launchSeeded {
+            c.launchSeeded = false
+            if c.olderWanted {
+                c.olderWanted = false
+                loadOlderBars(id, generation: c.generation)
+            }
+        }
     }
 
     /// Both series in time order; where both have a bar for the same time, `primary`'s wins.
@@ -3718,6 +3742,10 @@ nonisolated private final class ChartState {
     var reachedStart = false
     /// The bars shown are kept from before (see `BarCache`): the fresh history keeps those older than it.
     var keepsOlder = false
+    /// Its bars are the ones kept on disk from before the launch, IB's still to come (see `registerCharts`).
+    var launchSeeded = false
+    /// The view reached the oldest bar meanwhile (see `loadOlderBars`).
+    var olderWanted = false
     /// The overnight bars shown are kept from before, standing in for the overnight history on its way.
     var overnightStandIns = false
     var generation = 0

@@ -102,6 +102,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showMenuBarPnL() {
         guard menuBarPnL == nil, let broker else { return }
         menuBarPnL = MenuBarPnL(broker: broker)
+        // The charts' bars on disk every 5 minutes too (see `Broker.saveBars`).
+        Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak broker] _ in
+            MainActor.assumeIsolated { broker?.saveBars() }
+        }
         SimShare.shared.start(broker: broker)
         LivePush.shared.start(broker: broker)
     }
@@ -130,6 +134,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 broker.connect()
             }
         }
+    }
+
+    /// The charts' bars on disk, for the next launch (see `Broker.saveBars`).
+    func applicationDidResignActive(_ notification: Notification) {
+        broker?.saveBars()
     }
 
     /// Where every chart is, for the next launch (see `ChartViews`).
