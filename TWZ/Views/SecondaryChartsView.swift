@@ -418,6 +418,8 @@ struct SecondaryChartsView: View {
         .onChange(of: broker.scans[win.scannerOwner]?.symbols) { syncWithGainers() }
         .onChange(of: masterTimeframe) { _, new in
             workspace.setTimeframe(new, of: workspace.gridCharts(state.charts, list: state.list), broker: broker)
+            // The list on screen keeps it; the others keep theirs (see `listChanged`).
+            UserDefaults.standard.set(new.rawValue, forKey: listTimeframeKey(state.list))
         }
         // Charts still in the new top N stay put; the rest are emptied (smaller grid) or filled (larger).
         // A chart set by hand whose cell is gone lets go of its stock.
@@ -571,15 +573,33 @@ struct SecondaryChartsView: View {
     /// Another list: the charts still in its top N stay, the rest load its stocks; the Colored list's close-ups
     /// go back to the window's timeframe when it's left, and start at the forex charts' zoom when it's picked.
     /// Each list keeps where its charts were left on each stock and timeframe, and its zoom (see `Broker.leaveChartsWindowList`).
+    /// Each list has its own timeframe here, as it was left: the charts take it before they load the list's stocks, so
+    /// each loads once; one keeping its stock loads it on that timeframe.
     private func listChanged(from old: ScannerKind, to new: ScannerKind) {
-        broker.leaveChartsWindowList(win, charts: workspace.gridCharts(state.charts, list: old))
+        let leaving = workspace.gridCharts(state.charts, list: old)
+        broker.leaveChartsWindowList(win, charts: leaving)
         broker.chartsWindowLists[win] = new.rawValue
+        var retimed: [Int: String] = [:]
+        if let own = UserDefaults.standard.string(forKey: listTimeframeKey(new)).flatMap(Timeframe.init(rawValue:)), own != masterTimeframe {
+            masterTimeframe = own
+            for chart in leaving where chart.timeframe != own {
+                chart.timeframe = own
+                retimed[chart.id] = chart.symbol
+            }
+        }
         if old == .colored { workspace.leaveColored(state.charts, timeframe: masterTimeframe, broker: broker) }
         if new == .colored { workspace.closeUpZoom = workspace.closeUpStartZoom(fallback: layout == .all ? allZoom : customZoom) }
         coloredOrder = []
         start()
+        // Charts that kept their stock: on the new timeframe now.
+        for chart in state.charts where !chart.symbol.isEmpty && retimed[chart.id] == chart.symbol {
+            broker.loadChart(chart)
+        }
         broker.adoptChartsWindowList(win, charts: workspace.gridCharts(state.charts, list: new))
     }
+
+    /// Each list's own timeframe here.
+    private func listTimeframeKey(_ list: ScannerKind) -> String { win.key(SecondaryCharts.timeframeKey) + "." + list.rawValue }
 
     /// A row clicked in the side panel's lists: into the selected chart when it's one of this window's, which keeps it
     /// and its cell as if typed in its symbol field; else into the main window's selected chart, as there.
