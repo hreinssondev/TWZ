@@ -33,6 +33,7 @@ struct TWZApp: App {
                     appDelegate.broker = broker
                     broker.onTrendAlert = { [workspace, broker] symbol in workspace.focusAlert(symbol, broker: broker) }
                     appDelegate.showMenuBarPnL()
+                    for win in ChartsWin.allCases { broker.chartsWindowLists[win] = workspace.chartsWindow(win).list.rawValue }
                     broker.registerCharts(workspace.mainCharts + workspace.secondaryCharts)
                     broker.setFastCharts(workspace.fastChartIDs)
                     broker.connect()
