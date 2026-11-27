@@ -98,6 +98,8 @@ enum ChartsWin: Int, CaseIterable, Codable, Hashable {
 @Observable
 final class ChartsWindowState {
     let win: ChartsWin
+    /// Rows in its grid now, for ⌘← / ⌘→ on the Colored list (see `Workspace.moveColored`).
+    @ObservationIgnored var gridRows = 2
     /// One chart for each cell of its largest grid, empty until the window's open and not paused.
     let charts: [ChartModel]
     /// Charts given a stock by hand (their symbol field), by chart id, with the cell each keeps: the gainers fill
@@ -616,6 +618,7 @@ struct SecondaryChartsView: View {
         // The Colored list: the tickers given a color, each with its close-up (see `ColoredLayout`); charts set by hand
         // don't keep their cells here.
         if state.list == .colored {
+            state.gridRows = rows
             let symbols = workspace.coloredSymbols
             let plan = ColoredLayout.plan(forex: symbols.filter(ForexPair.isForex), stocks: symbols.filter { !ForexPair.isForex($0) },
                                           rowColumns: Array(repeating: columns, count: rows))

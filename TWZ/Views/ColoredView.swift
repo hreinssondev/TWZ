@@ -71,8 +71,25 @@ enum ColoredLayout {
 extension Workspace {
     /// The tickers given a color, pairs first, each in the colors' order.
     var coloredSymbols: [String] {
-        let all = StockColor.allCases.compactMap { color in stockColors.first { $0.value == color }?.key }
+        let byColor = StockColor.allCases.compactMap { color in stockColors.first { $0.value == color }?.key }
+        // Where ⌘ and the arrow keys put them; ones not moved yet after those, in the colors' order.
+        let rank = Dictionary(coloredOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        let all = byColor.enumerated().sorted { (rank[$0.element] ?? .max, $0.offset) < (rank[$1.element] ?? .max, $1.offset) }.map(\.element)
         return all.filter(ForexPair.isForex) + all.filter { !ForexPair.isForex($0) }
+    }
+
+    /// ⌘ and an arrow key on the Colored list: `symbol` swaps places with the ticker above or below it (`step` ±1), or
+    /// beside it in the next column (± the grid's `rows`), among the pairs or the stocks, as it's one. False when
+    /// there's no ticker there.
+    func moveColored(_ symbol: String, by step: Int) -> Bool {
+        let all = coloredSymbols
+        let forex = ForexPair.isForex(symbol)
+        var side = all.filter { ForexPair.isForex($0) == forex }
+        guard let i = side.firstIndex(of: symbol), side.indices.contains(i + step) else { return false }
+        side.swapAt(i, i + step)
+        let other = all.filter { ForexPair.isForex($0) != forex }
+        coloredOrder = forex ? side + other : other + side
+        return true
     }
 
     /// The zoom the close-ups start at: the first Charts window's forex charts' (on Forex or Forex + Active), else

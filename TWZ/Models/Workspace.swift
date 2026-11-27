@@ -476,6 +476,11 @@ final class Workspace {
         didSet { defaults.set(stockColors.mapValues(\.rawValue), forKey: StockColor.storageKey) }
     }
 
+    /// The Colored list's tickers in the order ⌘ and the arrow keys left them (see `moveColored`). Saved.
+    var coloredOrder: [String] {
+        didSet { defaults.set(coloredOrder, forKey: "coloredOrder") }
+    }
+
     /// Horizontal trend lines' prices by symbol, ⌘⇧-clicked on its charts (see `TrendLines`). Saved.
     var trendLines: [String: [Double]] {
         didSet { defaults.set(trendLines, forKey: TrendLines.storageKey) }
@@ -587,6 +592,7 @@ final class Workspace {
 
         stockColors = (defaults.dictionary(forKey: StockColor.storageKey) as? [String: String] ?? [:])
             .compactMapValues(StockColor.init(rawValue:))
+        coloredOrder = defaults.stringArray(forKey: "coloredOrder") ?? []
         trendLines = defaults.dictionary(forKey: TrendLines.storageKey) as? [String: [Double]] ?? [:]
 
         layouts = defaults.data(forKey: Layouts.storageKey)
