@@ -30,6 +30,7 @@ struct TWZApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     appDelegate.broker = broker
+                    broker.onTrendAlert = { [workspace, broker] symbol in workspace.focusAlert(symbol, broker: broker) }
                     appDelegate.showMenuBarPnL()
                     broker.registerCharts(workspace.mainCharts + workspace.secondaryCharts)
                     broker.setFastCharts(workspace.fastChartIDs)

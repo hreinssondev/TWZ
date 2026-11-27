@@ -113,6 +113,7 @@ extension Workspace {
 
     /// The grid has followed its list: a double-click waiting for it (see `showChart`) shows its stock.
     func showPendingFocus(broker: Broker) {
+        showAlertFocus()
         guard let pending = pendingFocus, pending.place.list == gridListKey else { return }
         pendingFocus = nil
         if Date() < pending.until { show(pending.symbol, at: pending.place, broker: broker) }
