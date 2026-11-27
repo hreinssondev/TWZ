@@ -2,61 +2,78 @@
 //  AlertFocus.swift
 //  TWZ
 //
-//  A trend line alert takes the main grid to its stock: to the first of the Colored, Forex + Active and Forex lists
-//  that shows it, in that order (as ⌘⇧C, ⌘⇧D, ⌘⇧F do), and once the grid shows that list, its chart is selected.
-//  Already on that list: its chart is selected at once. On none of them: its chart is selected if the grid shows it.
+//  A trend line alert takes the charts to its stock: an open Charts window's (the first, then Charts 2), else the main
+//  window's. They go to the Colored, Forex + Active and Forex lists that may show it, in that order (as ⌘⇧C, ⌘⇧D, ⌘⇧F
+//  do there), and once a chart there shows the stock, it's selected; a list that doesn't show it within a few seconds
+//  gives way to the next. On none of them: its chart there is selected if one shows it.
 //
 
-import Foundation
-
-struct PendingAlertFocus {
-    var symbol: String
-    var list: ScannerKind
-    /// Given up after this, should the list not show the stock.
-    var until: Date
-}
+import AppKit
 
 extension Workspace {
     /// The lists an alert's stock goes to, first one first.
     static let alertLists: [ScannerKind] = [.colored, .forexActive, .forex]
+    /// How long a list has to show the stock before the next is tried.
+    private static let alertListWait: Duration = .seconds(5)
 
     func focusAlert(_ symbol: String, broker: Broker) {
-        guard let list = Self.alertLists.first(where: { alertListShows(symbol, $0, broker: broker) }) else {
-            if let id = alertChart(showing: symbol) { selectedChartID = id }
-            return
+        let win = Self.alertWindow()
+        let lists = Self.alertLists.filter { alertListMayShow(symbol, $0, in: win, broker: broker) }
+        let token = UUID()
+        alertFocusToken = token
+        Task { @MainActor [weak self] in
+            await self?.focusAlert(symbol, in: win, lists: lists, token: token)
         }
-        alertFocus = PendingAlertFocus(symbol: symbol, list: list, until: Date().addingTimeInterval(15))
-        if gridScan?.kind == list {
-            showAlertFocus()
+    }
+
+    private func focusAlert(_ symbol: String, in win: ChartsWin?, lists: [ScannerKind], token: UUID) async {
+        let clock = ContinuousClock()
+        for list in lists {
+            guard alertFocusToken == token else { return }
+            if alertList(in: win) != list { showAlertList(list, in: win) }
+            let deadline = clock.now + Self.alertListWait
+            while clock.now < deadline {
+                if let id = alertChart(showing: symbol, in: win) {
+                    selectedChartID = id
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(200))
+                guard alertFocusToken == token else { return }
+            }
+        }
+        if alertFocusToken == token, let id = alertChart(showing: symbol, in: win) { selectedChartID = id }
+    }
+
+    /// The first open Charts window (not paused), nil for none: the main window then.
+    private static func alertWindow() -> ChartsWin? {
+        ChartsWin.allCases.first { win in
+            !UserDefaults.standard.bool(forKey: win.key(SecondaryCharts.pausedKey))
+                && NSApp.windows.contains { ChartsWin.of($0) == win && $0.isVisible && !$0.isMiniaturized }
+        }
+    }
+
+    private func alertList(in win: ChartsWin?) -> ScannerKind {
+        win.map { chartsWindow($0).list } ?? gridScan?.kind ?? .gainers
+    }
+
+    private func showAlertList(_ list: ScannerKind, in win: ChartsWin?) {
+        if let win {
+            chartsWindow(win).list = list
         } else {
             listShortcut = ListShortcut(kind: list)
         }
     }
 
-    /// The grid has followed its list: an alert waiting for it selects its stock's chart, once one shows it.
-    func showAlertFocus() {
-        guard let focus = alertFocus else { return }
-        guard Date() < focus.until else { alertFocus = nil; return }
-        guard gridScan?.kind == focus.list, let id = alertChart(showing: focus.symbol) else { return }
-        alertFocus = nil
-        selectedChartID = id
-    }
-
-    /// Whether `list` in the main grid shows `symbol`: Colored, the tickers given a color; Forex + Active, those and
-    /// Most Active $'s stocks; Forex, its pairs.
-    private func alertListShows(_ symbol: String, _ list: ScannerKind, broker: Broker) -> Bool {
+    /// Whether `list` may show `symbol` in that window: Colored, the tickers given a color; Forex + Active, Most Active
+    /// $'s stocks, and in a Charts window the pairs too (the main window shows only those given a color); Forex, its pairs.
+    private func alertListMayShow(_ symbol: String, _ list: ScannerKind, in win: ChartsWin?, broker: Broker) -> Bool {
+        let forex = ForexPair.isForex(symbol)
         switch list {
         case .colored:
             return coloredSymbols.contains(symbol)
         case .forexActive:
-            var rows: [String] = []
-            if [.forexActive, .dollarVolume].contains(gridScan?.kind), let symbols = broker.scans[MainGrid.scannerOwner]?.symbols {
-                rows += symbols
-            }
-            for (panel, kind) in shownLists where kind == .forexActive || kind == .dollarVolume {
-                rows += broker.scans[panel]?.symbols ?? []
-            }
-            return mainGridSymbols(rows, kind: .forexActive).prefix(mainCells.count).contains(symbol)
+            if forex { return win != nil && ForexPair.listed.contains(symbol) }
+            return mostActiveRows(broker).contains(symbol)
         case .forex:
             return ForexPair.listed.contains(symbol)
         default:
@@ -64,9 +81,20 @@ extension Workspace {
         }
     }
 
-    /// The main grid's first chart showing `symbol`, a Colored close-up only when no other chart does.
-    private func alertChart(showing symbol: String) -> Int? {
-        let showing = mainCells.filter { chart(id: $0)?.symbol == symbol }
+    /// Most Active $'s rows, from whatever shows them now: the main grid, a list panel or a Charts window.
+    private func mostActiveRows(_ broker: Broker) -> [String] {
+        let kinds: [ScannerKind] = [.forexActive, .dollarVolume]
+        var owners: [String] = []
+        if let kind = gridScan?.kind, kinds.contains(kind) { owners.append(MainGrid.scannerOwner) }
+        owners += shownLists.filter { kinds.contains($0.value) }.keys
+        owners += ChartsWin.allCases.filter { kinds.contains(chartsWindow($0).list) }.map(\.scannerOwner)
+        return owners.flatMap { broker.scans[$0]?.symbols ?? [] }
+    }
+
+    /// That window's first chart showing `symbol`, a Colored close-up only when no other chart does.
+    private func alertChart(showing symbol: String, in win: ChartsWin?) -> Int? {
+        let ids = win.map { chartsWindow($0).charts.map(\.id) } ?? mainCells
+        let showing = ids.filter { chart(id: $0)?.symbol == symbol }
         return showing.first { !closeUpChartIDs.contains($0) } ?? showing.first
     }
 }
