@@ -24,6 +24,9 @@ struct SplitGrid<Item: Identifiable, Cell: View>: View {
     @Binding var columnSplits: SplitStore
     @Binding var rowSplits: SplitStore
     let cell: (Item) -> Cell
+    /// Cell edges go on whole pixels: between two, a chart's 1 pt outline would smear over both, thicker and brighter
+    /// (on a screen without Retina above all, where a point is a pixel).
+    @Environment(\.displayScale) private var displayScale
 
     private static var minCellWidth: CGFloat { 80 }
     private static var minCellHeight: CGFloat { 60 }
@@ -58,9 +61,12 @@ struct SplitGrid<Item: Identifiable, Cell: View>: View {
                     let own = place.count == columns
                     // A row of its own count: even widths across the grid's.
                     let even = (geo.size.width - inset * 2 - gap * CGFloat(place.count - 1)) / CGFloat(place.count)
+                    let left = own ? xs[place.column] : inset + CGFloat(place.column) * (even + gap)
+                    let x = snap(left), right = snap(left + (own ? widths[place.column] : even))
+                    let y = snap(ys[place.row]), bottom = snap(ys[place.row] + heights[place.row])
                     cell(item)
-                        .frame(width: own ? widths[place.column] : even, height: heights[place.row])
-                        .offset(x: own ? xs[place.column] : inset + CGFloat(place.column) * (even + gap), y: ys[place.row])
+                        .frame(width: right - x, height: bottom - y)
+                        .offset(x: x, y: y)
                 }
                 ForEach(0..<max(0, rows - 1), id: \.self) { row in
                     ForEach(0..<max(0, columns - 1), id: \.self) { column in
@@ -90,6 +96,12 @@ struct SplitGrid<Item: Identifiable, Cell: View>: View {
     }
 
     /// Each cell's left (or top) edge: the inset, the sizes before it and a gap between each.
+    /// To the nearest whole pixel.
+    private func snap(_ value: CGFloat) -> CGFloat {
+        let scale = max(1, displayScale)
+        return (value * scale).rounded() / scale
+    }
+
     private func offsets(_ sizes: [CGFloat]) -> [CGFloat] {
         var edge = inset
         return sizes.map { size in

@@ -519,7 +519,8 @@ struct SecondaryChartsView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .frame(height: headerHeight)
+        // Whole points, so the charts under it start on a whole pixel (see `SplitGrid`).
+        .frame(height: headerHeight.rounded())
         // A ticker given a color or its color taken off: the Colored list follows.
         .onChange(of: workspace.coloredSymbols) {
             if state.list == .colored { syncWithGainers() }
