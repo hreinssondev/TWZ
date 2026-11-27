@@ -513,6 +513,15 @@ final class Workspace {
                 }
             }
             if placed != trendLinePlacedTimes { trendLinePlacedTimes = placed }
+            // When each line's alarm last went off (0: not yet), kept with the line as above.
+            var firedTimes: [String: [Double]] = [:]
+            for (symbol, prices) in trendLines {
+                var kept = Array(zip(oldValue[symbol] ?? [], trendLineFiredTimes[symbol] ?? []))
+                firedTimes[symbol] = prices.map { price in
+                    kept.firstIndex(where: { $0.0 == price }).map { kept.remove(at: $0).1 } ?? 0
+                }
+            }
+            if firedTimes != trendLineFiredTimes { trendLineFiredTimes = firedTimes }
             // An alarm taken off stops pulsing.
             let fired = firedAlerts.filter { trendLines[$0] != nil }
             if fired != firedAlerts { firedAlerts = fired }
@@ -522,6 +531,22 @@ final class Workspace {
     /// kept. Saved.
     @ObservationIgnored private var trendLinePlacedTimes: [String: [Double]] {
         didSet { defaults.set(trendLinePlacedTimes, forKey: "trendLinePlaced") }
+    }
+    /// When each trend line's alarm last went off (seconds since 1970, in `trendLines`' order); 0 while it hasn't. Saved.
+    private(set) var trendLineFiredTimes: [String: [Double]] {
+        didSet { defaults.set(trendLineFiredTimes, forKey: "trendLineFired") }
+    }
+    /// When each of `symbol`'s trend lines' alarm last went off, in `trendLines`' order; nil for one that hasn't.
+    func trendLineFiredAt(_ symbol: String) -> [Date?] {
+        (trendLineFiredTimes[symbol] ?? []).map { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+    }
+    /// `symbol`'s trend line at `price` has just gone off: drawn white from that candle on (see `ChartPane`).
+    func trendLineFired(_ symbol: String, price: Double) {
+        guard let prices = trendLines[symbol], let i = prices.firstIndex(of: price) else { return }
+        var times = trendLineFiredTimes[symbol] ?? []
+        while times.count < prices.count { times.append(0) }
+        times[i] = Date().timeIntervalSince1970
+        trendLineFiredTimes[symbol] = times
     }
     /// When each of `symbol`'s trend lines was placed, in `trendLines`' order; nil for one from before this was kept.
     func trendLinePlaced(_ symbol: String) -> [Date?] {
@@ -654,6 +679,7 @@ final class Workspace {
         coloredOrder = defaults.stringArray(forKey: "coloredOrder") ?? []
         trendLineTimes = defaults.dictionary(forKey: "trendLineTimes") as? [String: Double] ?? [:]
         trendLinePlacedTimes = defaults.dictionary(forKey: "trendLinePlaced") as? [String: [Double]] ?? [:]
+        trendLineFiredTimes = defaults.dictionary(forKey: "trendLineFired") as? [String: [Double]] ?? [:]
         firedAlerts = Set(defaults.stringArray(forKey: "firedAlerts") ?? [])
         trendLines = defaults.dictionary(forKey: TrendLines.storageKey) as? [String: [Double]] ?? [:]
 

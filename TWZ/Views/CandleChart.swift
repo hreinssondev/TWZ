@@ -71,6 +71,8 @@ struct PriceLine {
     var since: Date?
     /// Off the prices on screen: drawn at the top or bottom edge, thicker, instead of not at all (a trend line).
     var pinsToEdge = false
+    /// From the candle holding this time to the axis, before `fromDayStart` (a trend line whose alarm went off then).
+    var startsAt: Date?
     var lineWidth: CGFloat = 1
     /// Off: just the line, no price box.
     var showsTag = true

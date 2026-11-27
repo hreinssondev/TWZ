@@ -31,7 +31,10 @@ struct TWZApp: App {
                 .preferredColorScheme(.dark)
                 .onAppear {
                     appDelegate.broker = broker
-                    broker.onTrendAlert = { [workspace, broker] symbol in workspace.focusAlert(symbol, broker: broker) }
+                    broker.onTrendAlert = { [workspace, broker] symbol, price in
+                        workspace.trendLineFired(symbol, price: price)
+                        workspace.focusAlert(symbol, broker: broker)
+                    }
                     appDelegate.showMenuBarPnL()
                     for win in ChartsWin.allCases { broker.chartsWindowLists[win] = workspace.chartsWindow(win).list.rawValue }
                     broker.registerCharts(workspace.mainCharts + workspace.secondaryCharts)
