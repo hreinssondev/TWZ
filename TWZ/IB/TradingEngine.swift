@@ -1257,6 +1257,16 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             return
         }
         guard c.fullHistoryIn, c.olderReq == nil, !c.reachedStart, let oldest = c.bars.first?.time else { return }
+        // Another chart of the same stock and timeframe (in another list or window) reaching further back: its older
+        // bars, instead of asking IB again for what it has already sent.
+        if let donor = olderSibling(of: c, before: oldest) {
+            let older = donor.bars.prefix { $0.time < oldest }
+            c.bars = Array(older) + c.bars
+            if donor.reachedStart { c.reachedStart = true }
+            Self.log.notice("\(c.symbol, privacy: .public): \(older.count) older bars from another chart")
+            chartChanged(c, all: true)
+            return
+        }
         let reqId = makeReqId()
         c.olderReq = reqId
         olderChartByReq[reqId] = id
@@ -1268,6 +1278,14 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         sendFields([20, reqId] + contract(c.symbol) + [
             false, end, tf.barSize, tf.olderPage, tf.isIntraday || forex ? 0 : 1, forex ? "MIDPOINT" : "TRADES", 2, false, "",
         ])
+    }
+
+    /// Another chart of `c`'s stock and timeframe with bars before `time`, reaching on from there (to share its older bars).
+    private func olderSibling(of c: ChartState, before time: Date) -> ChartState? {
+        charts.values.first { other in
+            other !== c && other.symbol == c.symbol && other.timeframe == c.timeframe && !other.isLoading
+                && (other.bars.first?.time ?? .distantFuture) < time && (other.bars.last?.time ?? .distantPast) >= time
+        }
     }
 
     private static let utcStamp: DateFormatter = {
@@ -3390,6 +3408,15 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             } else {
                 c.bars = older + c.bars
                 chartChanged(c, all: true)
+                // The other charts of the same stock and timeframe reaching back to where these start get them too.
+                for sibling in charts.values where sibling !== c && sibling.symbol == c.symbol && sibling.timeframe == c.timeframe
+                    && !sibling.isLoading && sibling.olderReq == nil {
+                    guard let first = sibling.bars.first?.time, first <= oldest else { continue }
+                    let missing = older.filter { $0.time < first }
+                    guard !missing.isEmpty else { continue }
+                    sibling.bars = missing + sibling.bars
+                    chartChanged(sibling, all: true)
+                }
             }
             return
         }
