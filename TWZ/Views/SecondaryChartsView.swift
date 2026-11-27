@@ -612,6 +612,16 @@ struct SecondaryChartsView: View {
         let pins = state.pins
         let pinned = Dictionary(pins.map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         var rest = workspace.ranked(state.charts.filter { pins[$0.id] == nil }, by: lastGainers)[...]
+        // Forex + Active: the stocks in the rightmost cells (see `ScannerKind.stockCells`), the pairs left of them.
+        if state.list == .forexActive {
+            let stockCells = ScannerKind.stockCells(columns: columns, rows: rows, taken: Set(pinned.keys.filter { $0 < count }))
+            var stocks = rest.filter { !$0.symbol.isEmpty && !ForexPair.isForex($0.symbol) }[...]
+            var others = rest.filter { $0.symbol.isEmpty || ForexPair.isForex($0.symbol) }[...]
+            return (0..<state.charts.count).compactMap { cell in
+                if let id = pinned[cell], let chart = state.charts.first(where: { $0.id == id }) { return chart }
+                return stockCells.contains(cell) ? stocks.popFirst() ?? others.popFirst() : others.popFirst() ?? stocks.popFirst()
+            }
+        }
         return (0..<state.charts.count).compactMap { cell in
             if let id = pinned[cell], let chart = state.charts.first(where: { $0.id == id }) { return chart }
             return rest.popFirst()

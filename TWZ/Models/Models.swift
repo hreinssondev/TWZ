@@ -725,9 +725,17 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
     case forexActive = "Forex + Active"
     var id: String { rawValue }
 
-    /// Charts a Charts window gives Most Active $'s stocks on Forex + Active: its last 9, never more than half
-    /// of them (a grid of 15 charts gets 7, of 8 gets 4).
-    static func activeCells(of slots: Int) -> Int { min(9, slots / 2) }
+    /// Charts a Charts window gives Most Active $'s stocks on Forex + Active, of the `slots` following its list:
+    /// 9, but half in a grid of 9 or fewer (see `stockCells`).
+    static func activeCells(of slots: Int) -> Int { slots > 9 ? 9 : slots / 2 }
+
+    /// The cells of a `columns` × `rows` grid (reading order) Forex + Active's stocks take: the rightmost
+    /// `activeCells`, a column at a time from the right, top down, around the cells in `taken` (set by hand).
+    static func stockCells(columns: Int, rows: Int, taken: Set<Int>) -> Set<Int> {
+        let free = (0..<columns).reversed().flatMap { column in (0..<rows).map { $0 * columns + column } }
+            .filter { !taken.contains($0) }
+        return Set(free.prefix(activeCells(of: free.count)))
+    }
 
     /// Rows a list panel's scanner returns; a chart grid's asks for IB's maximum, 50, to fill 8×4.
     static let rowCount = 25
