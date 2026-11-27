@@ -14,15 +14,15 @@
 
 import SwiftUI
 
-/// The Colored list's top bar button (main window and Charts windows): its charts outlined in their tickers' colors, or
-/// not. Saved; other lists keep their colors either way.
+/// The top bar's Colors button (main window and Charts windows, on every list): the charts outlined in their tickers'
+/// colors, or not, everywhere at once. Saved.
 struct ColoredColorsButton: View {
     static let hidesKey = "coloredHidesColors"
     @AppStorage(Self.hidesKey) private var hides = false
 
     var body: some View {
         ForexListButton(title: "Colors", lit: !hides,
-                        help: hides ? "Outline the charts here in their tickers' colors again" : "Hide the tickers' colors here (the charts keep them on the other lists)") {
+                        help: hides ? "Outline the charts in their tickers' colors again" : "Hide the tickers' colors on every chart (they stay given, for when they're back)") {
             hides.toggle()
         }
     }
