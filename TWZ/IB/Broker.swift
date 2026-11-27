@@ -413,7 +413,7 @@ final class Broker {
                 if !seed.isEmpty {
                     chart.bars = seed
                     spec.bars = seed
-                    spec.fullHistory = Self.needsFullHistory(seed, key: key, chart: chart)
+                    spec.fullHistory = Self.needsFullHistory(seed, key: key)
                 }
             }
             specs.append(spec)
@@ -425,14 +425,8 @@ final class Broker {
     /// Kept from a while ago (from disk, after a relaunch): the full history, so the fresh bars reach back to them and the
     /// older ones stay (see `TradingEngine.historicalData`). Kept with the overnight session in them (from a full
     /// history): the full history again, which has it, so it doesn't show and then vanish when the short one comes in.
-    /// A view that shows back to the oldest of them (zoomed out): it would ask for the full history as soon as it draws
-    /// (see `OlderBars`), cancelling the short one, so it asks for it at once: one request to IB instead of two, which
-    /// with a grid of charts switching together is what keeps IB from holding them all back (its pacing).
-    static func needsFullHistory(_ seed: [Bar], key: BarCache.Key, chart: ChartModel) -> Bool {
-        guard !seed.isEmpty else { return false }
+    static func needsFullHistory(_ seed: [Bar], key: BarCache.Key) -> Bool {
         if let newest = seed.last?.time, newest < Date().addingTimeInterval(-6 * 3600) { return true }
-        let count = Double(seed.count)
-        if chart.scrollBack + chart.visibleBars >= count || chart.visibleBars >= count { return true }
         return key.timeframe.isIntraday && !ForexPair.isForex(key.symbol) && seed.contains { $0.phase == .overnight }
     }
 
@@ -534,7 +528,7 @@ final class Broker {
         }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         var spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
-        if Self.needsFullHistory(seed, key: key, chart: chart) { spec.fullHistory = true }
+        if Self.needsFullHistory(seed, key: key) { spec.fullHistory = true }
         engine.perform { $0.loadChart(spec, generation: generation) }
     }
 
