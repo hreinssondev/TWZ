@@ -744,6 +744,11 @@ private struct ScrollCatcher: NSViewRepresentable {
                 if abs(dy) < abs(dx) * 0.35 { dy = 0 } else if abs(dx) < abs(dy) * 0.35 { dx = 0 }
             }
             if event.isDirectionInvertedFromDevice { dy = -dy }
+            // Settings' Reverse swiping: a trackpad swipe moves everything the other way.
+            let sign: CGFloat = event.hasPreciseScrollingDeltas && Swiping.reversed ? -1 : 1
+            dx *= sign
+            dy *= sign
+            let sidewaysX = event.scrollingDeltaX * sign
             if event.hasPreciseScrollingDeltas, Swiping.locksPan {
                 if event.phase.contains(.began) || event.phase.contains(.mayBegin) { panLocked = false }
                 if !panLocked, event.momentumPhase.isEmpty, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) {
@@ -778,10 +783,10 @@ private struct ScrollCatcher: NSViewRepresentable {
                 if d != 0 { queuePrice(event.hasPreciseScrollingDeltas ? -d : d) }
             case .gridZoom where onShiftScroll != nil:
                 // Locked to panning (Swipe zooms every chart on): the chart under the pointer pans, nothing zooms.
-                if panLocked { queueScroll(event.scrollingDeltaX, 0, at: location, solo: false) } else if d != 0 { queueGrid(d) }
+                if panLocked { queueScroll(sidewaysX, 0, at: location, solo: false) } else if d != 0 { queueGrid(d) }
             case .gridZoom, .chart:
                 // Locked to panning: every bit sideways pans, none zooms.
-                if panLocked { queueScroll(event.scrollingDeltaX, 0, at: location, solo: solo) } else { queueScroll(dx, dy, at: location, solo: solo) }
+                if panLocked { queueScroll(sidewaysX, 0, at: location, solo: solo) } else { queueScroll(dx, dy, at: location, solo: solo) }
             }
         }
     }

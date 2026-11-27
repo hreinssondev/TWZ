@@ -324,6 +324,13 @@ enum Swiping {
     static let defaultLocksPan = false
 
     static var locksPan: Bool { UserDefaults.standard.object(forKey: locksPanKey) as? Bool ?? defaultLocksPan }
+
+    /// Trackpad swipes the other way round from now: the content moves against the fingers (as with macOS's
+    /// natural scrolling off), for panning, zooming and the ⌃ / ⌥⇧⌘ swipes alike.
+    static let reversedKey = "swipeReversed"
+    static let defaultReversed = false
+
+    static var reversed: Bool { UserDefaults.standard.object(forKey: reversedKey) as? Bool ?? defaultReversed }
 }
 
 /// Settings › Appearance › Performance: three ways the chart headers do less work, each on by default; all
@@ -353,7 +360,7 @@ enum AppearanceDefaults {
         PriceAxis.fontSizeKey, PriceAxis.labelSpacingKey, PriceAxis.lastPriceOpacityKey,
         TimeframeSwitch.keepViewKey, GridZoom.resetsAdjustedKey, NumberButtons.scalesKey,
         HeaderPerformance.freezeKey, HeaderPerformance.layoutKey, HeaderPerformance.perStockKey,
-        Swiping.zoomsAllKey, Swiping.locksPanKey, ViewSync.key, ZoomAnchor.keepsLatestKey,
+        Swiping.zoomsAllKey, Swiping.locksPanKey, Swiping.reversedKey, ViewSync.key, ZoomAnchor.keepsLatestKey,
     ] + LineDashes.keys + LineDashes.dotsKeys
 
     /// Removing the stored values makes every @AppStorage fall back to its default.
