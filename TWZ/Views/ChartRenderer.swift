@@ -56,6 +56,8 @@ nonisolated struct ChartFrame {
     var hoverControlColor: Color?
     /// The P/L at the hovered price (see `CandleChart.hoverPnL`).
     var hoverPnL: Double?
+    /// Pixels per point of what it's drawn into (Snap puts candles on whole pixels, see `ChartSharpness`).
+    var pixelScale: CGFloat = 1
 
     var candleTheme: CandleTheme { settings.candleTheme }
     var customUp: String { settings.customUp }
@@ -286,10 +288,13 @@ extension ChartFrame {
         let maxVolume = visible.map(\.volume).max() ?? 0
         if maxVolume > 0, volumeOpacity > 0 {
             var upVol = Path(), downVol = Path()
+            let snap = PixelSnap(scale: pixelScale, bodyWidth: max(1, barWidth * 0.7))
             for i in start..<end {
                 let b = bars[i]
                 let h = CGFloat(b.volume / maxVolume) * volumeHeight
-                let rect = CGRect(x: x(i) - barWidth * 0.35, y: plot.maxY - h, width: max(1, barWidth * 0.7), height: h)
+                let rect = settings.pixelSnap
+                    ? snap.column(centeredAt: x(i), top: plot.maxY - h, bottom: plot.maxY, minHeight: 0)
+                    : CGRect(x: x(i) - barWidth * 0.35, y: plot.maxY - h, width: max(1, barWidth * 0.7), height: h)
                 if b.close >= b.open { upVol.addRect(rect) } else { downVol.addRect(rect) }
             }
             plotCtx.fill(upVol, with: .color(up.opacity(volumeOpacity)))
@@ -299,22 +304,36 @@ extension ChartFrame {
         // Candles: batch into two paths per color for speed.
         var upWicks = Path(), downWicks = Path(), upBodies = Path(), downBodies = Path()
         let bodyWidth = max(1, barWidth * 0.7)
-        for i in start..<end {
-            let b = bars[i]
-            let xx = x(i)
-            let isUp = b.close >= b.open
-            let top = y(max(b.open, b.close))
-            let body = CGRect(x: xx - bodyWidth / 2, y: top, width: bodyWidth, height: max(1, y(min(b.open, b.close)) - top))
-            if isUp {
-                upWicks.move(to: CGPoint(x: xx, y: y(b.high))); upWicks.addLine(to: CGPoint(x: xx, y: y(b.low)))
-                upBodies.addRect(body)
-            } else {
-                downWicks.move(to: CGPoint(x: xx, y: y(b.high))); downWicks.addLine(to: CGPoint(x: xx, y: y(b.low)))
-                downBodies.addRect(body)
+        if settings.pixelSnap {
+            // Snap: bodies and wicks filled on whole pixels, every body as wide as the next, its wick in the middle.
+            let snap = PixelSnap(scale: pixelScale, bodyWidth: bodyWidth)
+            for i in start..<end {
+                let b = bars[i]
+                let xx = x(i)
+                let body = snap.column(centeredAt: xx, top: y(max(b.open, b.close)), bottom: y(min(b.open, b.close)), minHeight: 1)
+                let wick = snap.wick(centeredAt: xx, top: y(b.high), bottom: y(b.low))
+                if b.close >= b.open { upWicks.addRect(wick); upBodies.addRect(body) } else { downWicks.addRect(wick); downBodies.addRect(body) }
             }
+            plotCtx.fill(upWicks, with: .color(up))
+            plotCtx.fill(downWicks, with: .color(down))
+        } else {
+            for i in start..<end {
+                let b = bars[i]
+                let xx = x(i)
+                let isUp = b.close >= b.open
+                let top = y(max(b.open, b.close))
+                let body = CGRect(x: xx - bodyWidth / 2, y: top, width: bodyWidth, height: max(1, y(min(b.open, b.close)) - top))
+                if isUp {
+                    upWicks.move(to: CGPoint(x: xx, y: y(b.high))); upWicks.addLine(to: CGPoint(x: xx, y: y(b.low)))
+                    upBodies.addRect(body)
+                } else {
+                    downWicks.move(to: CGPoint(x: xx, y: y(b.high))); downWicks.addLine(to: CGPoint(x: xx, y: y(b.low)))
+                    downBodies.addRect(body)
+                }
+            }
+            plotCtx.stroke(upWicks, with: .color(up), lineWidth: 1)
+            plotCtx.stroke(downWicks, with: .color(down), lineWidth: 1)
         }
-        plotCtx.stroke(upWicks, with: .color(up), lineWidth: 1)
-        plotCtx.stroke(downWicks, with: .color(down), lineWidth: 1)
         plotCtx.fill(upBodies, with: .color(up))
         plotCtx.fill(downBodies, with: .color(down))
 
@@ -718,6 +737,39 @@ extension ChartFrame {
 }
 
 // MARK: - Rendering
+
+/// Snap (see `ChartSharpness`): candle bodies, volume bars and wicks on whole pixels. Every body is the same number
+/// of pixels wide, with the same parity as the wick's, so the wick sits exactly in its middle.
+nonisolated struct PixelSnap {
+    let scale: CGFloat
+    let bodyPixels: CGFloat
+    let wickPixels: CGFloat
+
+    init(scale: CGFloat, bodyWidth: CGFloat) {
+        self.scale = max(1, scale)
+        let wick = max(1, self.scale.rounded())
+        var body = max(1, (bodyWidth * self.scale).rounded())
+        if body > wick, Int(body - wick) % 2 != 0 { body -= 1 }
+        bodyPixels = max(wick, body)
+        wickPixels = wick
+    }
+
+    private func pixel(_ v: CGFloat) -> CGFloat { (v * scale).rounded() / scale }
+
+    private func left(centeredAt x: CGFloat) -> CGFloat { ((x * scale) - bodyPixels / 2).rounded() / scale }
+
+    /// A body (or volume bar) from `top` to `bottom`, at least `minHeight` points tall.
+    func column(centeredAt x: CGFloat, top: CGFloat, bottom: CGFloat, minHeight: CGFloat) -> CGRect {
+        let t = pixel(top), b = max(t + minHeight, pixel(bottom))
+        return CGRect(x: left(centeredAt: x), y: t, width: bodyPixels / scale, height: b - t)
+    }
+
+    /// The wick: a column one point wide, in the middle of the body's.
+    func wick(centeredAt x: CGFloat, top: CGFloat, bottom: CGFloat) -> CGRect {
+        let t = pixel(top), b = max(t + wickPixels / scale, pixel(bottom))
+        return CGRect(x: left(centeredAt: x) + (bodyPixels - wickPixels) / 2 / scale, y: t, width: wickPixels / scale, height: b - t)
+    }
+}
 
 /// A time zone's offsets from GMT, one per stretch between its daylight saving changes (2000–2050), looked up without a
 /// lock: the charts render on several threads at once, and a zone's own lookup is slow.

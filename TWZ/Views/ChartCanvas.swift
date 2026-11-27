@@ -189,7 +189,15 @@ final class ChartCanvasView: NSView {
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.setNeedsRender() } }
             }
         }
-        guard let frame else { return nil }
+        guard var frame else { return nil }
+        frame.pixelScale = scale
+        // Crisp: the window server shows the chart's pixels as drawn, not blended across two where the view sits
+        // between pixels (see `ChartSharpness`).
+        let filter: CALayerContentsFilter = frame.settings.noBlend ? .nearest : .linear
+        if layer?.magnificationFilter != filter {
+            layer?.magnificationFilter = filter
+            layer?.minificationFilter = filter
+        }
         target.busy = true
         guard let layer else { return nil }
         return ChartRenderJob(frame: frame, size: size, scale: scale, target: target, layer: layer)
@@ -232,6 +240,8 @@ final class ChartSettings {
         var labelSpacing: Double
         var lastPriceOpacity: Double
         var rightPaddingBars: Double
+        var noBlend: Bool
+        var pixelSnap: Bool
 
         static func read() -> Values {
             let d = UserDefaults.standard
@@ -259,7 +269,9 @@ final class ChartSettings {
                 axisFontSize: double(PriceAxis.fontSizeKey, PriceAxis.defaultFontSize),
                 labelSpacing: double(PriceAxis.labelSpacingKey, PriceAxis.defaultLabelSpacing),
                 lastPriceOpacity: double(PriceAxis.lastPriceOpacityKey, PriceAxis.defaultLastPriceOpacity),
-                rightPaddingBars: double(RightSpace.key, RightSpace.defaultBars))
+                rightPaddingBars: double(RightSpace.key, RightSpace.defaultBars),
+                noBlend: bool(ChartSharpness.noBlendKey, false),
+                pixelSnap: bool(ChartSharpness.pixelSnapKey, false))
         }
     }
 
@@ -274,5 +286,37 @@ final class ChartSettings {
                 if new != self.values { self.values = new }
             }
         }
+    }
+}
+
+/// Two switches in the Charts window's top bar, to compare how sharp the charts look (both off by default):
+/// Crisp shows each chart's pixels as drawn (a chart sitting between screen pixels, as most do in a grid, is otherwise
+/// blended across two); Snap puts candle bodies, wicks and volume bars on whole pixels, every body as wide as the
+/// next, its wick in the middle.
+enum ChartSharpness {
+    static let noBlendKey = "chartNoBlend"
+    static let pixelSnapKey = "chartPixelSnap"
+}
+
+struct SharpnessToggles: View {
+    @AppStorage(ChartSharpness.noBlendKey) private var noBlend = false
+    @AppStorage(ChartSharpness.pixelSnapKey) private var pixelSnap = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            toggle("Crisp", $noBlend, help: "Crisp: each chart's pixels shown as drawn, not blended across two where the chart sits between screen pixels")
+            toggle("Snap", $pixelSnap, help: "Snap: candle bodies, wicks and volume bars on whole pixels, every body as wide as the next, its wick in the middle")
+        }
+    }
+
+    private func toggle(_ label: String, _ isOn: Binding<Bool>, help: String) -> some View {
+        Button { isOn.wrappedValue.toggle() } label: {
+            Text("\(label) \(isOn.wrappedValue ? "ON" : "OFF")")
+                .font(.system(size: 10, weight: isOn.wrappedValue ? .semibold : .regular).monospacedDigit())
+                .foregroundStyle(isOn.wrappedValue ? Color.green : Color.secondary.opacity(0.7))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
