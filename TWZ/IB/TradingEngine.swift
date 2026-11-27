@@ -1236,12 +1236,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// (`generation`).
     func loadOlderBars(_ id: Int, generation: Int) {
         guard apiReady, let c = charts[id], c.generation == generation, !c.symbol.isEmpty, !c.isLoading else { return }
-        // Bars kept from before on screen, the short history still on its way behind them: asked for once that's in
-        // (see `historicalData`), rather than cancelling it for the full one, which IB can take a minute to send.
-        if c.keepsOlder {
-            c.olderWanted = true
-            return
-        }
         if !c.fullHistory {
             c.fullHistory = true
             requestChart(id, keepingBars: true)
@@ -1292,7 +1286,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         overnightBars[id] = nil
         if let old = c.olderReq { olderChartByReq[old] = nil }
         c.olderReq = nil
-        c.olderWanted = false
         c.reachedStart = false
         c.fullHistoryIn = false
         c.overnightStandIns = false
@@ -3424,10 +3417,6 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         c.isLoading = false
         c.error = c.bars.isEmpty ? "No data" : nil
         chartChanged(c, all: true)
-        if c.olderWanted {
-            c.olderWanted = false
-            loadOlderBars(id, generation: c.generation)
-        }
     }
 
     /// Both series in time order; where both have a bar for the same time, `primary`'s wins.
@@ -3729,8 +3718,6 @@ nonisolated private final class ChartState {
     var reachedStart = false
     /// The bars shown are kept from before (see `BarCache`): the fresh history keeps those older than it.
     var keepsOlder = false
-    /// The view reached the oldest bar while the bars kept from before were on screen (see `loadOlderBars`).
-    var olderWanted = false
     /// The overnight bars shown are kept from before, standing in for the overnight history on its way.
     var overnightStandIns = false
     var generation = 0
