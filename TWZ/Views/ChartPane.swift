@@ -921,7 +921,7 @@ struct TradingChart: View {
             lines.append(PriceLine(price: price, color: isFired ? .white : trendColor, label: "", dashed: isFired || trendDashed,
                                    dotted: isFired || (trendDashed && trendDots), orderId: TrendLines.lineId(index),
                                    drawnAcross: true, fromDayStart: true, since: index < placed.count ? placed[index] : nil,
-                                   pinsToEdge: true, startsAt: firedAt, lineWidth: trendWidth, showsTag: trendPriceBox))
+                                   pinsToEdge: true, startsAt: firedAt, lineWidth: trendWidth, showsTag: trendPriceBox && !isFired))
         }
         if let trip = shownTrip {
             // Shown from the Round trips tab: small dots, green at the average entry (unknown for shares
