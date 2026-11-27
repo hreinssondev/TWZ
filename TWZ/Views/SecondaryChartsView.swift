@@ -512,10 +512,12 @@ struct SecondaryChartsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(height: headerHeight)
-        // The height drag sits behind the controls so it never takes a slider's drag.
+        // The height drag sits behind the controls so it never takes a slider's drag; a click there
+        // deselects the chart, as a click on empty space in Orders or Positions does.
         .background(
             Color(nsColor: .textBackgroundColor).opacity(0.2)
                 .contentShape(Rectangle())
+                .onTapGesture { workspace.isChartSelected = false }
                 .gesture(
                     DragGesture()
                         .onChanged { value in
