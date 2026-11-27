@@ -71,6 +71,8 @@ struct PriceLine {
     var since: Date?
     /// Off the prices on screen: drawn at the top or bottom edge, thicker, instead of not at all (a trend line).
     var pinsToEdge = false
+    /// From the candle holding this time to the axis, before `fromDayStart` (a trend line whose alarm went off then).
+    var startsAt: Date?
     var lineWidth: CGFloat = 1
     /// Off: just the line, no price box.
     var showsTag = true
@@ -727,6 +729,16 @@ struct CandleChart: View {
             }
             return min(max(x(low) - barWidth / 2, plot.minX), plot.maxX)
         }
+        // A trend line whose alarm went off: from the left edge of the candle that set it off (the last bar starting at or
+        // before then) to the axis; the chart's left edge if that's before its bars.
+        func candleStart(_ time: Date) -> CGFloat {
+            var low = 0, high = bars.count
+            while low < high {
+                let mid = (low + high) / 2
+                if bars[mid].time <= time { low = mid + 1 } else { high = mid }
+            }
+            return min(max(x(max(0, low - 1)) - barWidth / 2, plot.minX), plot.maxX)
+        }
         func draw(_ line: PriceLine) {
             // A trend line above or below the prices on screen: at the top or bottom edge, thicker, its own price in
             // its box; normal again once the view reaches it.
@@ -738,7 +750,7 @@ struct CandleChart: View {
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed, dotted: line.dotted,
                      tag: line.label.isEmpty ? Fmt.price(line.price, for: chart.symbol) : "\(line.label) \(Fmt.price(line.price, for: chart.symbol))",
                      tagInside: covered || isOrder(line), chartTag: line.chartText, showsTag: line.showsTag,
-                     lineStart: isOrder(line) ? orderLineStart : line.fromDayStart ? dayStart(since: line.since) : nil,
+                     lineStart: isOrder(line) ? orderLineStart : line.startsAt.map(candleStart) ?? (line.fromDayStart ? dayStart(since: line.since) : nil),
                      progress: line.fillProgress, lineWidth: pinned ? pinnedWidth : line.lineWidth)
         }
         let visibleLines = placedLines.filter { $0.price > lo && $0.price < hi || $0.pinsToEdge }

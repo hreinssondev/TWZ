@@ -896,11 +896,14 @@ struct TradingChart: View {
         var lines: [PriceLine] = []
         // Trend lines (⌘⇧-click) first, under the rest; a double-click on one removes it.
         let placed = workspace.trendLinePlaced(chart.symbol)
+        let fired = workspace.trendLineFiredAt(chart.symbol)
         for (index, price) in (workspace.trendLines[chart.symbol] ?? []).enumerated() {
-            lines.append(PriceLine(price: price, color: trendColor, label: "", dashed: trendDashed,
+            // One whose alarm went off: white, from the candle that set it off.
+            let firedAt = index < fired.count ? fired[index] : nil
+            lines.append(PriceLine(price: price, color: firedAt == nil ? trendColor : .white, label: "", dashed: trendDashed,
                                    dotted: trendDashed && trendDots, orderId: TrendLines.lineId(index),
                                    drawnAcross: true, fromDayStart: true, since: index < placed.count ? placed[index] : nil,
-                                   pinsToEdge: true, lineWidth: trendWidth, showsTag: trendPriceBox))
+                                   pinsToEdge: true, startsAt: firedAt, lineWidth: trendWidth, showsTag: trendPriceBox))
         }
         if let trip = shownTrip {
             // Shown from the Round trips tab: small dots, green at the average entry (unknown for shares

@@ -187,7 +187,7 @@ final class Broker {
     /// The lines that have alerted, until the price moves `TrendLines.rearmShare` away from them.
     @ObservationIgnored var trendAlertsFired: [String: Set<Double>] = [:]
     /// Called with the stock of each trend line alert (the app shows it: see `Workspace.focusAlert`).
-    @ObservationIgnored var onTrendAlert: ((String) -> Void)?
+    @ObservationIgnored var onTrendAlert: ((_ symbol: String, _ price: Double) -> Void)?
     @ObservationIgnored private let engine = TradingEngine()
     @ObservationIgnored private var charts: [ChartModel] = []
     /// Bumped on every chart load, so bars still on their way from the previous load are dropped.
