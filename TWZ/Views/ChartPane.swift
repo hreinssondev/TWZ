@@ -915,10 +915,11 @@ struct TradingChart: View {
         let placed = workspace.trendLinePlaced(chart.symbol)
         let fired = workspace.trendLineFiredAt(chart.symbol)
         for (index, price) in (workspace.trendLines[chart.symbol] ?? []).enumerated() {
-            // One whose alarm went off: white, from the candle that set it off.
+            // One whose alarm went off: white dots, from the candle that set it off.
             let firedAt = index < fired.count ? fired[index] : nil
-            lines.append(PriceLine(price: price, color: firedAt == nil ? trendColor : .white, label: "", dashed: trendDashed,
-                                   dotted: trendDashed && trendDots, orderId: TrendLines.lineId(index),
+            let isFired = firedAt != nil
+            lines.append(PriceLine(price: price, color: isFired ? .white : trendColor, label: "", dashed: isFired || trendDashed,
+                                   dotted: isFired || (trendDashed && trendDots), orderId: TrendLines.lineId(index),
                                    drawnAcross: true, fromDayStart: true, since: index < placed.count ? placed[index] : nil,
                                    pinsToEdge: true, startsAt: firedAt, lineWidth: trendWidth, showsTag: trendPriceBox))
         }
