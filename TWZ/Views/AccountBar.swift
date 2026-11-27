@@ -67,7 +67,7 @@ struct AccountBar: View {
 
             HStack(spacing: 18) {
                 FrameMeterBadge()
-                AccountStatusControls()
+                AccountStatusControls(showsSMA: false)
             }
         }
         // At the top, beside the window controls and centered on them, so the stats line up with them;
@@ -127,10 +127,12 @@ struct AccountSummary: View {
 struct AccountStatusControls: View {
     @Environment(Broker.self) private var broker
     @Environment(Workspace.self) private var workspace
+    /// The SMA 9 / SMA 21 switches: in a Charts window's title bar, not the main window's top bar (Settings has them).
+    var showsSMA = true
 
     var body: some View {
         HStack(spacing: 18) {
-            IndicatorToggles()
+            IndicatorToggles(showsSMA: showsSMA)
 
             // The status text (e.g. why it disconnected) shows on hover; a click reconnects, as Settings ›
             // Connection's Reconnect does.
@@ -334,13 +336,16 @@ private struct IndicatorToggles: View {
     @AppStorage(Indicators.fastSMAKey) private var showFastSMA = true
     @AppStorage(Indicators.slowSMAKey) private var showSlowSMA = true
     @AppStorage(Indicators.tradesKey) private var showTrades = false
+    var showsSMA = true
 
     var body: some View {
         HStack(spacing: 1) {
             chip("Trades", isOn: $showTrades)
             chip("VWAP", isOn: $showVWAP)
-            chip("SMA9", isOn: $showFastSMA)
-            chip("SMA21", isOn: $showSlowSMA)
+            if showsSMA {
+                chip("SMA9", isOn: $showFastSMA)
+                chip("SMA21", isOn: $showSlowSMA)
+            }
         }
     }
 
