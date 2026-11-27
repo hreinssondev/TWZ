@@ -27,8 +27,8 @@ struct BarCache {
         var fileName: String { "\(symbol.replacingOccurrences(of: "/", with: "-"))_\(timeframe.rawValue).bars" }
     }
 
-    /// Bars kept in memory at most, about 190 MB (64 bytes a bar).
-    static let maxBars = 3_000_000
+    /// Bars kept in memory at most, about 38 MB (64 bytes a bar).
+    static let maxBars = 600_000
 
     private var series: [Key: (bars: [Bar], kept: Int)] = [:]
     private var keeps = 0
