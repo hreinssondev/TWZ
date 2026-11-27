@@ -317,8 +317,8 @@ final class Workspace {
     @ObservationIgnored var placeKeeps = 0
     /// A double-click on a stock shown on another list, waiting for that list's rows (see `showChart`).
     @ObservationIgnored var pendingFocus: PendingFocus?
-    /// A trend line alert's stock, waiting for the main grid to show its list (see `focusAlert`).
-    @ObservationIgnored var alertFocus: PendingAlertFocus?
+    /// The trend line alert being shown (see `focusAlert`): a newer one takes over.
+    @ObservationIgnored var alertFocusToken: UUID?
 
     struct PendingFocus {
         var symbol: String

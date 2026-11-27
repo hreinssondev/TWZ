@@ -165,6 +165,5 @@ extension Workspace {
                                       rowColumns: MainGrid.rowColumns(columns: mainColumns, rows: mainRows))
         let cells = layOutColored(mainCells.compactMap(chart(id:)), plan: plan, timeframe: timeframe, broker: broker).map(\.id)
         if cells != mainCells { mainCells = cells }
-        showAlertFocus()
     }
 }
