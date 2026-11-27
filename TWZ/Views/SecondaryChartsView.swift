@@ -21,7 +21,8 @@
 //  power and its own timeframe switch. ⌥1–6 (⌃ too) with this window in front sets every chart's timeframe here, and ⇧1–5 (or a click on the header's layout numbers) loads one of its own saved chart layouts (see `GridLayout`).
 //  The header's 1–5 before them are this window's own view sets or scales, as the main window's top bar has (see
 //  `ScaleButtons`; ⌥⇧1–5 with this window in front). On the Forex list, 1/2 after them shows the pairs past those
-//  the grid has room for (2/2), and back, and 5D orders the pairs by their range over the last 5 finished days. With P on, or the
+//  the grid has room for (2/2), and back, and 5D orders the pairs by their range over the last 5 finished days (1D the last
+//  one; % today's range so far over the pair's ATR). With P on, or the
 //  window closed, the scanner stops and every chart is emptied: no history, bar updates or quotes.
 //  Hidden by its shortcut (see `ChartsWindowShortcut`), the window isn't closed: the charts stay live.
 //  There are two of these windows, Charts and Charts 2 (the Window menu, or each one's own shortcut), each with all of
@@ -381,8 +382,10 @@ struct SecondaryChartsView: View {
     }
     /// The Forex list by each pair's range over its last 5 finished days, widest first (see `TradingEngine.setForexByRange`).
     @AppStorage private var forexByRange: Bool
-    /// … or over the last finished day alone (the 1D button; one of the two at a time).
+    /// … or over the last finished day alone (the 1D button; one of the three at a time).
     @AppStorage private var forexByDay: Bool
+    /// … or by today's range so far over the pair's ATR (the % button).
+    @AppStorage private var forexByVol: Bool
     @AppStorage private var masterTimeframe: Timeframe
     @AppStorage private var headerHeight: Double
     /// P: the main window's right side (the lists, Orders, Positions, Round trips) beside the charts. Saved.
@@ -403,6 +406,7 @@ struct SecondaryChartsView: View {
         self.win = win
         _forexByRange = AppStorage(wrappedValue: false, win.key("secondaryChartsForexByRange"))
         _forexByDay = AppStorage(wrappedValue: false, win.key("secondaryChartsForexByDay"))
+        _forexByVol = AppStorage(wrappedValue: false, win.key("secondaryChartsForexByVol"))
         _masterTimeframe = AppStorage(wrappedValue: .m1, win.key(SecondaryCharts.timeframeKey))
         _headerHeight = AppStorage(wrappedValue: 28, win.key("secondaryHeaderHeight"))
         _showsSidePanel = AppStorage(wrappedValue: false, win.key("chartsWindowSidePanel"))
@@ -572,9 +576,9 @@ struct SecondaryChartsView: View {
         .padding(.vertical, 6)
         // Whole points, so the charts under it start on a whole pixel (see `SplitGrid`).
         .frame(height: headerHeight.rounded())
-        // 1/2 ↔ 2/2, from its button or ⌘← / ⌘→; 1D / 5D, from theirs or ⌘↑ / ⌘↓.
+        // 1/2 ↔ 2/2, from its button or ⌘← / ⌘→; 1D / 5D / %, from theirs or ⌘↑ / ⌘↓.
         .onChange(of: state.forexShowsRest) { lastGainers = []; syncWithGainers() }
-        .onChange(of: [forexByRange, forexByDay]) { syncForexRange() }
+        .onChange(of: [forexByRange, forexByDay, forexByVol]) { syncForexRange() }
         // A ticker given a color or its color taken off: the Colored list follows.
         .onChange(of: workspace.coloredSymbols) {
             if state.list == .colored { syncWithGainers() }
@@ -612,22 +616,29 @@ struct SecondaryChartsView: View {
                         help: forexByDay ? "Back to the Forex list's fixed order"
                             : "The pairs by their range over the last finished day, (high − low) / low, widest first; set once a day, after 17:00 ET") {
                 forexByDay.toggle()
-                if forexByDay { forexByRange = false }
+                if forexByDay { forexByRange = false; forexByVol = false }
                 syncForexRange()
             }
             forexButton("5D", lit: forexByRange,
                         help: forexByRange ? "Back to the Forex list's fixed order"
                             : "The pairs by their range over the last 5 finished days, (high − low) / low, widest first; set once a day, after 17:00 ET") {
                 forexByRange.toggle()
-                if forexByRange { forexByDay = false }
+                if forexByRange { forexByDay = false; forexByVol = false }
+                syncForexRange()
+            }
+            forexButton("%", lit: forexByVol,
+                        help: forexByVol ? "Back to the Forex list's fixed order" : "The pairs by how much of an average day they've moved today: today's range so far over the pair's 14-day ATR, highest first; follows the day live") {
+                forexByVol.toggle()
+                if forexByVol { forexByDay = false; forexByRange = false }
                 syncForexRange()
             }
         }
     }
 
-    /// The engine orders this window's pairs by 1D's or 5D's range, or neither (on Forex + Active too: its pairs only).
+    /// The engine orders this window's pairs by 1D's or 5D's range, by %, or none (on Forex + Active too: its pairs only).
     private func syncForexRange() {
-        broker.setForexByRange(forexByRange || forexByDay, days: forexByDay ? 1 : 5, owner: win.scannerOwner)
+        broker.setForexByRange(forexByRange || forexByDay || forexByVol, days: forexByVol ? 0 : forexByDay ? 1 : 5,
+                               owner: win.scannerOwner)
     }
 
     private func forexButton(_ title: String, lit: Bool, help: String, action: @escaping () -> Void) -> some View {
