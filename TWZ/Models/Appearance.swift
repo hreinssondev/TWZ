@@ -527,7 +527,7 @@ enum LineColors {
     static let showGridKey = "showChartGridLines"
     /// ⌘⇧-click trend lines (see `TrendLines`).
     static let trendKey = "trendLineColor"
-    static let defaultTrend = Color.gray
+    static let defaultTrend = Color(white: 0.4)
     static let defaultLastPrice = Color(red: 0.30, green: 0.50, blue: 0.95)
     static let defaultAvgCost = Color.blue
     static let defaultAltClick = Color.white
@@ -542,12 +542,19 @@ enum LineColors {
 }
 
 /// Horizontal trend lines: ⌘⇧-click a chart for one at that price, double-click it to remove it. Kept per
-/// stock (see `Workspace.trendLines`), drawn across the chart in Settings' color, style and width.
+/// stock (see `Workspace.trendLines`), drawn on intraday charts from where today starts (the previous day's end) to
+/// the axis, on daily ones across the chart, in Settings' color, style and width. The price reaching one alerts
+/// (see `Broker.checkTrendAlerts`).
 enum TrendLines {
     static let storageKey = "trendLines"
     static let widthKey = "trendLineWidth"
-    static let defaultWidth = 1.0
-    static let widthRange = 0.5...3.0
+    static let defaultWidth = 0.5
+    static let widthRange = 0.25...3.0
+    /// On: a sound, a message and a notification when a stock's price reaches one of its trend lines.
+    static let alertKey = "trendLineAlerts"
+    static let defaultAlert = true
+    /// After an alert, the line alerts again once the price has moved this share of it away (0.5%).
+    static let rearmShare = 0.005
     /// The price in a box on the axis.
     static let priceBoxKey = "trendLinePriceBox"
     static let defaultPriceBox = true

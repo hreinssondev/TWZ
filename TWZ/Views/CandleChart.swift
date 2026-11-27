@@ -64,6 +64,9 @@ struct PriceLine {
     var followsLastPrice = false
     /// Across the whole chart even with an `orderId`, its price box on the axis (a trend line).
     var drawnAcross = false
+    /// With `drawnAcross`, on intraday charts only from where today starts (the line where the previous day ends)
+    /// to the axis (a trend line).
+    var fromDayStart = false
     var lineWidth: CGFloat = 1
     /// Off: just the line, no price box.
     var showsTag = true

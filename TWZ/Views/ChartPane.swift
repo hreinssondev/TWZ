@@ -864,7 +864,7 @@ struct TradingChart: View {
         for (index, price) in (workspace.trendLines[chart.symbol] ?? []).enumerated() {
             lines.append(PriceLine(price: price, color: trendColor, label: "", dashed: trendDashed,
                                    dotted: trendDashed && trendDots, orderId: TrendLines.lineId(index),
-                                   drawnAcross: true, lineWidth: trendWidth, showsTag: trendPriceBox))
+                                   drawnAcross: true, fromDayStart: true, lineWidth: trendWidth, showsTag: trendPriceBox))
         }
         if let trip = shownTrip {
             // Shown from the Round trips tab: small dots, green at the average entry (unknown for shares

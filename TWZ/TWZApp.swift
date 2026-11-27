@@ -36,6 +36,7 @@ struct TWZApp: App {
                     broker.connect()
                 }
                 .onChange(of: workspace.fastChartIDs) { _, ids in broker.setFastCharts(ids) }
+                .onChange(of: workspace.trendLines, initial: true) { _, lines in broker.setTrendLines(lines) }
                 .onChange(of: workspace.selectedChartID, initial: true) { _, id in
                     broker.setSelectedChart(id)
                 }
