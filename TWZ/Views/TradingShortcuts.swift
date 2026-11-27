@@ -236,6 +236,19 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
+                    // ⌥⇧⌫ on the Alerts list: the selected chart's stock leaves it, its alarm (its trend lines) taken off.
+                    if modifiers == [.option, .shift], inMainWindow, event.keyCode == 51,
+                       workspace.isChartSelected, let chart = workspace.chart(id: workspace.selectedChartID),
+                       (ChartsWin.of(chartID: chart.id).map { workspace.chartsWindow($0).list } ?? workspace.gridScan?.kind) == .alerts {
+                        if !event.isARepeat {
+                            if chart.symbol.isEmpty || workspace.trendLines.removeValue(forKey: chart.symbol) == nil {
+                                NSSound.beep()
+                            } else {
+                                broker.say("\(chart.symbol): alarm taken off, out of the Alerts list")
+                            }
+                        }
+                        return nil
+                    }
                     // ⌥⇧ and a color's letter colors the selected chart's stock; ⌥⇧⌫ takes its color off.
                     if modifiers == [.option, .shift], inMainWindow {
                         let color = StockColor(key: event.charactersIgnoringModifiers?.lowercased() ?? "")
@@ -453,7 +466,7 @@ extension KeyShortcut {
             return "⌥⇧R reloads the chart under the pointer"
         }
         if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
-            return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
+            return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off (on the Alerts list, its alarm)" : "\(display) colors the stock"
         }
         if control, shift, !command, !option, let theme = CandleTheme.forShortcut(keyCode: keyCode) {
             return "\(display) picks the candle colors \(theme.rawValue)"

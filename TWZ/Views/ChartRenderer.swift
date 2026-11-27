@@ -353,28 +353,36 @@ extension ChartFrame {
         }
         // Order lines run from the latest candle to the axis, not across the whole chart.
         let orderLineStart = min(max(x(bars.count - 1), plot.minX), plot.maxX)
-        // Trend lines on intraday charts: from where today starts (the previous day's end) to the axis.
-        lazy var dayStart: CGFloat? = {
+        // Trend lines on intraday charts: from where the day they were placed starts (that day's first bar; today's
+        // for one placed before that was kept) to the axis; the chart's left edge if that's before its bars.
+        func dayStart(since: Date?) -> CGFloat? {
             guard chart.timeframe.isIntraday, let lastBar = bars.last else { return nil }
-            var i = bars.count - 1
-            if forex != nil {
-                let day = Self.forexDay(lastBar.time)
-                while i > 0, Self.forexDay(bars[i - 1].time) == day { i -= 1 }
-            } else {
-                while i > 0, bars[i - 1].vwapDay == lastBar.vwapDay { i -= 1 }
+            let from = since ?? lastBar.time
+            let day = forex != nil ? Self.forexDay(from) : MarketSession.vwapDay(from)
+            func barDay(_ i: Int) -> Int { forex != nil ? Self.forexDay(bars[i].time) : bars[i].vwapDay }
+            // The first bar of that day or after (the bars are in time order).
+            var low = 0, high = bars.count
+            while low < high {
+                let mid = (low + high) / 2
+                if barDay(mid) < day { low = mid + 1 } else { high = mid }
             }
-            return min(max(x(i) - barWidth / 2, plot.minX), plot.maxX)
-        }()
+            return min(max(x(low) - barWidth / 2, plot.minX), plot.maxX)
+        }
         func draw(_ line: PriceLine) {
-            let lineY = y(line.price)
+            // A trend line above or below the prices on screen: at the top or bottom edge, thicker, its own price in
+            // its box; normal again once the view reaches it.
+            let pinned = line.pinsToEdge && !(line.price > lo && line.price < hi)
+            let pinnedWidth = max(2.5, line.lineWidth * 4)
+            let lineY = !pinned ? y(line.price)
+                : line.price >= hi ? priceRect.minY + pinnedWidth / 2 : priceRect.maxY - pinnedWidth / 2
             let covered = line.movesAsideForLastPrice && last.map { abs(y($0) - lineY) < tagHeight } == true
             drawLine(in: &ctx, y: lineY, plot: plot, color: line.color, dashed: line.dashed, dotted: line.dotted,
                      tag: line.label.isEmpty ? Fmt.price(line.price, for: chart.symbol) : "\(line.label) \(Fmt.price(line.price, for: chart.symbol))",
                      tagInside: covered || isOrder(line), chartTag: line.chartText, showsTag: line.showsTag,
-                     lineStart: isOrder(line) ? orderLineStart : line.fromDayStart ? dayStart : nil,
-                     progress: line.fillProgress, lineWidth: line.lineWidth)
+                     lineStart: isOrder(line) ? orderLineStart : line.fromDayStart ? dayStart(since: line.since) : nil,
+                     progress: line.fillProgress, lineWidth: pinned ? pinnedWidth : line.lineWidth)
         }
-        let visibleLines = placedLines.filter { $0.price > lo && $0.price < hi }
+        let visibleLines = placedLines.filter { $0.price > lo && $0.price < hi || $0.pinsToEdge }
         visibleLines.filter { !$0.movesAsideForLastPrice && !isOrder($0) }.forEach(draw)
 
         // Last price: color, dashes and whether the line shows (the box always does) from Settings.

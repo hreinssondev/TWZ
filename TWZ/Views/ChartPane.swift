@@ -576,7 +576,19 @@ struct ChartOutline: View {
         return workspace.stockColors[chart.symbol]?.color
     }
 
-    var body: some View { outline }
+    var body: some View {
+        outline.overlay {
+            // Its stock's alarm went off: a white edge pulsing until one of its charts is selected.
+            if !chart.symbol.isEmpty, workspace.firedAlerts.contains(chart.symbol) {
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(Color.white, lineWidth: outlineWidth * SelectedOutline.selectedMultiple)
+                    .phaseAnimator([false, true]) { pulse, bright in
+                        pulse.opacity(bright ? 1 : 0.15)
+                    } animation: { _ in .easeInOut(duration: 0.6) }
+                    .allowsHitTesting(false)
+            }
+        }
+    }
 
     /// The thick selection outline (fainter on another chart of the same stock), else the plain border.
     /// A stock with a color is outlined in it instead: as thick while selected, a third of that otherwise.
@@ -883,10 +895,12 @@ struct TradingChart: View {
     private var priceLines: [PriceLine] {
         var lines: [PriceLine] = []
         // Trend lines (⌘⇧-click) first, under the rest; a double-click on one removes it.
+        let placed = workspace.trendLinePlaced(chart.symbol)
         for (index, price) in (workspace.trendLines[chart.symbol] ?? []).enumerated() {
             lines.append(PriceLine(price: price, color: trendColor, label: "", dashed: trendDashed,
                                    dotted: trendDashed && trendDots, orderId: TrendLines.lineId(index),
-                                   drawnAcross: true, fromDayStart: true, lineWidth: trendWidth, showsTag: trendPriceBox))
+                                   drawnAcross: true, fromDayStart: true, since: index < placed.count ? placed[index] : nil,
+                                   pinsToEdge: true, lineWidth: trendWidth, showsTag: trendPriceBox))
         }
         if let trip = shownTrip {
             // Shown from the Round trips tab: small dots, green at the average entry (unknown for shares

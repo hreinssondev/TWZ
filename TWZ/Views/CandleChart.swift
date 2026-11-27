@@ -67,6 +67,10 @@ struct PriceLine {
     /// With `drawnAcross`, on intraday charts only from where today starts (the line where the previous day ends)
     /// to the axis (a trend line).
     var fromDayStart = false
+    /// With `fromDayStart`: from the start of this time's day instead of today's (when a trend line was placed).
+    var since: Date?
+    /// Off the prices on screen: drawn at the top or bottom edge, thicker, instead of not at all (a trend line).
+    var pinsToEdge = false
     var lineWidth: CGFloat = 1
     /// Off: just the line, no price box.
     var showsTag = true
