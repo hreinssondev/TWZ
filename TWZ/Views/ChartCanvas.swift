@@ -225,6 +225,24 @@ final class ChartSettings {
         var labelSpacing: Double
         var lastPriceOpacity: Double
         var rightPaddingBars: Double
+        /// Each Charts window's own axis text (see `ChartsAxisText`), by window number; unset ones go by Settings.
+        var windowAxis: [Int: ChartsAxisText.Look]
+        /// Set by `forWindow`: the axis labels' size and brightness (nil: `axisFontSize`, Settings' color).
+        var axisLabelSize: Double?
+        var axisLabelBrightness: Double?
+
+        /// As a chart in window `window` draws: a Charts window's own axis text, its label spacing included.
+        func forWindow(_ window: Int) -> Values {
+            guard let look = windowAxis[window] else { return self }
+            var values = self
+            values.axisLabelSize = look.size
+            values.axisLabelBrightness = look.brightness
+            if let spacing = look.spacing { values.labelSpacing = spacing }
+            return values
+        }
+
+        /// The size the price axis is widened for: the price boxes' and the labels'.
+        var axisWidthFontSize: Double { max(axisFontSize, axisLabelSize ?? 0) }
 
         static func read() -> Values {
             let d = UserDefaults.standard
@@ -252,7 +270,12 @@ final class ChartSettings {
                 axisFontSize: double(PriceAxis.fontSizeKey, PriceAxis.defaultFontSize),
                 labelSpacing: double(PriceAxis.labelSpacingKey, PriceAxis.defaultLabelSpacing),
                 lastPriceOpacity: double(PriceAxis.lastPriceOpacityKey, PriceAxis.defaultLastPriceOpacity),
-                rightPaddingBars: double(RightSpace.key, RightSpace.defaultBars))
+                rightPaddingBars: double(RightSpace.key, RightSpace.defaultBars),
+                windowAxis: Dictionary(uniqueKeysWithValues: ChartsWin.allCases.map { win in
+                    (win.rawValue, ChartsAxisText.Look(brightness: d.object(forKey: win.key(ChartsAxisText.brightnessKey)) as? Double,
+                                                       size: d.object(forKey: win.key(ChartsAxisText.sizeKey)) as? Double,
+                                                       spacing: d.object(forKey: win.key(ChartsAxisText.spacingKey)) as? Double))
+                }))
         }
     }
 

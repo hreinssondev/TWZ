@@ -231,7 +231,10 @@ struct CandleChart: View {
     private var showTrades: Bool { ChartSettings.shared.values.showTrades }
     private var indicatorWidth: Double { ChartSettings.shared.values.indicatorWidth }
     private var axisFontSize: Double { ChartSettings.shared.values.axisFontSize }
-    private var labelSpacing: Double { ChartSettings.shared.values.labelSpacing }
+    /// This chart's window's own axis text (see `ChartsAxisText`).
+    private var windowValues: ChartSettings.Values { ChartSettings.shared.values.forWindow(chart.windowIndex) }
+    private var labelSpacing: Double { windowValues.labelSpacing }
+    private var axisLabelSize: Double { windowValues.axisLabelSize ?? axisFontSize }
     private var lastPriceOpacity: Double { ChartSettings.shared.values.lastPriceOpacity }
     /// The settings above are read once for every chart (see `ChartSettings`).
     private var rightPaddingBars: Double {
@@ -248,7 +251,7 @@ struct CandleChart: View {
     @State private var tripleClickAt = Date.distantPast
 
     /// Widens with the axis text so larger prices still fit.
-    private var axisWidth: CGFloat { max(58, (axisFontSize * 5.8).rounded()) }
+    private var axisWidth: CGFloat { max(58, (windowValues.axisWidthFontSize * 5.8).rounded()) }
     /// Height of the price boxes on the axis.
     private var tagHeight: CGFloat { axisFontSize + 6 }
     private let timeAxisHeight: CGFloat = 16
@@ -571,7 +574,9 @@ struct CandleChart: View {
         // Grid lines switched off in Settings: drawn clear, the labels stay.
         let gridColor = scene.map { $0.grid.opacity(showGrid ? 0.14 : 0) } ?? Color.primary.opacity(showGrid ? 0.07 : 0)
         // The axis labels' color, for Core Text (see `AxisLabels`).
-        let labelNSColor = scene.map { NSColor($0.label) } ?? AxisLabels.secondary
+        // A Charts window's own brightness (see `ChartsAxisText`): white at that opacity.
+        let labelNSColor = windowValues.axisLabelBrightness.map { NSColor.white.withAlphaComponent($0) }
+            ?? scene.map { NSColor($0.label) } ?? AxisLabels.secondary
         let (up, down) = candleTheme.colors(customUp: customUp, customDown: customDown)
 
         // Session shading, one band per run of bars from the same session.
@@ -631,10 +636,10 @@ struct CandleChart: View {
             priceLabels.append(.init(text: tick.formatted(.number.precision(.fractionLength(decimals))),
                                      point: CGPoint(x: plot.maxX + 6, y: yy), anchor: .leading))
         }
-        AxisLabels.draw(priceLabels, size: axisFontSize, color: labelNSColor, in: ctx)
+        AxisLabels.draw(priceLabels, size: axisLabelSize, color: labelNSColor, in: ctx)
 
         // Vertical grid + time labels, roughly every 90px.
-        let labelEvery = max(1, Int((90 / barWidth).rounded(.up)))
+        let labelEvery = max(1, Int((labelSpacing * 2 / barWidth).rounded(.up)))
         let timeLabelSpan = Double(labelEvery) * (chart.timeframe.barSeconds ?? 86_400)
         var timeLabels: [AxisLabels.Item] = []
         for i in start..<end where i % labelEvery == 0 {
@@ -660,7 +665,7 @@ struct CandleChart: View {
                                         point: CGPoint(x: xx, y: plot.maxY + timeAxisHeight / 2 + 1), anchor: .center))
             }
         }
-        AxisLabels.draw(timeLabels, size: 9, color: labelNSColor, in: plotCtx)
+        AxisLabels.draw(timeLabels, size: min(12, axisLabelSize - 1), color: labelNSColor, in: plotCtx)
 
         // Volume, at Settings' opacity.
         let maxVolume = visible.map(\.volume).max() ?? 0
