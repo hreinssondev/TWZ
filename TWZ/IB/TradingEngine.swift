@@ -1071,8 +1071,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     private func startScan(_ owner: String) {
         guard apiReady, let spec = scanSpecs[owner] else { return }
         // IB has no forex scanner: the Forex list is `ForexPair.listed`, in its fixed order.
-        // The Colored list is the workspace's (see `Workspace.coloredSymbols`).
-        if spec.kind == .colored {
+        // The Colored and Alerts lists are the workspace's (see `Workspace.coloredSymbols`, `alertSymbols`).
+        if spec.kind.isWorkspaceList {
             scans[owner] = ScanResult(symbols: [], updated: Date())
             return
         }
