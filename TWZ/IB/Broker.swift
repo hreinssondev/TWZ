@@ -410,6 +410,20 @@ final class Broker {
         engine.perform { $0.setSelectedChart(id) }
     }
 
+    /// ⌥⇧R: the chart's bars thrown away and loaded fresh from IB, its view back to the default (latest bars,
+    /// default zoom, prices fitted), for a chart gone wrong. Only this chart; nothing else moves.
+    func reloadChart(_ chart: ChartModel) {
+        chart.adjustedByHand = false
+        chart.scrollBack = 0
+        chart.visibleBars = chart.defaultVisibleBars
+        chart.priceShift = 0
+        chart.priceScale = 1
+        chart.pendingEdge = nil
+        guard !chart.symbol.isEmpty else { return }
+        let id = chart.id
+        engine.perform { $0.reloadChart(id) }
+    }
+
     /// Loads the chart's symbol and timeframe. Its bars kept from before,
     /// or another chart's showing them, show at once, fresh ones replacing them when they're in; the
     /// bars it showed are kept (see `BarCache`).

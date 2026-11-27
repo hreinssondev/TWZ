@@ -268,12 +268,14 @@ struct CandleChart: View {
             .onContinuousHover { phase in
                 if case .active(let p) = phase {
                     hover = p
+                    if workspace.hoveredChartID != chart.id { workspace.hoveredChartID = chart.id }
                     onHover?()
                     optionHeld = NSEvent.modifierFlags.contains(.option)
                     controlHeld = NSEvent.modifierFlags.contains(.control)
                     commandHeld = NSEvent.modifierFlags.isSuperset(of: [.command, .shift])
                 } else {
                     hover = nil
+                    if workspace.hoveredChartID == chart.id { workspace.hoveredChartID = nil }
                 }
             }
             .gesture(panGesture(plotWidth: plotWidth, plotHeight: plotRect(size: geo.size).height))

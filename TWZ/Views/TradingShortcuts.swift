@@ -19,7 +19,7 @@
 //  cancels every order in the symbol, stop loss and take profit included (with no chart selected, the last
 //  order placed, as ⌘Z); ⌘⌫ does too, then closes
 //  the whole position at market; both also remove the symbol's ⌃-click what-if, and ⌘⇧⌫ removes just that; ⌘Z, like ⌥Z, cancels the last order placed; ⌥⇧ and a color's letter
-//  (R, G, B, Y, O, P, M, W, K khaki, I pink, N brown, F turquoise, L lime) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
+//  (N red, G, B, Y, O, P, M, W, K khaki, I pink, U brown, F turquoise, L lime) colors the stock (see `StockColor`), ⌥⇧⌫ takes it off.
 //  While typing in a text field, ⌘↩ / ⌘⇧↩ do nothing, ⌘A / ⌘⌫ / ⌘Z stay Select All / delete to the
 //  line's start / Undo, and shortcuts without ⌘, ⌃ or ⌥ (other than F-keys) type.
 //  ⌃⌥⇧1 / 2 / 3 / 4 sells (shorts) a what-if trade (simulated, see `SimTrades.swift`) of $1,000 / $2,000 /
@@ -207,6 +207,18 @@ struct TradingShortcuts: ViewModifier {
                     if inMainWindow, modifiers == [.command, .shift],
                        let kind = ScannerKind.forShortcut(event.charactersIgnoringModifiers?.lowercased() ?? "") {
                         workspace.listShortcut = Workspace.ListShortcut(kind: kind)
+                        return nil
+                    }
+                    // ⌥⇧R, in any window: the chart under the pointer reloads, its view back to the default.
+                    if modifiers == [.option, .shift], event.charactersIgnoringModifiers?.lowercased() == "r" {
+                        if !event.isARepeat {
+                            if let id = workspace.hoveredChartID, let chart = workspace.chart(id: id) {
+                                broker.reloadChart(chart)
+                                if !chart.symbol.isEmpty { broker.say("\(chart.symbol) reloaded") }
+                            } else {
+                                NSSound.beep()
+                            }
+                        }
                         return nil
                     }
                     // ⌥⇧ and a color's letter colors the selected chart's stock; ⌥⇧⌫ takes its color off.
@@ -406,6 +418,9 @@ extension KeyShortcut {
     /// Why this shortcut can't be used, if it's one the app or macOS already uses.
     var reservedFor: String? {
         let k = key.lowercased()
+        if option, shift, !command, !control, k == "r" {
+            return "⌥⇧R reloads the chart under the pointer"
+        }
         if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
             return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off" : "\(display) colors the stock"
         }

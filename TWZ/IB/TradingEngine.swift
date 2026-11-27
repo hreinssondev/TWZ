@@ -1258,6 +1258,13 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return f
     }()
 
+    /// The chart's bars dropped and asked for again from scratch (see `Broker.reloadChart`).
+    func reloadChart(_ id: Int) {
+        guard let c = charts[id], !c.symbol.isEmpty else { return }
+        c.fullHistory = false
+        requestChart(id)
+    }
+
     /// (Re)requests a chart's bars. `keepingBars`: the bars it has stay on screen, not loading,
     /// until the new ones replace them.
     private func requestChart(_ id: Int, keepingBars: Bool = false) {
