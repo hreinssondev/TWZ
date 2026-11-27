@@ -328,10 +328,12 @@ struct TradingShortcuts: ViewModifier {
                     // ChartGrid follows it. Set again too, so a chart whose own switch was changed goes back to it.
                     if modifiers == .option || modifiers == .control,
                        inMainWindow, let timeframe = Timeframe(keyCode: event.keyCode) {
-                        // The Charts window in front: every chart there, as its header's switch.
+                        // The Charts window in front: every chart there, as its header's switch (on the Colored list, not
+                        // the 5m close-ups).
                         if let chartsWin {
                             UserDefaults.standard.set(timeframe.rawValue, forKey: chartsWin.key(SecondaryCharts.timeframeKey))
-                            workspace.setTimeframe(timeframe, of: workspace.chartsWindow(chartsWin).charts, broker: broker)
+                            let window = workspace.chartsWindow(chartsWin)
+                            workspace.setTimeframe(timeframe, of: workspace.gridCharts(window.charts, list: window.list), broker: broker)
                             return nil
                         }
                         UserDefaults.standard.set(timeframe.rawValue, forKey: MainGrid.timeframeKey)
