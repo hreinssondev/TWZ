@@ -76,3 +76,35 @@ struct ChartsAxisTextSliders: View {
         }
     }
 }
+
+/// A Charts window's UI brightness (a slider in its top bar): its top bar, the charts' headers and outlines and the
+/// side panel, darker below 0, brighter above; the charts themselves (candles, lines, axes) as they are. 0: unchanged.
+enum ChartsUIBrightness {
+    static let key = "chartsUIBrightness"
+    static let range = -0.5...0.5
+}
+
+struct ChartsUIBrightnessSlider: View {
+    @AppStorage private var brightness: Double
+
+    init(win: ChartsWin) {
+        _brightness = AppStorage(wrappedValue: 0, win.key(ChartsUIBrightness.key))
+    }
+
+    var body: some View {
+        let shown = Int((brightness * 200).rounded())
+        MiniSlider(label: "UI", valueText: shown > 0 ? "+\(shown)" : "\(shown)",
+                   value: Binding(get: { brightness }, set: { brightness = ($0 * 40).rounded() / 40 }),
+                   range: ChartsUIBrightness.range)
+            .frame(width: 64)
+            .help("This window's top bar, chart headers, outlines and side panel: darker to the left, brighter to the right; 0 as they were. The charts' candles stay as they are. Right-click: 0")
+            .contextMenu { Button("Back to 0") { brightness = 0 } }
+    }
+}
+
+extension View {
+    /// `.brightness(amount)`, but nothing at all at 0, so the UI is exactly as it was there.
+    @ViewBuilder func uiBrightness(_ amount: Double) -> some View {
+        if amount == 0 { self } else { brightness(amount) }
+    }
+}
