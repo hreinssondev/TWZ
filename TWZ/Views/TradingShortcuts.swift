@@ -203,6 +203,21 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
+                    // ⌘ and an arrow key on the Colored list: the selected chart's ticker (else the one under the pointer)
+                    // moves up, down, or to the column left or right (see `Workspace.moveColored`).
+                    if modifiers == .command, [123, 124, 125, 126].contains(event.keyCode), event.window?.attachedSheet == nil,
+                       !(event.window?.firstResponder is NSTextView) {
+                        let rows: Int? = chartsWin.map { workspace.chartsWindow($0).list == .colored ? workspace.chartsWindow($0).gridRows : 0 }
+                            ?? (inMainWindow && workspace.gridScan?.kind == .colored ? workspace.mainRows : nil)
+                        if let rows, rows > 0 {
+                            let ids = [workspace.isChartSelected ? workspace.selectedChartID : nil, workspace.hoveredChartID].compactMap { $0 }
+                                .filter { ChartsWin.of(chartID: $0) == chartsWin }      // this window's
+                            let symbol = ids.lazy.compactMap { workspace.chart(id: $0)?.symbol }.first { workspace.coloredSymbols.contains($0) }
+                            let step = [123: -rows, 124: rows, 125: 1, 126: -1][event.keyCode] ?? 0
+                            if let symbol, workspace.moveColored(symbol, by: step) {} else { NSSound.beep() }
+                            return nil
+                        }
+                    }
                     // ⌘⇧ and a list's letter shows that list and loads it into the chart grid.
                     if inMainWindow, modifiers == [.command, .shift],
                        let kind = ScannerKind.forShortcut(event.charactersIgnoringModifiers?.lowercased() ?? "") {
