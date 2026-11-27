@@ -401,33 +401,9 @@ final class Broker {
 
     func registerCharts(_ charts: [ChartModel]) {
         self.charts = charts
-        var specs: [ChartSpec] = []
-        for chart in charts {
-            let key = BarCache.Key(symbol: chart.symbol, timeframe: chart.timeframe)
-            loadedBars[chart.id] = key
-            var spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe)
-            // At launch, the bars kept on disk (see `BarCache`) show at once and stay behind the fresh ones, older
-            // ones included (see `TradingEngine.checkReady`), so a view zoomed far out doesn't load them again.
-            if chart.bars.isEmpty, !chart.isLoading {
-                let seed = barCache.stored(key)
-                if !seed.isEmpty {
-                    chart.bars = seed
-                    spec.bars = seed
-                    spec.fullHistory = Self.needsFullHistory(seed, key: key)
-                }
-            }
-            specs.append(spec)
-        }
+        for chart in charts { loadedBars[chart.id] = BarCache.Key(symbol: chart.symbol, timeframe: chart.timeframe) }
+        let specs = charts.map { ChartSpec(id: $0.id, symbol: $0.symbol, timeframe: $0.timeframe) }
         engine.perform { $0.registerCharts(specs) }
-    }
-
-    /// Whether a chart starting from bars kept from before (`seed`) asks for the full history rather than the short one.
-    /// Kept from a while ago (from disk, after a relaunch): the full history, so the fresh bars reach back to them and the
-    /// older ones stay (see `TradingEngine.historicalData`). Kept with the overnight session in them (from a full
-    /// history): the full history again, which has it, so it doesn't show and then vanish when the short one comes in.
-    static func needsFullHistory(_ seed: [Bar], key: BarCache.Key) -> Bool {
-        if let newest = seed.last?.time, newest < Date().addingTimeInterval(-6 * 3600) { return true }
-        return key.timeframe.isIntraday && !ForexPair.isForex(key.symbol) && seed.contains { $0.phase == .overnight }
     }
 
     /// These charts get tick-by-tick trades, as does the selected one; the others keep IB's regular bar updates.
@@ -528,7 +504,14 @@ final class Broker {
         }
         chart.isLoading = seed.isEmpty && state == .connected && !chart.symbol.isEmpty
         var spec = ChartSpec(id: chart.id, symbol: chart.symbol, timeframe: chart.timeframe, bars: seed)
-        if Self.needsFullHistory(seed, key: key) { spec.fullHistory = true }
+        // Bars kept from a while ago (from disk, after a relaunch): the full history, so the fresh bars
+        // reach back to them and the older ones stay (see `TradingEngine.historicalData`).
+        if let newest = seed.last?.time, newest < Date().addingTimeInterval(-6 * 3600) { spec.fullHistory = true }
+        // Bars kept with the overnight session in them (from a full history): the full history again, which
+        // has it, so it doesn't show and then vanish when the short one comes in.
+        if key.timeframe.isIntraday, !ForexPair.isForex(key.symbol), seed.contains(where: { $0.phase == .overnight }) {
+            spec.fullHistory = true
+        }
         engine.perform { $0.loadChart(spec, generation: generation) }
     }
 

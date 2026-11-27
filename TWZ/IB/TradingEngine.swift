@@ -567,18 +567,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         syncQuoteSubscriptions()
         watchSessionPhase()
         subscribeUsdNok()
-        // Bars a chart shows already (from before a reconnect, or kept on disk at launch) stay until the fresh ones are
-        // in, and those older than the fresh ones stay in front of them (see `historicalData`), so a view zoomed far
-        // out doesn't load them again. Bars from a while ago (the Mac slept): the full history, to reach back to them.
-        for id in charts.keys.sorted() {
-            guard let c = charts[id], !c.symbol.isEmpty, let newest = c.bars.last?.time else {
-                requestChart(id)
-                continue
-            }
-            c.keepsOlder = true
-            if newest < Date().addingTimeInterval(-6 * 3600) { c.fullHistory = true }
-            requestChart(id, keepingBars: true)
-        }
+        for id in charts.keys.sorted() { requestChart(id) }
         syncTickByTick()
         for owner in scanSpecs.keys { startScan(owner) }
         scheduleRestrictionCheck()
@@ -1213,10 +1202,7 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     func registerCharts(_ specs: [ChartSpec]) {
         for spec in specs where charts[spec.id] == nil {
-            let c = ChartState(spec)
-            // Kept on disk (see `BarCache`): shown until the fresh bars are in (see `checkReady`).
-            c.bars = spec.bars
-            charts[spec.id] = c
+            charts[spec.id] = ChartState(spec)
         }
     }
 
