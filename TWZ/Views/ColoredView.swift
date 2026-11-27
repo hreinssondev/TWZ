@@ -12,7 +12,21 @@
 //  at theirs.
 //
 
-import Foundation
+import SwiftUI
+
+/// The Colored list's top bar button (main window and Charts windows): its charts outlined in their tickers' colors, or
+/// not. Saved; other lists keep their colors either way.
+struct ColoredColorsButton: View {
+    static let hidesKey = "coloredHidesColors"
+    @AppStorage(Self.hidesKey) private var hides = false
+
+    var body: some View {
+        ForexListButton(title: "Colors", lit: !hides,
+                        help: hides ? "Outline the charts here in their tickers' colors again" : "Hide the tickers' colors here (the charts keep them on the other lists)") {
+            hides.toggle()
+        }
+    }
+}
 
 /// A cell of the Colored list's grid: its ticker, as its chart or its 5m close-up.
 struct ColoredCell: Equatable {

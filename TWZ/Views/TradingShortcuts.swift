@@ -241,7 +241,21 @@ struct TradingShortcuts: ViewModifier {
                         let color = StockColor(key: event.charactersIgnoringModifiers?.lowercased() ?? "")
                         if color != nil || event.keyCode == 51 {
                             let symbol = workspace.targetSymbol
-                            if symbol.isEmpty { NSSound.beep() } else { workspace.setColor(color, of: symbol) }
+                            if symbol.isEmpty {
+                                NSSound.beep()
+                            } else if let color, let owner = workspace.stockColors.first(where: { $0.value == color && $0.key != symbol })?.key {
+                                // The color is another ticker's: asks first (↩ moves it here, Esc keeps it there).
+                                DispatchQueue.main.async {
+                                    let alert = NSAlert()
+                                    alert.messageText = "\(color.rawValue.capitalized) is \(owner)'s"
+                                    alert.informativeText = "Give it to \(symbol) instead? ↩ changes it, Esc cancels."
+                                    alert.addButton(withTitle: "Change")
+                                    alert.addButton(withTitle: "Cancel")
+                                    if alert.runModal() == .alertFirstButtonReturn { workspace.setColor(color, of: symbol) }
+                                }
+                            } else {
+                                workspace.setColor(color, of: symbol)
+                            }
                             return nil
                         }
                     }
