@@ -230,6 +230,8 @@ final class ChartSettings {
         /// Set by `forWindow`: the axis labels' size and brightness (nil: `axisFontSize`, Settings' color).
         var axisLabelSize: Double?
         var axisLabelBrightness: Double?
+        /// Set by `forWindow`: a Charts window's UI brightness (see `ChartsUIBrightness`), for its forex day lines.
+        var uiBrightness: Double = 0
 
         /// As a chart in window `window` draws: a Charts window's own axis text, its label spacing included.
         func forWindow(_ window: Int) -> Values {
@@ -239,6 +241,7 @@ final class ChartSettings {
             // The axis follows its text's size: the price boxes on it too, and its width.
             if let size = look.size { values.axisFontSize = size }
             values.axisLabelBrightness = look.brightness
+            values.uiBrightness = look.ui
             if let spacing = look.spacing { values.labelSpacing = spacing }
             return values
         }
@@ -276,7 +279,8 @@ final class ChartSettings {
                 windowAxis: Dictionary(uniqueKeysWithValues: ChartsWin.allCases.map { win in
                     (win.rawValue, ChartsAxisText.Look(brightness: d.object(forKey: win.key(ChartsAxisText.brightnessKey)) as? Double,
                                                        size: d.object(forKey: win.key(ChartsAxisText.sizeKey)) as? Double,
-                                                       spacing: d.object(forKey: win.key(ChartsAxisText.spacingKey)) as? Double))
+                                                       spacing: d.object(forKey: win.key(ChartsAxisText.spacingKey)) as? Double,
+                                                       ui: double(win.key(ChartsUIBrightness.key), 0)))
                 }))
         }
     }

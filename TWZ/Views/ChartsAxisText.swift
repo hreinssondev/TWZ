@@ -23,6 +23,8 @@ enum ChartsAxisText {
         var brightness: Double?
         var size: Double?
         var spacing: Double?
+        /// The window's UI brightness (see `ChartsUIBrightness`), for the forex day lines.
+        var ui: Double = 0
     }
 }
 
