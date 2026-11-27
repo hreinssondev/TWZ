@@ -238,7 +238,11 @@ extension ChartFrame {
                 separators.move(to: CGPoint(x: xx, y: plot.minY))
                 separators.addLine(to: CGPoint(x: xx, y: plot.maxY))
             }
-            plotCtx.stroke(separators, with: .color(scene?.label.opacity(0.3) ?? Color.primary.opacity(0.25)), lineWidth: 0.5)
+            // A Charts window's UI slider fades them, or brightens them toward full (see `ChartsUIBrightness`).
+            let ui = settings.uiBrightness
+            let base = scene == nil ? 0.25 : 0.3
+            let opacity = ui < 0 ? base * (1 + ui) : base + (1 - base) * ui
+            plotCtx.stroke(separators, with: .color(scene?.label.opacity(opacity) ?? Color.primary.opacity(opacity)), lineWidth: 0.5)
         }
 
         // Horizontal grid + price labels.
