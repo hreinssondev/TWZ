@@ -32,8 +32,8 @@ struct ChartViews: Codable {
     struct Key: Hashable, Codable {
         var bars: BarCache.Key
         var inChartsWindow: Bool
-        /// The main grid's list it was left in (see `Workspace.gridListKey`): each list keeps its own.
-        /// nil in the Charts windows, and for views kept before lists kept their own.
+        /// The list it was left in, the main grid's (see `Workspace.gridListKey`) or a Charts window's: each list keeps
+        /// its own. nil for views kept before lists kept their own.
         var list: String?
         /// The second Charts window's (2); nil in the main window and the first Charts window.
         var chartsWindow: Int?

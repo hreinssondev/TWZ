@@ -405,6 +405,7 @@ struct SecondaryChartsView: View {
         }
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .onAppear {
+            broker.chartsWindowLists[win] = state.list.rawValue
             applyZoom()
             workspace.syncChartsWindowScale(to: broker)
             start()
@@ -568,11 +569,15 @@ struct SecondaryChartsView: View {
 
     /// Another list: the charts still in its top N stay, the rest load its stocks; the Colored list's close-ups
     /// go back to the window's timeframe when it's left, and start at the forex charts' zoom when it's picked.
+    /// Each list keeps where its charts were left on each stock and timeframe, and its zoom (see `Broker.leaveChartsWindowList`).
     private func listChanged(from old: ScannerKind, to new: ScannerKind) {
+        broker.leaveChartsWindowList(win, charts: workspace.gridCharts(state.charts, list: old))
+        broker.chartsWindowLists[win] = new.rawValue
         if old == .colored { workspace.leaveColored(state.charts, timeframe: masterTimeframe, broker: broker) }
         if new == .colored { workspace.closeUpZoom = workspace.closeUpStartZoom(fallback: layout == .all ? allZoom : customZoom) }
         coloredOrder = []
         start()
+        broker.adoptChartsWindowList(win, charts: workspace.gridCharts(state.charts, list: new))
     }
 
     /// A row clicked in the side panel's lists: into the selected chart when it's one of this window's, which keeps it
