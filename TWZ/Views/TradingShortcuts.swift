@@ -188,8 +188,17 @@ struct TradingShortcuts: ViewModifier {
                         || workspace.resetShortcut.map({ KeyShortcut(event) == $0 }) == true {
                         if event.window?.firstResponder is NSTextView, modifiers == .shift || KeyShortcut(event).isPlain { return event }
                         if !event.isARepeat {
+                            // On the Colored list, with the pointer over a chart there: only the close-ups, or only the
+                            // other charts, as it's one or the other.
+                            let window = workspace.chartsWindow(chartsWin)
+                            if window.list == .colored, let id = workspace.hoveredChartID, ChartsWin.of(chartID: id) == chartsWin {
+                                window.resetsCloseUps = workspace.closeUpChartIDs.contains(id)
+                            } else {
+                                window.resetsCloseUps = nil
+                            }
+                            let which = window.resetsCloseUps.map { $0 ? "the 5m close-ups" : "the charts (not the close-ups)" } ?? "every chart"
                             workspace.resetChartsWindow(chartsWin)
-                            broker.say("\(chartsWin.name) reset: every chart at the Zoom slider's zoom (symbols you typed stay; the Reset button lets them go)")
+                            broker.say("\(chartsWin.name) reset: \(which) at the Zoom slider's zoom (symbols you typed stay; the Reset button lets them go)")
                         }
                         return nil
                     }
