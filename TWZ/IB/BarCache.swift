@@ -71,11 +71,16 @@ struct BarCache {
     mutating func bars(for key: Key, previous: Key, previousBars: [Bar], live: [Bar]?) -> [Bar] {
         guard key.isKept, previous != key else { return [] }
         if let live, !live.isEmpty { return live }
-        // Not in memory: from disk, as last kept (after a relaunch, say).
-        if series[key] == nil, let disk = store.read(name: key.fileName) { put(disk, for: key) }
-        let kept = series[key]?.bars ?? []
+        let kept = stored(key)
         guard key.timeframe == .m5, previous == Key(symbol: key.symbol, timeframe: .m1), !previousBars.isEmpty else { return kept }
         return Self.fiveMinute(previousBars, after: kept)
+    }
+
+    /// The bars kept for `key`: in memory, or not there, from disk, as last kept (after a relaunch, say).
+    mutating func stored(_ key: Key) -> [Bar] {
+        guard key.isKept else { return [] }
+        if series[key] == nil, let disk = store.read(name: key.fileName) { put(disk, for: key) }
+        return series[key]?.bars ?? []
     }
 
     /// 5m bars made from 1m bars, after the 5m bars `kept` from before them: from the first 5 minutes
