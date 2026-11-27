@@ -297,12 +297,13 @@ struct TradingShortcuts: ViewModifier {
                         }
                         let current = workspace.currentGridView
                         workspace.gridSwitch = (current, target, Date())
-                        if target.timeframe != current.timeframe {
+                        if target.list != current.list {
+                            // The list comes back on its timeframe (see `Workspace.loadList`): the one gone back to.
+                            UserDefaults.standard.set(target.timeframe.rawValue, forKey: MainGrid.listTimeframeKey(target.list))
+                            workspace.listShortcut = Workspace.ListShortcut(kind: target.list)
+                        } else if target.timeframe != current.timeframe {
                             UserDefaults.standard.set(target.timeframe.rawValue, forKey: MainGrid.timeframeKey)
                             workspace.setMainTimeframe(target.timeframe, broker: broker)
-                        }
-                        if target.list != current.list {
-                            workspace.listShortcut = Workspace.ListShortcut(kind: target.list)
                         }
                         broker.say("Back to \(target.list.rawValue), \(target.timeframe.rawValue) (´ again: \(current.list.rawValue), \(current.timeframe.rawValue))")
                         return nil

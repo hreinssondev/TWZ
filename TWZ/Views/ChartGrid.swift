@@ -41,6 +41,8 @@ enum MainGrid {
     static let rowsKey = "mainGridRows"
     static let zoomKey = "mainGridZoom"
     static let timeframeKey = "mainGridTimeframe"
+    /// Each list's own timeframe, as it was left: switching to a list puts it back (see `Workspace.loadList`).
+    static func listTimeframeKey(_ list: ScannerKind) -> String { timeframeKey + "." + list.rawValue }
     static let pinsKey = "mainGridPins"
     static let scanKey = "mainGridScan"
     static let scannerOwner = "main-gainers"
@@ -161,7 +163,11 @@ struct ChartGrid: View {
         }
         .onChange(of: workspace.gridScale(workspace.activeScale)) { workspace.syncGridScale(to: broker) }
         .onChange(of: workspace.manualZoom) { workspace.syncGridScale(to: broker) }
-        .onChange(of: timeframe) { _, new in workspace.setMainTimeframe(new, broker: broker) }
+        .onChange(of: timeframe) { _, new in
+            workspace.setMainTimeframe(new, broker: broker)
+            // The list on screen keeps it (see `MainGrid.listTimeframeKey`).
+            UserDefaults.standard.set(new.rawValue, forKey: MainGrid.listTimeframeKey(workspace.gridScan?.kind ?? .gainers))
+        }
         // The grid left (list or timeframe) is the one ´ goes back to.
         .onChange(of: Workspace.GridView(list: workspace.gridScan?.kind ?? .gainers, timeframe: timeframe)) { old, new in
             workspace.noteGrid(from: old, to: new)
@@ -297,6 +303,13 @@ extension Workspace {
         if pendingFocus?.place.list != Self.listKey(spec) { pendingFocus = nil }
         gridScan = spec
         mainForexShowsRest = false
+        // The list's own timeframe, as it was left; the others keep theirs (see `MainGrid.listTimeframeKey`).
+        var timeframe = timeframe
+        if let own = UserDefaults.standard.string(forKey: MainGrid.listTimeframeKey(spec.kind)).flatMap(Timeframe.init(rawValue:)),
+           own != timeframe {
+            timeframe = own
+            UserDefaults.standard.set(own.rawValue, forKey: MainGrid.timeframeKey)
+        }
         // The list's own views, lit scale and zoom set by hand, before its charts load.
         syncGridScale(to: broker)
         broker.setScanner(spec, owner: MainGrid.scannerOwner)
