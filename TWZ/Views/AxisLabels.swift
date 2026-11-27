@@ -11,7 +11,7 @@ import AppKit
 import CoreText
 import SwiftUI
 
-enum AxisLabels {
+nonisolated enum AxisLabels {
     enum Anchor { case leading, center }
 
     struct Item {
@@ -39,8 +39,10 @@ enum AxisLabels {
         let descent: CGFloat
     }
 
-    private static var lines: [Key: Line] = [:]
-    private static var fonts: [FontKey: NSFont] = [:]
+    /// Charts draw on several threads at once (see `ChartRenderLoop`).
+    nonisolated(unsafe) private static var lines: [Key: Line] = [:]
+    nonisolated(unsafe) private static var fonts: [FontKey: NSFont] = [:]
+    private static let lock = NSLock()
 
     /// SwiftUI's secondary text color in the app's dark windows.
     static let secondary: NSColor = {
@@ -77,12 +79,11 @@ enum AxisLabels {
         func byte(_ x: CGFloat) -> UInt32 { UInt32((min(1, max(0, x)) * 255).rounded()) }
         let colorKey = byte(rgb.redComponent) << 24 | byte(rgb.greenComponent) << 16 | byte(rgb.blueComponent) << 8 | byte(rgb.alphaComponent)
         let key = Key(text: text, size: size, weight: weight.rawValue, color: colorKey)
-        if let cached = lines[key] { return cached }
-        if lines.count > 4_000 { lines.removeAll(keepingCapacity: true) }
+        if let cached = lock.withLock({ lines[key] }) { return cached }
         let fontKey = FontKey(size: size, weight: weight.rawValue)
-        let font = fonts[fontKey] ?? {
+        let font = lock.withLock { fonts[fontKey] } ?? {
             let f = NSFont.monospacedDigitSystemFont(ofSize: size, weight: weight)
-            fonts[fontKey] = f
+            lock.withLock { fonts[fontKey] = f }
             return f
         }()
         let attributed = NSAttributedString(string: text, attributes: [
@@ -93,7 +94,10 @@ enum AxisLabels {
         var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
         let width = CGFloat(CTLineGetTypographicBounds(ct, &ascent, &descent, &leading))
         let made = Line(line: ct, width: width, ascent: ascent, descent: descent)
-        lines[key] = made
+        lock.withLock {
+            if lines.count > 4_000 { lines.removeAll(keepingCapacity: true) }
+            lines[key] = made
+        }
         return made
     }
 }

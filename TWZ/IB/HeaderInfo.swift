@@ -81,9 +81,9 @@ extension Broker {
         return box
     }
 
-    /// Brings every box up to date, assigning only those whose values changed; boxes of stocks no longer
+    /// Brings every box up to date (see `refreshHeaderBoxes`), assigning only those whose values changed; boxes of stocks no longer
     /// charted are dropped (made again when needed).
-    func refreshHeaderBoxes() {
+    func refreshHeaderBoxesNow() {
         guard !headerBoxes.isEmpty else { return }
         let charted = chartedSymbols
         let fillsBySymbol = Dictionary(grouping: fills.values, by: \.symbol)

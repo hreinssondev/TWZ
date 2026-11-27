@@ -10,8 +10,8 @@ import AppKit
 import QuartzCore
 import SwiftUI
 
-/// Counts chart redraws. A frame is every chart drawn in one pass of the main run loop (a zoom of the whole
-/// grid redraws them all together); it ends once the pass is over. Records nothing while the meter is off.
+/// Counts the frames of charts shown (see `ChartRenderLoop`; a zoom of the whole grid draws them all in one).
+/// Records nothing while the meter is off.
 final class FrameMeter {
     static let shared = FrameMeter()
     static let enabledKey = "showFrameMeter"
@@ -21,12 +21,12 @@ final class FrameMeter {
 
     struct Frame {
         let end: CFTimeInterval
-        /// From the first chart's drawing to the last one's: the main thread's time for the frame's charts.
+        /// From copying the frame's charts to showing them, drawn on every core.
         let span: CFTimeInterval
         let charts: Int
     }
 
-    struct Snapshot {
+    struct Snapshot: Equatable {
         var fps = 0
         var averageMs = 0.0
         var slowestMs = 0.0
@@ -39,9 +39,6 @@ final class FrameMeter {
     private(set) var isOn = FrameMeter.enabled
     private var frames: [Frame] = []
     private var inputs: [CFTimeInterval] = []
-    private var frameStart: CFTimeInterval?
-    private var lastEnd: CFTimeInterval = 0
-    private var chartsInFrame = 0
 
     private init() {
         NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -53,35 +50,18 @@ final class FrameMeter {
         }
     }
 
-    /// At the start of a chart's drawing: its start time, nil while the meter is off.
-    func chartBegan() -> CFTimeInterval? {
-        guard isOn else { return nil }
+    /// A frame shown: `span` from copying its charts to showing them, drawn on every core (see `ChartRenderLoop`).
+    func record(span: CFTimeInterval, charts: Int) {
+        guard isOn else { return }
         let now = CACurrentMediaTime()
-        if frameStart == nil {
-            frameStart = now
-            DispatchQueue.main.async { self.closeFrame() }
-        }
-        return now
-    }
-
-    func chartEnded(_ start: CFTimeInterval?) {
-        guard start != nil else { return }
-        lastEnd = CACurrentMediaTime()
-        chartsInFrame += 1
+        frames.append(Frame(end: now, span: span, charts: charts))
+        prune(now: now)
     }
 
     /// A scroll, swipe, pinch or drag step.
     func input() {
         guard isOn else { return }
         inputs.append(CACurrentMediaTime())
-    }
-
-    private func closeFrame() {
-        guard let start = frameStart else { return }
-        frames.append(Frame(end: lastEnd, span: max(0, lastEnd - start), charts: chartsInFrame))
-        frameStart = nil
-        chartsInFrame = 0
-        prune(now: CACurrentMediaTime())
     }
 
     private func prune(now: CFTimeInterval) {
@@ -110,24 +90,31 @@ final class FrameMeter {
 struct FrameMeterBadge: View {
     @AppStorage(FrameMeter.enabledKey) private var on = FrameMeter.defaultOn
     @State private var screenHz = NSScreen.main?.maximumFramesPerSecond ?? 60
+    @State private var s = FrameMeter.Snapshot()
 
     var body: some View {
         if on {
-            TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-                let s = FrameMeter.shared.snapshot(refreshRate: screenHz)
-                let budget = 1000 / Double(max(1, screenHz))
-                Text("\(s.fps)")
-                    .foregroundStyle(s.fps >= screenHz - 5 ? Color.green : s.fps >= screenHz / 2 ? Color.yellow : Color.primary.opacity(0.8))
+            let budget = 1000 / Double(max(1, screenHz))
+            Text("\(s.fps)")
+                .foregroundStyle(s.fps >= screenHz - 5 ? Color.green : s.fps >= screenHz / 2 ? Color.yellow : Color.primary.opacity(0.8))
                 .font(.system(size: 10).monospacedDigit())
                 .offset(y: 1)
                 .fixedSize()
                 .help("Frame meter (Settings › Appearance › Performance), the last second: chart frames per second / the screen's refresh rate; "
-                      + "the main thread's time to draw a frame's charts, average / slowest (orange: over one refresh's \(ms(budget)) ms"
-                      + (s.overBudget > 0 ? ", \(s.overBudget) frames over" : "") + "; \(s.charts) charts a frame); "
+                      + "the time to draw a frame's charts (on every core), average / slowest (over one refresh's \(ms(budget)) ms"
+                      + (s.overBudget > 0 ? ": \(s.overBudget) frames" : "") + "; \(s.charts) charts a frame); "
                       + "scroll, swipe, pinch and drag events per second. Zoom or pan to read it.\n\n"
                       + "Last second: \(s.fps) / \(screenHz) fps, \(ms(s.averageMs)) / \(ms(s.slowestMs)) ms drawing, \(s.inputPerSecond) input events/s.")
                 .background(ScreenRate(hz: $screenHz))
-            }
+                // Read twice a second by a plain timer: a TimelineView kept SwiftUI updating both windows at every
+                // refresh of the screen, which took more of the main thread than anything else.
+                .task {
+                    while !Task.isCancelled {
+                        let new = FrameMeter.shared.snapshot(refreshRate: screenHz)
+                        if new != s { s = new }
+                        try? await Task.sleep(for: .milliseconds(500))
+                    }
+                }
         }
     }
 

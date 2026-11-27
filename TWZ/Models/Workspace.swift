@@ -16,7 +16,12 @@ final class ChartModel: Identifiable {
     /// Switching keeps the view, only the candles change (as much time on screen, the right edge at the
     /// same time), or with Settings' Keep the view off, goes to the timeframe's own (see `Broker.loadChart`).
     var timeframe: Timeframe
-    var bars: [Bar] = []
+    var bars: [Bar] = [] {
+        didSet { if hasBars == bars.isEmpty { hasBars = !bars.isEmpty } }
+    }
+    /// Whether there are bars: changes far less often than `bars`, for views that only need this (a view reading
+    /// `bars` updates with every live bar).
+    private(set) var hasBars = false
     var isLoading = false
     var error: String?
 

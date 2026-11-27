@@ -762,7 +762,7 @@ struct TradingChart: View {
         // A trip shown from the Round trips tab, or an order's fills from the Orders list, scrolls into
         // view once the chart has bars.
         .onChange(of: TripReveal(tripId: shownTrip?.id, orderFillIds: workspace.shownOrderFills[chart.symbol],
-                                 hasBars: !chart.bars.isEmpty), initial: true) {
+                                 hasBars: chart.hasBars), initial: true) {
             if let shownTrip {
                 reveal(from: shownTrip.start, to: shownTrip.lastFill)
             } else if let first = shownOrderFills.map(\.time).min(), let last = shownOrderFills.map(\.time).max() {

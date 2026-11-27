@@ -51,6 +51,18 @@ final class Broker {
     /// doesn't redraw every view that shows some other symbol's quote.
     @ObservationIgnored private(set) var quotes: [String: Quote] = [:]
     @ObservationIgnored private var quoteBoxes: [String: QuoteBox] = [:]
+    /// The charts' quotes: every snapshot's, while `quoteBoxes` (what SwiftUI shows) follow at `uiRefreshInterval`.
+    @ObservationIgnored private var liveQuoteBoxes: [String: QuoteBox] = [:]
+    /// What SwiftUI shows from the live feed (quotes, the chart headers) is brought up to date at most this often:
+    /// each update is a pass over every view in every window, and prices stream up to 120 times a second, which
+    /// left the main thread too little time to move the charts at the screen's rate. The charts follow every
+    /// price on their own (see `liveQuote`, `ChartRenderLoop`); orders, fills and positions aren't held back.
+    static let uiRefreshInterval: TimeInterval = 1.0 / 15
+    @ObservationIgnored private var pacedRefreshPending = false
+    @ObservationIgnored private var lastPacedRefresh: TimeInterval = 0
+    @ObservationIgnored private var headerBoxesStale = false
+    /// The latest status's account values, applied at the next paced refresh (see `uiRefreshInterval`).
+    @ObservationIgnored private var pendingAccount: EngineSnapshot.Status?
     /// Symbols IB refused real-time data for this session, with IB's reason.
     private(set) var unavailableQuotes: [String: String] = [:]
     /// Headlines from IB's free providers, newest first, by feed: a stock's symbol, or `News.allFeed`.
@@ -744,12 +756,57 @@ final class Broker {
         return TradingEngine.protectiveFillsNow(positions[symbol], last: quotes[symbol]?.last, kind: kind, at: price)
     }
 
-    /// One symbol's quote; a view reading it is redrawn only when that symbol's quote changes.
+    /// One symbol's quote; a view reading it is redrawn only when that symbol's quote changes, at most
+    /// `uiRefreshInterval` apart.
     func quote(_ symbol: String) -> Quote? {
         if let box = quoteBoxes[symbol] { return box.quote }
         let box = QuoteBox(quote: quotes[symbol])
         quoteBoxes[symbol] = box
         return box.quote
+    }
+
+    /// One symbol's quote as of the latest snapshot, for the charts (they redraw on their own, not through SwiftUI).
+    func liveQuote(_ symbol: String) -> Quote? {
+        if let box = liveQuoteBoxes[symbol] { return box.quote }
+        let box = QuoteBox(quote: quotes[symbol])
+        liveQuoteBoxes[symbol] = box
+        return box.quote
+    }
+
+    /// The chart headers' values brought up to date, at most `uiRefreshInterval` apart.
+    func refreshHeaderBoxes() {
+        headerBoxesStale = true
+        schedulePacedRefresh()
+    }
+
+    private func schedulePacedRefresh() {
+        guard !pacedRefreshPending else { return }
+        pacedRefreshPending = true
+        let wait = max(0, lastPacedRefresh + Self.uiRefreshInterval - ProcessInfo.processInfo.systemUptime)
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pacedRefreshPending = false
+                self.lastPacedRefresh = ProcessInfo.processInfo.systemUptime
+                if let st = self.pendingAccount {
+                    self.pendingAccount = nil
+                    self.update(\.netLiquidation, st.netLiquidation)
+                    self.update(\.grossPositionValue, st.grossPositionValue)
+                    self.update(\.margin, st.margin)
+                    self.update(\.dailyPnL, st.dailyPnL)
+                    self.update(\.unrealizedPnL, st.unrealizedPnL)
+                    self.update(\.realizedPnL, st.realizedPnL)
+                    self.update(\.usdNok, st.usdNok)
+                    self.update(\.usdNokIsLive, st.usdNokIsLive)
+                    self.headerBoxesStale = true
+                }
+                for (symbol, box) in self.quoteBoxes where box.quote != self.quotes[symbol] { box.quote = self.quotes[symbol] }
+                if self.headerBoxesStale {
+                    self.headerBoxesStale = false
+                    self.refreshHeaderBoxesNow()
+                }
+            }
+        }
     }
 
     /// % change in the last price over the past `recentChangeWindow` (5 minutes). Samples the price
@@ -802,14 +859,9 @@ final class Broker {
             }
             update(\.lastMessage, st.lastMessage)
             update(\.account, st.account)
-            update(\.netLiquidation, st.netLiquidation)
-            update(\.grossPositionValue, st.grossPositionValue)
-            update(\.margin, st.margin)
-            update(\.dailyPnL, st.dailyPnL)
-            update(\.unrealizedPnL, st.unrealizedPnL)
-            update(\.realizedPnL, st.realizedPnL)
-            update(\.usdNok, st.usdNok)
-            update(\.usdNokIsLive, st.usdNokIsLive)
+            // The account's values and USD.NOK (which streams, moving every NOK value shown) at the UI's pace.
+            pendingAccount = st
+            schedulePacedRefresh()
         }
         if let v = s.positions, v != positions {
             positions = v
@@ -821,7 +873,8 @@ final class Broker {
         if let v = s.fills { update(\.fills, v) }
         if let v = s.quotes {
             quotes = v
-            for (symbol, box) in quoteBoxes where box.quote != v[symbol] { box.quote = v[symbol] }
+            for (symbol, box) in liveQuoteBoxes where box.quote != v[symbol] { box.quote = v[symbol] }
+            schedulePacedRefresh()
             if !simPositions.isEmpty { checkSimExits() }
         }
         if let v = s.unavailableQuotes { update(\.unavailableQuotes, v) }

@@ -2,11 +2,8 @@
 //  ChartCanvas.swift
 //  TWZ
 //
-//  The charts drawn by an AppKit view rather than a SwiftUI Canvas. A Canvas redraws through SwiftUI's view update,
-//  which for a full grid zooming on every frame cost about 3 ms a frame on its own, more than the drawing: too much
-//  for a 240 Hz screen (4.2 ms a frame). This view redraws itself as soon as anything it drew from changes (the
-//  chart's zoom and place, its bars, the prices: anything observable it read while drawing), with SwiftUI only
-//  involved when the chart view itself changes (its lines, the hover, settings).
+//  The view a chart is shown in, the painter it's drawn with and the settings it's drawn from. The drawing itself
+//  is done off the main thread, every chart at once (see `ChartRenderer`).
 //
 
 import AppKit
@@ -15,7 +12,7 @@ import SwiftUI
 
 /// What `CandleChart` draws with: the parts of SwiftUI's `GraphicsContext` it uses, on a Core Graphics context.
 /// A copy keeps its own clip, as a `GraphicsContext` does.
-struct ChartPainter {
+nonisolated struct ChartPainter {
     let cg: CGContext
     private var clips: [Path] = []
 
@@ -82,117 +79,127 @@ struct ChartPainter {
 
     /// A SwiftUI color as the app's dark windows show it, in sRGB; converted once each (a conversion looks up the
     /// color's HDR headroom in its color profile every time, which added up over a grid's worth of lines and boxes).
-    private static var colors: [Color: CGColor] = [:]
+    /// Charts draw on several threads at once (see `ChartRenderLoop`).
+    nonisolated(unsafe) private static var colors: [Color: CGColor] = [:]
+    private static let colorsLock = NSLock()
 
     private static func cgColor(_ color: Color) -> CGColor {
-        if let cached = colors[color] { return cached }
-        if colors.count > 1_000 { colors.removeAll(keepingCapacity: true) }
+        if let cached = colorsLock.withLock({ colors[color] }) { return cached }
         let ns = NSColor(color)
         let made = ns.usingColorSpace(.sRGB)?.cgColor ?? ns.cgColor
-        colors[color] = made
+        colorsLock.withLock {
+            if colors.count > 1_000 { colors.removeAll(keepingCapacity: true) }
+            colors[color] = made
+        }
         return made
     }
 }
 
-/// The AppKit view a chart draws into (see `CandleChart`). It takes no clicks: SwiftUI's gestures over it do.
+/// The AppKit view a chart is shown in (see `CandleChart`). It takes no clicks: SwiftUI's gestures over it do.
 struct ChartCanvas: NSViewRepresentable {
-    let draw: (inout ChartPainter, CGSize) -> Void
+    /// The chart's frame at this size, copied on the main thread (see `ChartFrame`).
+    let frame: (CGSize) -> ChartFrame?
 
     func makeNSView(context: Context) -> ChartCanvasView { ChartCanvasView() }
 
     func updateNSView(_ view: ChartCanvasView, context: Context) {
-        view.drawChart = draw
-        view.needsDisplay = true
+        view.makeFrame = frame
+        view.setNeedsRender()
     }
 }
 
+/// Shows a chart drawn by its window's `ChartRenderLoop`: its layer's contents are the last surface drawn. It
+/// draws again as soon as anything it drew from changes (the chart's zoom and place, its bars, the prices: anything
+/// observable read while copying its frame), with SwiftUI only involved when the chart view itself changes (its
+/// lines, the hover, settings).
 final class ChartCanvasView: NSView {
-    var drawChart: ((inout ChartPainter, CGSize) -> Void)? {
-        get { chartLayer.drawChart }
-        set { chartLayer.drawChart = newValue }
-    }
-    private let chartLayer = ChartLayer()
+    var makeFrame: ((CGSize) -> ChartFrame?)?
+    /// Up to three: one shown, one drawing, one spare for when the window server still holds the one shown before.
+    private var surfaces: [ChartSurface] = []
+    private var shown: ChartSurface?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        // Hosts a plain layer (set before `wantsLayer`): unlike a view's own layer it draws off the main thread and in
-        // 8-bit color as asked (see `ChartLayer`).
-        layer = chartLayer
+        layer = CALayer()
         wantsLayer = true
+        layer?.isOpaque = false
+        layer?.contentsGravity = .topLeft
+        layer?.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() {}
 
-    override var needsDisplay: Bool {
-        get { super.needsDisplay }
-        set {
-            super.needsDisplay = newValue
-            if newValue { chartLayer.setNeedsDisplay() }
-        }
+    func setNeedsRender() {
+        guard let window else { return }
+        ChartRenderLoop.of(window).setNeedsRender(self)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        setNeedsRender()
+    }
+
+    override func viewDidUnhide() {
+        super.viewDidUnhide()
+        setNeedsRender()
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        chartLayer.contentsScale = window?.backingScaleFactor ?? 2
-        chartLayer.setNeedsDisplay()
+        setNeedsRender()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        chartLayer.setNeedsDisplay()
-    }
-}
-
-/// The chart's layer: its drawing recorded on the main thread and rasterized on a background one, into 8-bit color
-/// (a view's own layer on an HDR-capable screen draws in 16-bit floats, twice the memory to fill).
-final class ChartLayer: CALayer {
-    var drawChart: ((inout ChartPainter, CGSize) -> Void)?
-    private static let dark = NSAppearance(named: .darkAqua)
-
-    override init() {
-        super.init()
-        drawsAsynchronously = true
-        contentsFormat = .RGBA8Uint
-        isOpaque = false
-        needsDisplayOnBoundsChange = true
-        contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+        setNeedsRender()
     }
 
-    override init(layer: Any) { super.init(layer: layer) }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    /// No fades: new contents and sizes show at once.
-    override func action(forKey event: String) -> (any CAAction)? { NSNull() }
-
-    override func draw(in cg: CGContext) {
-        guard let drawChart else { return }
-        let started = FrameMeter.shared.chartBegan()
+    /// At the render loop's tick: this chart's frame copied, with a surface to draw it into; nil while there's
+    /// nothing to show (out of a window, hidden, no size) or no surface free yet (then it tries again next tick).
+    func prepareRender() -> ChartRenderJob? {
+        guard let window, let makeFrame, !isHiddenOrHasHiddenAncestor else { return nil }
         let size = bounds.size
-        // The chart draws top-down. Hosted by a flipped view the layer is flipped already (its context runs top-down);
-        // otherwise a layer's context runs bottom-up.
-        if !contentsAreFlipped() {
-            cg.translateBy(x: 0, y: size.height)
-            cg.scaleBy(x: 1, y: -1)
+        let scale = window.backingScaleFactor
+        let width = Int((size.width * scale).rounded(.up)), height = Int((size.height * scale).rounded(.up))
+        guard width > 0, height > 0 else { return nil }
+        if surfaces.first.map({ $0.pixelWidth != width || $0.pixelHeight != height }) == true {
+            surfaces.removeAll { $0 !== shown && !$0.busy }
         }
-        // Anything observable read while drawing (the chart's zoom, place and bars, prices, fills, settings) redraws
-        // it on change.
+        let target = surfaces.first { $0 !== shown && !$0.busy && !$0.surface.isInUse
+                                      && $0.pixelWidth == width && $0.pixelHeight == height }
+            ?? (surfaces.count < 3 ? ChartSurface(pixelWidth: width, pixelHeight: height).map { surfaces.append($0); return $0 } : nil)
+        guard let target else {
+            DispatchQueue.main.async { [weak self] in self?.setNeedsRender() }
+            return nil
+        }
+        // Anything observable read while copying (the chart's zoom, place and bars, prices, fills, settings) draws it
+        // again on change.
+        var frame: ChartFrame?
         withObservationTracking {
-            let draw = {
-                var painter = ChartPainter(cg)
-                drawChart(&painter, size)
-            }
-            if let dark = Self.dark { dark.performAsCurrentDrawingAppearance(draw) } else { draw() }
+            frame = makeFrame(size)
         } onChange: { [weak self] in
             if Thread.isMainThread {
-                MainActor.assumeIsolated { self?.setNeedsDisplay() }
+                MainActor.assumeIsolated { self?.setNeedsRender() }
             } else {
-                DispatchQueue.main.async { self?.setNeedsDisplay() }
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.setNeedsRender() } }
             }
         }
-        FrameMeter.shared.chartEnded(started)
+        guard let frame else { return nil }
+        target.busy = true
+        guard let layer else { return nil }
+        return ChartRenderJob(frame: frame, size: size, scale: scale, target: target, layer: layer)
+    }
+
+    /// The job's surface shown (by the render loop, from its thread).
+    func presented(_ job: ChartRenderJob) {
+        job.target.busy = false
+        shown = job.target
+        surfaces.removeAll { $0 !== shown && !$0.busy && ($0.pixelWidth != job.target.pixelWidth || $0.pixelHeight != job.target.pixelHeight) }
     }
 }
 
