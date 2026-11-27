@@ -224,8 +224,8 @@ struct TradingShortcuts: ViewModifier {
                         workspace.listShortcut = Workspace.ListShortcut(kind: kind)
                         return nil
                     }
-                    // ⌥⇧R, in any window: the chart under the pointer reloads, its view back to the default.
-                    if modifiers == [.option, .shift], event.charactersIgnoringModifiers?.lowercased() == "r" {
+                    // ⌥⇧⌘R, in any window: the chart under the pointer reloads, its view back to the default.
+                    if modifiers == [.option, .shift, .command], event.charactersIgnoringModifiers?.lowercased() == "r" {
                         if !event.isARepeat {
                             if let id = workspace.hoveredChartID, let chart = workspace.chart(id: id) {
                                 broker.reloadChart(chart)
@@ -245,6 +245,18 @@ struct TradingShortcuts: ViewModifier {
                                 NSSound.beep()
                             } else {
                                 broker.say("\(chart.symbol): alarm taken off, out of the Alerts list")
+                            }
+                        }
+                        return nil
+                    }
+                    // ⌥⇧R: the selected chart's stock red (the color any number of stocks can have), or its red off again.
+                    if modifiers == [.option, .shift], inMainWindow, event.charactersIgnoringModifiers?.lowercased() == "r" {
+                        if !event.isARepeat {
+                            let symbol = workspace.targetSymbol
+                            if symbol.isEmpty {
+                                NSSound.beep()
+                            } else {
+                                workspace.setColor(workspace.stockColors[symbol] == .red ? nil : .red, of: symbol)
                             }
                         }
                         return nil
@@ -463,7 +475,10 @@ extension KeyShortcut {
     var reservedFor: String? {
         let k = key.lowercased()
         if option, shift, !command, !control, k == "r" {
-            return "⌥⇧R reloads the chart under the pointer"
+            return "⌥⇧R makes the stock red, or takes its red off"
+        }
+        if option, shift, command, !control, k == "r" {
+            return "⌥⇧⌘R reloads the chart under the pointer"
         }
         if option, shift, !command, !control, keyCode == 51 || StockColor(key: k) != nil {
             return keyCode == 51 ? "⌥⇧⌫ takes the stock's color off (on the Alerts list, its alarm)" : "\(display) colors the stock"
