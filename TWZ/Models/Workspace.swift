@@ -171,7 +171,7 @@ final class Workspace {
     /// The Colored list's 5m close-up charts, in any window (see `ColoredLayout`), and the zoom they're at.
     @ObservationIgnored var closeUpChartIDs: Set<Int> = []
     @ObservationIgnored var closeUpZoom: Double?
-    /// The chart under the pointer, in any window (see `CandleChart`); ⌥⇧R reloads it (see `reloadChart`).
+    /// The chart under the pointer, in any window (see `CandleChart`); ⌥⇧⌘R reloads it (see `reloadChart`).
     @ObservationIgnored var hoveredChartID: Int?
 
     var hotkeys: [Hotkey] { didSet { save() } }

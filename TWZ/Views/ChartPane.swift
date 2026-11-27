@@ -578,8 +578,8 @@ struct ChartOutline: View {
         outline.overlay {
             // Its stock's alarm went off: a white edge pulsing until one of its charts is selected.
             if !chart.symbol.isEmpty, workspace.firedAlerts.contains(chart.symbol) {
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(Color.white, lineWidth: outlineWidth * SelectedOutline.selectedMultiple)
+                ChartEdges(sides: outlineWidth * SelectedOutline.selectedMultiple, topBottomShare: topBottomShare)
+                    .fill(Color.white, style: FillStyle(eoFill: true))
                     .phaseAnimator([false, true]) { pulse, bright in
                         pulse.opacity(bright ? 1 : 0.15)
                     } animation: { _ in .easeInOut(duration: 0.6) }
@@ -604,9 +604,28 @@ struct ChartOutline: View {
         } else {
             (color, width) = (Color.primary.opacity(0.12), 1)
         }
-        return RoundedRectangle(cornerRadius: 4)
-            .strokeBorder(color, lineWidth: width)
+        return ChartEdges(sides: width, topBottomShare: topBottomShare)
+            .fill(color, style: FillStyle(eoFill: true))
             .allowsHitTesting(false)
+    }
+
+    /// In the Charts windows the top and bottom edges are half as thick as the left and right ones.
+    private var topBottomShare: Double { chart.inChartsWindow ? 0.5 : 1 }
+}
+
+/// A chart's outline: its left and right edges `sides` thick, its top and bottom `topBottomShare` of that, the
+/// corners rounded.
+struct ChartEdges: Shape {
+    var sides: Double
+    var topBottomShare: Double = 1
+    private static let cornerRadius: CGFloat = 4
+
+    func path(in rect: CGRect) -> Path {
+        let dx = CGFloat(sides), dy = CGFloat(sides * topBottomShare)
+        var path = Path(roundedRect: rect, cornerRadius: Self.cornerRadius)
+        path.addRoundedRect(in: rect.insetBy(dx: dx, dy: dy),
+                            cornerSize: CGSize(width: max(0, Self.cornerRadius - dx), height: max(0, Self.cornerRadius - dy)))
+        return path
     }
 }
 

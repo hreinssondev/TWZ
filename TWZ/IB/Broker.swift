@@ -507,7 +507,7 @@ final class Broker {
         engine.perform { $0.setSelectedChart(id) }
     }
 
-    /// ⌥⇧R: the chart's bars thrown away and loaded fresh from IB, its view back to the default (latest bars,
+    /// ⌥⇧⌘R: the chart's bars thrown away and loaded fresh from IB, its view back to the default (latest bars,
     /// default zoom, prices fitted), for a chart gone wrong. Only this chart; nothing else moves.
     func reloadChart(_ chart: ChartModel) {
         chart.adjustedByHand = false
