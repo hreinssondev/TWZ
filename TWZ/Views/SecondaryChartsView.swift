@@ -419,6 +419,9 @@ struct SecondaryChartsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Beside the window controls, where the title bar would be: the account, as in the main window's top bar.
+            ChartsWindowTitleBar()
+                .uiBrightness(uiBrightness)
             header
                 .uiBrightness(uiBrightness)
             Divider()
@@ -440,6 +443,7 @@ struct SecondaryChartsView: View {
                 }
             }
         }
+        .ignoresSafeArea(.container, edges: .top)
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35))
         .onAppear {
             broker.chartsWindowLists[win] = state.list.rawValue
