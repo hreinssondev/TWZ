@@ -382,16 +382,25 @@ extension Workspace {
     /// to all the bars the grid's charts have loaded (older ones load as the view reaches them), never
     /// jumping in from further out. The new zoom, for the Zoom slider.
     func zoomGrid(by factor: Double, from chart: ChartModel, sliderZoom: Double, broker: Broker) -> Double {
-        let shown = mainCells.compactMap(self.chart(id:))
+        let split = gridScan?.kind == .forexActive
+        let shown = zoomSide(of: mainCells.compactMap(self.chart(id:)), from: chart, split: split)
         let base = !GridZoom.resetsAdjusted && chart.adjustedByHand
             ? shown.first { !$0.adjustedByHand && !$0.symbol.isEmpty }?.visibleBars ?? sliderZoom
             : chart.visibleBars
         guard base > 0 else { return sliderZoom }
         let most = shown.map { Double($0.bars.count) }.max() ?? 0
         let zoom = min(max(ChartModel.maxVisibleBars, most, base), max(15, base * factor))
-        setZoom(zoom, of: mainCharts, broker: broker, by: zoom / base)
+        setZoom(zoom, of: zoomSide(of: mainCharts, from: chart, split: split), broker: broker, by: zoom / base)
         if zoom != sliderZoom { swipedGridZoom = zoom }
         return zoom
+    }
+
+    /// The charts a swipe on `chart` zooms: all of `charts`; or on Forex + Active (`split`), the pairs when it shows
+    /// one, else the stocks (a chart showing nothing goes with neither).
+    func zoomSide(of charts: [ChartModel], from chart: ChartModel, split: Bool) -> [ChartModel] {
+        guard split, !chart.symbol.isEmpty else { return charts }
+        let forex = ForexPair.isForex(chart.symbol)
+        return charts.filter { !$0.symbol.isEmpty && ForexPair.isForex($0.symbol) == forex }
     }
 
     /// Tells the broker what main charts loading now go by: the grid's list (each keeps its own views),

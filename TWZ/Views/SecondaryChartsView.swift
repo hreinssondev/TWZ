@@ -185,18 +185,20 @@ extension Workspace {
     }
 
     /// ⇧-, ⌘- or ⌥-swipe on Charts window chart `chart`: every chart there zooms by `factor` from the zoom on
-    /// screen, as `zoomGrid` does for the main charts. The new zoom, for the window's Zoom slider.
+    /// screen, as `zoomGrid` does for the main charts; on Forex + Active, only the pairs or only the stocks,
+    /// as `chart` is one (see `zoomSide`). The new zoom, for the window's Zoom slider.
     func zoomChartsWindow(by factor: Double, from chart: ChartModel, sliderZoom: Double, broker: Broker) -> Double {
         guard let win = ChartsWin.of(chartID: chart.id) else { return sliderZoom }
         let window = chartsWindow(win)
-        let shown = window.charts.filter { !$0.symbol.isEmpty }
+        let charts = zoomSide(of: window.charts, from: chart, split: window.list == .forexActive)
+        let shown = charts.filter { !$0.symbol.isEmpty }
         let base = !GridZoom.resetsAdjusted && chart.adjustedByHand
             ? shown.first { !$0.adjustedByHand }?.visibleBars ?? sliderZoom
             : chart.visibleBars
         guard base > 0 else { return sliderZoom }
         let most = shown.map { Double($0.bars.count) }.max() ?? 0
         let zoom = min(max(ChartModel.maxVisibleBars, most, base), max(15, base * factor))
-        setZoom(zoom, of: window.charts, broker: broker, by: zoom / base)
+        setZoom(zoom, of: charts, broker: broker, by: zoom / base)
         if zoom != sliderZoom { window.swipedZoom = zoom }
         return zoom
     }
