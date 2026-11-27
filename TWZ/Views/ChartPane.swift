@@ -564,12 +564,13 @@ struct ChartOutline: View {
         return colored && showsTarget && ChartsWin.of(chartID: workspace.selectedChartID) == win
     }
 
-    /// Its ticker's color, if it's outlined in it: on the Colored list only the ticker's own chart is, not its
-    /// close-up, and none while the top bar's Colors is off.
+    /// Its ticker's color, if it's outlined in it: none while the top bar's Colors is off; on the Colored list only the
+    /// ticker's own chart is, not its close-up.
     private var mark: Color? {
+        if coloredHidesColors { return nil }
         let win = ChartsWin.of(chartID: chart.id)
         if win.map({ workspace.chartsWindow($0).list == .colored }) ?? (workspace.gridScan?.kind == .colored),
-           coloredHidesColors || workspace.closeUpChartIDs.contains(chart.id) {
+           workspace.closeUpChartIDs.contains(chart.id) {
             return nil
         }
         return workspace.stockColors[chart.symbol]?.color
