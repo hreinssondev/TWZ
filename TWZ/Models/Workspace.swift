@@ -169,6 +169,8 @@ final class Workspace {
     /// False after clicking empty space in the Orders or Positions column: no chart is selected, so
     /// hotkeys and order shortcuts have no symbol to act on until a chart is selected again.
     var isChartSelected = true
+    /// The chart under the pointer, in any window (see `CandleChart`); ⌥⇧R reloads it (see `reloadChart`).
+    @ObservationIgnored var hoveredChartID: Int?
 
     var hotkeys: [Hotkey] { didSet { save() } }
     /// Settings › Order Keys: keyboard shortcuts that send an order without a hotkey button (see `OrderKeys`). Saved.
