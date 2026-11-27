@@ -495,6 +495,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         forexRangeSymbolByReq.removeAll()
         newForexRanges.removeAll()
         newForexRanges1D.removeAll()
+        newForexATR.removeAll()
+        newForexTodayBar.removeAll()
         scans.removeAll()
         fxReq = nil
         detailsSymbolByReq.removeAll()
@@ -582,10 +584,22 @@ nonisolated final class TradingEngine: @unchecked Sendable {
     /// Lists showing the Forex list by each pair's range over its last 5 finished days, (high − low) / low, widest
     /// first. Fetched from IB's daily midpoint bars once per forex day (it ends 17:00 ET) and kept, in the defaults
     /// too, until the next one ends: the order holds all day.
-    /// By owner, the days its order goes by: 5, or 1 (the last finished day alone, the 1D button).
+    /// By owner, the days its order goes by: 5, or 1 (the last finished day alone, the 1D button), or 0 (Vol: today's
+    /// range so far against the pair's ATR, see `forexVolScore`).
     private var forexRangeOwners: [String: Int] = [:]
     private var forexRanges: [String: Double] = [:]
     private var forexRanges1D: [String: Double] = [:]
+    /// Each pair's average true range over its last 14 finished days, as a % of its last close (Vol).
+    private var forexATR: [String: Double] = [:]
+    private var newForexATR: [String: Double] = [:]
+    /// Today's high and low so far as the daily bars had them when fetched, until live quotes widen them (Vol).
+    private var forexTodayBar: [String: (high: Double, low: Double)] = [:]
+    private var newForexTodayBar: [String: (high: Double, low: Double)] = [:]
+    private var forexTodayBarDay = ""
+    private var forexVolRefreshScheduled = false
+    private static let forexATRKey = "forexATR14"
+    private static let forexVolQuoteOwner = "forex-vol"
+    private static let forexATRDays = 14
     /// The forex day `forexRanges` are for (they cover the 5 before it).
     private var forexRangesDay = ""
     private var forexRangesLoaded = false
@@ -604,15 +618,47 @@ nonisolated final class TradingEngine: @unchecked Sendable {
 
     /// A list showing the Forex list asks for it by range (true) over the last `days` finished days (5, or 1), or in
     /// its fixed order.
+    /// `days` 0: by today's range against the ATR (Vol), every pair's quotes streaming meanwhile.
     func setForexByRange(_ on: Bool, days: Int = 5, owner: String) {
         let wanted = on ? days : nil
         guard forexRangeOwners[owner] != wanted else { return }
         forexRangeOwners[owner] = wanted
+        let wantsVol = forexRangeOwners.values.contains(0)
+        if wantsVol != (quoteOwners[Self.forexVolQuoteOwner] != nil) {
+            setQuoteSymbols(wantsVol ? ForexPair.listed : [], owner: Self.forexVolQuoteOwner)
+            if !wantsVol { quoteOwners[Self.forexVolQuoteOwner] = nil }
+        }
         if on {
             requestForexRanges()
             scheduleForexRangeCheck()
         }
+        if wantsVol { scheduleForexVolRefresh() }
         refreshForexScans()
+    }
+
+    /// Vol: today's range so far, (high − low) / low, over the pair's ATR as a % — 1 is an average day's range
+    /// covered already. High and low: the widest of IB's for the day, the daily bar's when fetched and the mid now.
+    private func forexVolScore(_ symbol: String) -> Double? {
+        guard let atr = forexATR[symbol], atr > 0 else { return nil }
+        let q = quotes[symbol]
+        let bar = forexTodayBarDay == Self.forexDayKey() ? forexTodayBar[symbol] : nil
+        let highs = [q?.high, bar?.high, q?.mid].compactMap { $0 }.filter { $0 > 0 }
+        let lows = [q?.low, bar?.low, q?.mid].compactMap { $0 }.filter { $0 > 0 }
+        guard let high = highs.max(), let low = lows.min(), low > 0, high > low else { return nil }
+        return (high - low) / low * 100 / atr
+    }
+
+    /// Every 15 s while a list wants Vol: its order follows today's ranges as they widen.
+    private func scheduleForexVolRefresh() {
+        guard !forexVolRefreshScheduled else { return }
+        forexVolRefreshScheduled = true
+        queue.asyncAfter(deadline: .now() + 15) { [weak self] in
+            guard let self else { return }
+            self.forexVolRefreshScheduled = false
+            guard self.forexRangeOwners.values.contains(0) else { return }
+            self.refreshForexScans()
+            self.scheduleForexVolRefresh()
+        }
     }
 
     /// `ForexPair.listed`, by 5-day (or 1-day) range for an owner asking for that (pairs without one last, in list order).
@@ -621,10 +667,12 @@ nonisolated final class TradingEngine: @unchecked Sendable {
             forexRangesLoaded = true
             forexRanges = defaults.dictionary(forKey: Self.forexRangesKey) as? [String: Double] ?? [:]
             forexRanges1D = defaults.dictionary(forKey: Self.forexRanges1DKey) as? [String: Double] ?? [:]
+            forexATR = defaults.dictionary(forKey: Self.forexATRKey) as? [String: Double] ?? [:]
             forexRangesDay = defaults.string(forKey: Self.forexRangesDayKey) ?? ""
         }
         guard let days = forexRangeOwners[owner] else { return ForexPair.listed }
-        let ranges = days == 1 ? forexRanges1D : forexRanges
+        let ranges = days == 0 ? ForexPair.listed.reduce(into: [String: Double]()) { $0[$1] = forexVolScore($1) }
+            : days == 1 ? forexRanges1D : forexRanges
         guard !ranges.isEmpty else { return ForexPair.listed }
         return ForexPair.listed.enumerated().sorted { a, b in
             switch (ranges[a.element], ranges[b.element]) {
@@ -659,18 +707,24 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         return result
     }
 
-    /// Every listed pair's last two weeks of daily bars, unless this forex day's ranges are in (or on their way).
+    /// Every listed pair's last month of daily bars, unless this forex day's ranges are in (or on their way). Vol
+    /// fetches once more on a day whose ranges came from the defaults, for today's bar so far.
     private func requestForexRanges() {
         _ = forexOrder(for: "")
-        // (The 1-day ranges came in with the 5-day ones from when they were kept too.)
-        guard apiReady, !forexRangeOwners.isEmpty, forexRangesDay != Self.forexDayKey() || forexRanges1D.isEmpty,
+        let today = Self.forexDayKey()
+        // (The 1-day ranges and the ATRs came in with the 5-day ones from when they were kept too.)
+        let wantsToday = forexRangeOwners.values.contains(0) && forexTodayBarDay != today
+        guard apiReady, !forexRangeOwners.isEmpty,
+              forexRangesDay != today || forexRanges1D.isEmpty || forexATR.isEmpty || wantsToday,
               forexRangeSymbolByReq.isEmpty else { return }
         newForexRanges = [:]
         newForexRanges1D = [:]
+        newForexATR = [:]
+        newForexTodayBar = [:]
         for symbol in ForexPair.listed {
             let reqId = makeReqId()
             forexRangeSymbolByReq[reqId] = symbol
-            sendFields([20, reqId] + contract(symbol) + [false, "", "1 day", "2 W", 0, "MIDPOINT", 1, false, ""])
+            sendFields([20, reqId] + contract(symbol) + [false, "", "1 day", "1 M", 0, "MIDPOINT", 1, false, ""])
         }
     }
 
@@ -680,13 +734,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if !newForexRanges.isEmpty {
             forexRanges = newForexRanges
             forexRanges1D = newForexRanges1D
+            forexATR = newForexATR
             forexRangesDay = Self.forexDayKey()
+            forexTodayBar = newForexTodayBar
+            forexTodayBarDay = forexRangesDay
             defaults.set(forexRanges, forKey: Self.forexRangesKey)
             defaults.set(forexRanges1D, forKey: Self.forexRanges1DKey)
+            defaults.set(forexATR, forKey: Self.forexATRKey)
             defaults.set(forexRangesDay, forKey: Self.forexRangesDayKey)
         }
         newForexRanges = [:]
         newForexRanges1D = [:]
+        newForexATR = [:]
+        newForexTodayBar = [:]
         refreshForexScans()
     }
 
@@ -3135,6 +3195,8 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         case 1, 66: q.bid = price > 0 ? price : nil
         case 2, 67: q.ask = price > 0 ? price : nil
         case 4, 68: if price > 0 { q.last = price }
+        case 6, 72: if price > 0, ForexPair.isForex(symbol) { q.high = price } else { return }
+        case 7, 73: if price > 0, ForexPair.isForex(symbol) { q.low = price } else { return }
         case 9, 75: if price > 0 { q.prevClose = price }
         default: return
         }
@@ -3445,10 +3507,19 @@ nonisolated final class TradingEngine: @unchecked Sendable {
         if let symbol = forexRangeSymbolByReq.removeValue(forKey: reqId) {
             // Its last 5 finished forex days (daily bars' dates are "yyyyMMdd", the day each ends at 17:00 ET).
             let today = Self.forexDayKey()
-            let days = stride(from: 5, to: min(f.count - 7, 5 + count * 8), by: 8)
-                .map { (day: String(f[$0].prefix(8)), high: f.double($0 + 2), low: f.double($0 + 3)) }
-                .filter { $0.day < today && $0.low > 0 }
-                .suffix(5)
+            let bars = stride(from: 5, to: min(f.count - 7, 5 + count * 8), by: 8)
+                .map { (day: String(f[$0].prefix(8)), high: f.double($0 + 2), low: f.double($0 + 3), close: f.double($0 + 4)) }
+                .filter { $0.low > 0 }
+            let finished = bars.filter { $0.day < today }
+            if let now = bars.last(where: { $0.day == today }) { newForexTodayBar[symbol] = (now.high, now.low) }
+            // ATR: the average true range (high − low, stretched to the day before's close) of the last 14 days.
+            let trueRanges = zip(finished.dropFirst(), finished).map { day, before in
+                max(day.high, before.close) - min(day.low, before.close)
+            }.suffix(Self.forexATRDays)
+            if trueRanges.count >= 5, let close = finished.last?.close, close > 0 {
+                newForexATR[symbol] = trueRanges.reduce(0, +) / Double(trueRanges.count) / close * 100
+            }
+            let days = finished.suffix(5)
             if let high = days.map(\.high).max(), let low = days.map(\.low).min(), low > 0 {
                 newForexRanges[symbol] = (high - low) / low * 100
             }

@@ -49,6 +49,9 @@ nonisolated struct Quote: Equatable {
     var ask: Double?
     var last: Double?
     var prevClose: Double?
+    /// Today's high and low, as IB's market data has them.
+    var high: Double?
+    var low: Double?
     var volume: Double?
     /// An option's: what IB's option model works out from its price, and how many contracts are open.
     var greeks: OptionGreeks?

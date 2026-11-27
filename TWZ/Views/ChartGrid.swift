@@ -48,8 +48,10 @@ enum MainGrid {
     static let scannerOwner = "main-gainers"
     /// The top bar's 5D with the Forex list in the grid (see `MainForexButtons`).
     static let forexByRangeKey = "mainGridForexByRange"
-    /// The top bar's 1D (one of 5D and 1D at a time).
+    /// The top bar's 1D (one of 5D, 1D and % at a time).
     static let forexByDayKey = "mainGridForexByDay"
+    /// The top bar's %: today's range so far over each pair's ATR.
+    static let forexByVolKey = "mainGridForexByVol"
 
     /// With 3 rows the bottom row holds this many charts, whatever the Cols slider says.
     static let threeRowBottomColumns = 7
@@ -99,6 +101,7 @@ struct ChartGrid: View {
     private var rows: Int { MainGrid.rows(storedRows) }
     @AppStorage(MainGrid.forexByRangeKey) private var forexByRange = false
     @AppStorage(MainGrid.forexByDayKey) private var forexByDay = false
+    @AppStorage(MainGrid.forexByVolKey) private var forexByVol = false
     /// The symbols the grid follows: the top gainers, or the list loaded with a list's load button; the Forex
     /// list's second page (the top bar's 2/2): the pairs past the cells left around those set by hand, less theirs.
     private var gainers: [String] {
@@ -132,7 +135,7 @@ struct ChartGrid: View {
             broker.setScanner(scan, owner: MainGrid.scannerOwner)
             follow()
         }
-        .onChange(of: [forexByRange, forexByDay]) { syncForexRange() }
+        .onChange(of: [forexByRange, forexByDay, forexByVol]) { syncForexRange() }
         // A list's load button, or Reset: the grid's scanner follows.
         .onChange(of: workspace.gridScan) { old, new in
             broker.setScanner(scan, owner: MainGrid.scannerOwner)
@@ -189,9 +192,10 @@ struct ChartGrid: View {
             ? workspace.mainCells : workspace.arrangedMainCells(columns: columns, rows: rows, gainers: gainers)
     }
 
-    /// The engine orders the grid's pairs by 1D's or 5D's range, or neither.
+    /// The engine orders the grid's pairs by 1D's or 5D's range, by %, or none.
     private func syncForexRange() {
-        broker.setForexByRange(forexByRange || forexByDay, days: forexByDay ? 1 : 5, owner: MainGrid.scannerOwner)
+        broker.setForexByRange(forexByRange || forexByDay || forexByVol, days: forexByVol ? 0 : forexByDay ? 1 : 5,
+                               owner: MainGrid.scannerOwner)
     }
 
     private func follow() {
@@ -666,6 +670,7 @@ struct MainForexButtons: View {
     @Environment(Workspace.self) private var workspace
     @AppStorage(MainGrid.forexByRangeKey) private var forexByRange = false
     @AppStorage(MainGrid.forexByDayKey) private var forexByDay = false
+    @AppStorage(MainGrid.forexByVolKey) private var forexByVol = false
 
     var body: some View {
         HStack(spacing: 3) {
@@ -678,13 +683,18 @@ struct MainForexButtons: View {
                             help: forexByDay ? "Back to the Forex list's fixed order"
                                 : "The pairs by their range over the last finished day, (high − low) / low, widest first; set once a day, after 17:00 ET") {
                 forexByDay.toggle()
-                if forexByDay { forexByRange = false }
+                if forexByDay { forexByRange = false; forexByVol = false }
             }
             ForexListButton(title: "5D", lit: forexByRange,
                             help: forexByRange ? "Back to the Forex list's fixed order"
                                 : "The pairs by their range over the last 5 finished days, (high − low) / low, widest first; set once a day, after 17:00 ET") {
                 forexByRange.toggle()
-                if forexByRange { forexByDay = false }
+                if forexByRange { forexByDay = false; forexByVol = false }
+            }
+            ForexListButton(title: "%", lit: forexByVol,
+                            help: forexByVol ? "Back to the Forex list's fixed order" : "The pairs by how much of an average day they've moved today: today's range so far over the pair's 14-day ATR, highest first; follows the day live") {
+                forexByVol.toggle()
+                if forexByVol { forexByDay = false; forexByRange = false }
             }
         }
     }
