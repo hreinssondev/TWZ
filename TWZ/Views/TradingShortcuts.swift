@@ -118,7 +118,8 @@ struct TradingShortcuts: ViewModifier {
                         }
                     }
                     // The extra Reset shortcut (Settings › Order Keys), as ⌘R.
-                    if inMainWindow, let reset = workspace.resetShortcut, KeyShortcut(event) == reset {
+                    // (A Charts window in front is NSApp's main window too: its own Reset keys are below.)
+                    if inMainWindow, ChartsWin.of(event.window) == nil, let reset = workspace.resetShortcut, KeyShortcut(event) == reset {
                         if event.window?.firstResponder is NSTextView, reset.isPlain { return event }
                         if !event.isARepeat { workspace.resetToGainers() }
                         return nil
@@ -164,7 +165,8 @@ struct TradingShortcuts: ViewModifier {
                         return nil
                     }
                     // ⇧R (outside a text field), ⌥R, ⌃R or ⌘⇧R: the top bar's Reset, as ⌘R.
-                    if inMainWindow, modifiers == .shift || modifiers == .option || modifiers == .control || modifiers == [.command, .shift],
+                    if inMainWindow, ChartsWin.of(event.window) == nil,
+                       modifiers == .shift || modifiers == .option || modifiers == .control || modifiers == [.command, .shift],
                        event.charactersIgnoringModifiers?.lowercased() == "r" {
                         if modifiers == .shift, event.window?.firstResponder is NSTextView { return event }
                         workspace.resetToGainers()
@@ -212,8 +214,11 @@ struct TradingShortcuts: ViewModifier {
                                 window.resetsCloseUps = nil
                             }
                             let which = window.resetsCloseUps.map { $0 ? "the 5m close-ups" : "the charts (not the close-ups)" } ?? "every chart"
-                            workspace.resetChartsWindow(chartsWin)
-                            broker.say("\(chartsWin.name) reset: \(which) at the Zoom slider's zoom (symbols you typed stay; the Reset button lets them go)")
+                            // ⌘⇧R is the Reset button: the symbols typed there let go too.
+                            let button = modifiers == [.command, .shift]
+                            workspace.resetChartsWindow(chartsWin, releasingHandSet: button)
+                            broker.say("\(chartsWin.name) reset: \(which) at the Zoom slider's zoom"
+                                       + (button ? ", typed symbols let go" : " (symbols you typed stay; ⌘⇧R or the Reset button lets them go)"))
                         }
                         return nil
                     }
