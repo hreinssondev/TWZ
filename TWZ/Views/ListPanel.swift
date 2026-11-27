@@ -67,7 +67,13 @@ struct ListPanel: View {
         ScanSpec(kind: scanner, filter: workspace.scanFilter(panel: panelId, scanner))
     }
 
-    private var symbols: [String] { scanner == .colored ? workspace.coloredSymbols : broker.scans[panelId]?.symbols ?? [] }
+    private var symbols: [String] {
+        switch scanner {
+        case .colored: workspace.coloredSymbols
+        case .alerts: workspace.alertSymbols
+        default: broker.scans[panelId]?.symbols ?? []
+        }
+    }
     /// Symbols with a fill today.
     private var tradedSymbols: Set<String> { Set(broker.fills.values.map(\.symbol)) }
 
@@ -94,8 +100,8 @@ struct ListPanel: View {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                     }
                     .buttonStyle(.borderless)
-                    .disabled(scanner == .forex || scanner == .colored)
-                    .help(scanner == .forex || scanner == .colored ? "The \(scanner.rawValue) list has no filters" : "Scanner filters")
+                    .disabled(scanner == .forex || scanner.isWorkspaceList)
+                    .help(scanner == .forex || scanner.isWorkspaceList ? "The \(scanner.rawValue) list has no filters" : "Scanner filters")
                     .popover(isPresented: $showFilter, arrowEdge: .bottom) {
                         ScanFilterEditor(filter: workspace.scanFilter(panel: panelId, scanner), defaults: scanner.defaultFilter) { filter in
                             workspace.setScanFilter(filter, panel: panelId, scanner)
@@ -378,7 +384,7 @@ private struct ScanFilterEditor: View {
 
 extension ScannerKind {
     /// ⌘⇧ + a letter shows that list and loads it into the chart grid (see `TradingShortcuts`): S
-    /// Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex, D Forex + Active, C Colored.
+    /// Most Active $, L Top Losers, H AH Gainers, A Top Gainers, F Forex, D Forex + Active, C Colored, X Alerts.
     static func forShortcut(_ key: String) -> ScannerKind? {
         switch key {
         case "s": .dollarVolume
@@ -388,10 +394,11 @@ extension ScannerKind {
         case "f": .forex
         case "d": .forexActive
         case "c": .colored
+        case "x": .alerts
         default: nil
         }
     }
 
-    static let shortcutHelp = "⌘⇧S Most Active $ · ⌘⇧L Top Losers · ⌘⇧H AH Gainers · ⌘⇧A Top Gainers · ⌘⇧F Forex · ⌘⇧D Forex + Active · ⌘⇧C Colored: "
+    static let shortcutHelp = "⌘⇧S Most Active $ · ⌘⇧L Top Losers · ⌘⇧H AH Gainers · ⌘⇧A Top Gainers · ⌘⇧F Forex · ⌘⇧D Forex + Active · ⌘⇧C Colored · ⌘⇧X Alerts: "
         + "shows the list and loads it into the chart grid"
 }

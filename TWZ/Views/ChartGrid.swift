@@ -181,7 +181,7 @@ struct ChartGrid: View {
     }
 
     private func follow() {
-        if workspace.gridScan?.kind == .colored { return workspace.followColored(timeframe: timeframe, broker: broker) }
+        if workspace.gridScan?.kind.isWorkspaceList == true { return workspace.followColored(timeframe: timeframe, broker: broker) }
         workspace.followGainers(gainers, timeframe: timeframe, broker: broker)
     }
 
@@ -306,6 +306,7 @@ extension Workspace {
             closeUpZoom = closeUpStartZoom(fallback: mainCharts.first?.defaultVisibleBars ?? ChartModel.initialVisibleBars)
             return followColored(timeframe: timeframe, broker: broker)
         }
+        if spec.kind == .alerts { return followColored(timeframe: timeframe, broker: broker) }
         followGainers(mainGridSymbols(symbols, kind: spec.kind), timeframe: timeframe, broker: broker)
     }
 
@@ -313,6 +314,7 @@ extension Workspace {
     /// (in the colors' order), then the list's stocks; any other list's rows as they are.
     func mainGridSymbols(_ rows: [String], kind: ScannerKind?) -> [String] {
         if kind == .colored { return coloredSymbols }
+        if kind == .alerts { return alertSymbols }
         guard kind == .forexActive else { return rows }
         let colored = StockColor.allCases.compactMap { color in stockColors.first { $0.value == color }?.key }
         return colored + rows.filter { !ForexPair.isForex($0) && !colored.contains($0) }

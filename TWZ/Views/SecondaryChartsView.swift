@@ -524,6 +524,10 @@ struct SecondaryChartsView: View {
         .onChange(of: workspace.coloredSymbols) {
             if !isPaused, state.list == .colored { syncWithGainers() }
         }
+        // A stock given its first trend line or its last taken off: the Alerts list follows.
+        .onChange(of: workspace.alertSymbols) {
+            if !isPaused, state.list == .alerts { syncWithGainers() }
+        }
         // The height drag sits behind the controls so it never takes a slider's drag; a click there
         // deselects the chart, as a click on empty space in Orders or Positions does.
         .background(
@@ -622,11 +626,9 @@ struct SecondaryChartsView: View {
     private func syncWithGainers() {
         // The Colored list: the tickers given a color, each with its close-up (see `ColoredLayout`); charts set by hand
         // don't keep their cells here.
-        if state.list == .colored {
+        if state.list.isWorkspaceList {
             state.gridRows = rows
-            let symbols = workspace.coloredSymbols
-            let plan = ColoredLayout.plan(forex: symbols.filter(ForexPair.isForex), stocks: symbols.filter { !ForexPair.isForex($0) },
-                                          rowColumns: Array(repeating: columns, count: rows))
+            let plan = workspace.workspacePlan(state.list, rowColumns: Array(repeating: columns, count: rows))
             let ordered = coloredOrder.compactMap { id in state.charts.first { $0.id == id } }
             let charts = ordered + state.charts.filter { !coloredOrder.contains($0.id) }
             coloredOrder = workspace.layOutColored(charts, plan: plan, timeframe: masterTimeframe, broker: broker).map(\.id)
@@ -656,7 +658,7 @@ struct SecondaryChartsView: View {
 
     /// The charts in grid order: one set by hand in its own cell, the others in gainer rank order around them.
     private var items: [ChartModel] {
-        if state.list == .colored, !coloredOrder.isEmpty {
+        if state.list.isWorkspaceList, !coloredOrder.isEmpty {
             return coloredOrder.compactMap { id in state.charts.first { $0.id == id } }
         }
         let pins = state.pins

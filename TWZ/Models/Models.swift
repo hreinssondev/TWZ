@@ -725,7 +725,13 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
     case forexActive = "Forex + Active"
     /// The tickers given a color, each as its chart and a 5m close-up beside it (see `ColoredLayout`). Not an IB scan.
     case colored = "Colored"
+    /// The tickers with trend lines (their alerts, see `TrendAlerts`), the oldest placed first, one chart each, down
+    /// a column then the next (see `Workspace.alertSymbols`). Not an IB scan.
+    case alerts = "Alerts"
     var id: String { rawValue }
+
+    /// The workspace's own lists, laid out by `ColoredLayout` rather than followed in rank order.
+    var isWorkspaceList: Bool { self == .colored || self == .alerts }
 
     /// Charts a Charts window gives Most Active $'s stocks on Forex + Active, of the `slots` following its list:
     /// 9, but half in a grid of 9 or fewer (see `stockCells`).
@@ -751,7 +757,7 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
         case .losers: "TOP_PERC_LOSE"
         case .afterHours: "TOP_AFTER_HOURS_PERC_GAIN"
         case .dollarVolume, .forexActive: "MOST_ACTIVE_USD"
-        case .forex, .colored: ""
+        case .forex, .colored, .alerts: ""
         }
     }
 

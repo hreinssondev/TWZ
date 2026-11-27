@@ -82,7 +82,43 @@ enum ColoredLayout {
     }
 }
 
+extension ColoredLayout {
+    /// The Alerts list's grid: one chart a ticker, in order down a column, then down the next.
+    static func columnPlan(_ symbols: [String], rowColumns: [Int]) -> [ColoredCell?] {
+        let places = rowColumns.indices.flatMap { row in (0..<rowColumns[row]).map { (row: row, column: $0) } }
+        var cells = [ColoredCell?](repeating: nil, count: places.count)
+        var queue = symbols[...]
+        for i in places.indices.sorted(by: { (places[$0].column, places[$0].row) < (places[$1].column, places[$1].row) }) {
+            guard let symbol = queue.popFirst() else { break }
+            cells[i] = ColoredCell(symbol: symbol, closeUp: false)
+        }
+        return cells
+    }
+}
+
 extension Workspace {
+    /// The Alerts list (⌘⇧X): the stocks with trend lines, the oldest placed first; those from before their time
+    /// was kept come first, by symbol.
+    var alertSymbols: [String] {
+        let times = trendLineTimes
+        return trendLines.keys.sorted { a, b in
+            switch (times[a], times[b]) {
+            case let (x?, y?) where x != y: x < y
+            case (nil, _?): true
+            case (_?, nil): false
+            default: a < b
+            }
+        }
+    }
+
+    /// The grid plan of a workspace list (see `ScannerKind.isWorkspaceList`).
+    func workspacePlan(_ kind: ScannerKind, rowColumns: [Int]) -> [ColoredCell?] {
+        if kind == .alerts { return ColoredLayout.columnPlan(alertSymbols, rowColumns: rowColumns) }
+        let symbols = coloredSymbols
+        return ColoredLayout.plan(forex: symbols.filter(ForexPair.isForex), stocks: symbols.filter { !ForexPair.isForex($0) },
+                                  rowColumns: rowColumns)
+    }
+
     /// The tickers given a color, pairs first, each in the colors' order.
     var coloredSymbols: [String] {
         let byColor = StockColor.allCases.compactMap { color in stockColors.first { $0.value == color }?.key }
@@ -172,11 +208,9 @@ extension Workspace {
         list == .colored ? charts.filter { !closeUpChartIDs.contains($0.id) } : charts
     }
 
-    /// The main grid on the Colored list: its cells laid out to the colored tickers (see `ColoredLayout`).
+    /// The main grid on the Colored or Alerts list: its cells laid out to that list (see `ColoredLayout`).
     func followColored(timeframe: Timeframe, broker: Broker) {
-        let symbols = coloredSymbols
-        let plan = ColoredLayout.plan(forex: symbols.filter(ForexPair.isForex), stocks: symbols.filter { !ForexPair.isForex($0) },
-                                      rowColumns: MainGrid.rowColumns(columns: mainColumns, rows: mainRows))
+        let plan = workspacePlan(gridScan?.kind ?? .colored, rowColumns: MainGrid.rowColumns(columns: mainColumns, rows: mainRows))
         let cells = layOutColored(mainCells.compactMap(chart(id:)), plan: plan, timeframe: timeframe, broker: broker).map(\.id)
         if cells != mainCells { mainCells = cells }
     }

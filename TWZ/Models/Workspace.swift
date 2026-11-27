@@ -490,7 +490,18 @@ final class Workspace {
 
     /// Horizontal trend lines' prices by symbol, ⌘⇧-clicked on its charts (see `TrendLines`). Saved.
     var trendLines: [String: [Double]] {
-        didSet { defaults.set(trendLines, forKey: TrendLines.storageKey) }
+        didSet {
+            defaults.set(trendLines, forKey: TrendLines.storageKey)
+            // When each stock got its trend lines, for the Alerts list's order (see `alertSymbols`).
+            var times = trendLineTimes
+            for symbol in trendLines.keys where oldValue[symbol] == nil { times[symbol] = Date().timeIntervalSince1970 }
+            for symbol in times.keys where trendLines[symbol] == nil { times[symbol] = nil }
+            if times != trendLineTimes { trendLineTimes = times }
+        }
+    }
+    /// When each stock with trend lines got its first (seconds since 1970); none for those from before this was kept. Saved.
+    private(set) var trendLineTimes: [String: Double] {
+        didSet { defaults.set(trendLineTimes, forKey: "trendLineTimes") }
     }
 
     /// Gives `symbol` a color, or takes its color off (nil). A color marks one stock: the stock that
@@ -600,6 +611,7 @@ final class Workspace {
         stockColors = (defaults.dictionary(forKey: StockColor.storageKey) as? [String: String] ?? [:])
             .compactMapValues(StockColor.init(rawValue:))
         coloredOrder = defaults.stringArray(forKey: "coloredOrder") ?? []
+        trendLineTimes = defaults.dictionary(forKey: "trendLineTimes") as? [String: Double] ?? [:]
         trendLines = defaults.dictionary(forKey: TrendLines.storageKey) as? [String: [Double]] ?? [:]
 
         layouts = defaults.data(forKey: Layouts.storageKey)
