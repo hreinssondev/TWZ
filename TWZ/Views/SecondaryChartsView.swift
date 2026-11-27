@@ -190,7 +190,7 @@ extension Workspace {
     func zoomChartsWindow(by factor: Double, from chart: ChartModel, sliderZoom: Double, broker: Broker) -> Double {
         guard let win = ChartsWin.of(chartID: chart.id) else { return sliderZoom }
         let window = chartsWindow(win)
-        let charts = zoomSide(of: window.charts, from: chart, split: window.list == .forexActive)
+        let charts = zoomSide(of: window.charts, from: chart, list: window.list)
         let shown = charts.filter { !$0.symbol.isEmpty }
         let base = !GridZoom.resetsAdjusted && chart.adjustedByHand
             ? shown.first { !$0.adjustedByHand }?.visibleBars ?? sliderZoom
@@ -199,6 +199,11 @@ extension Workspace {
         let most = shown.map { Double($0.bars.count) }.max() ?? 0
         let zoom = min(max(ChartModel.maxVisibleBars, most, base), max(15, base * factor))
         setZoom(zoom, of: charts, broker: broker, by: zoom / base)
+        // The Colored list's close-ups zoom apart from the slider.
+        if window.list == .colored, closeUpChartIDs.contains(chart.id) {
+            closeUpZoom = zoom
+            return sliderZoom
+        }
         if zoom != sliderZoom { window.swipedZoom = zoom }
         return zoom
     }
@@ -333,6 +338,8 @@ struct SecondaryChartsView: View {
     private static let gap: CGFloat = 4
 
     @State private var lastGainers: [String] = []
+    /// On the Colored list: the charts' ids in cell order (see `ColoredLayout`).
+    @State private var coloredOrder: [Int] = []
     /// The Forex list's second page: the pairs past those the grid has room for, in its cells instead.
     @State private var showsRest = false
     /// The Forex list by each pair's range over its last 5 finished days, widest first (see `TradingEngine.setForexByRange`).
@@ -402,7 +409,7 @@ struct SecondaryChartsView: View {
             if !isPaused { syncWithGainers() }
         }
         .onChange(of: masterTimeframe) { _, new in
-            workspace.setTimeframe(new, of: state.charts, broker: broker)
+            workspace.setTimeframe(new, of: workspace.gridCharts(state.charts, list: state.list), broker: broker)
         }
         .onChange(of: isPaused) { _, paused in
             if paused { stop() } else { start() }
@@ -418,13 +425,8 @@ struct SecondaryChartsView: View {
             if !isPaused { lastGainers = []; syncWithGainers() }
         }
         // Another list: the charts still in its top N stay, the rest load its stocks.
-        .onChange(of: state.list) {
-            if !isPaused { start() }
-        }
-        .onChange(of: state.resets) {
-            workspace.syncChartsWindowScale(to: broker)
-            workspace.resetViews(of: state.charts, zoom: layout == .all ? allZoom : customZoom, broker: broker)
-        }
+        .onChange(of: state.list) { old, new in listChanged(from: old, to: new) }
+        .onChange(of: state.resets) { reset() }
         .onChange(of: layout) { applyZoom() }
         // A chart layout loaded: its lines (see `GridLayout`).
         .onChange(of: workspace.gridLayoutLoads) {
@@ -512,6 +514,10 @@ struct SecondaryChartsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(height: headerHeight)
+        // A ticker given a color or its color taken off: the Colored list follows.
+        .onChange(of: workspace.coloredSymbols) {
+            if !isPaused, state.list == .colored { syncWithGainers() }
+        }
         // The height drag sits behind the controls so it never takes a slider's drag; a click there
         // deselects the chart, as a click on empty space in Orders or Positions does.
         .background(
@@ -551,6 +557,24 @@ struct SecondaryChartsView: View {
         ForexListButton(title: title, lit: lit, help: help, action: action)
     }
 
+    /// Another list: the charts still in its top N stay, the rest load its stocks; the Colored list's close-ups
+    /// go back to the window's timeframe when it's left, and start at the forex charts' zoom when it's picked.
+    private func listChanged(from old: ScannerKind, to new: ScannerKind) {
+        if old == .colored { workspace.leaveColored(state.charts, timeframe: masterTimeframe, broker: broker) }
+        if new == .colored { workspace.closeUpZoom = workspace.closeUpStartZoom(fallback: layout == .all ? allZoom : customZoom) }
+        coloredOrder = []
+        if !isPaused { start() }
+    }
+
+    /// Reset: every chart back to the Zoom slider's zoom; on the Colored list, the close-ups to theirs.
+    private func reset() {
+        workspace.syncChartsWindowScale(to: broker)
+        workspace.resetViews(of: workspace.gridCharts(state.charts, list: state.list), zoom: layout == .all ? allZoom : customZoom, broker: broker)
+        if state.list == .colored, let closeUpZoom = workspace.closeUpZoom {
+            workspace.resetViews(of: state.charts.filter { workspace.closeUpChartIDs.contains($0.id) }, zoom: closeUpZoom, broker: broker)
+        }
+    }
+
     /// The Zoom slider moved, or a swipe moved it (that zoomed the charts already, see `zoomChartsWindow`).
     private func zoomMoved(to zoom: Double) {
         if state.swipedZoom == zoom {
@@ -562,7 +586,7 @@ struct SecondaryChartsView: View {
 
     /// Sets every chart's default zoom for the current view and zooms them to it.
     private func applyZoom() {
-        workspace.setZoom(layout == .all ? allZoom : customZoom, of: state.charts, broker: broker)
+        workspace.setZoom(layout == .all ? allZoom : customZoom, of: workspace.gridCharts(state.charts, list: state.list), broker: broker)
     }
 
     private func start() {
@@ -590,6 +614,17 @@ struct SecondaryChartsView: View {
     /// Fills the charts not set by hand with the top gainers, as many as there are cells left around
     /// the ones set by hand; the other charts are emptied.
     private func syncWithGainers() {
+        // The Colored list: the tickers given a color, each with its close-up (see `ColoredLayout`); charts set by hand
+        // don't keep their cells here.
+        if state.list == .colored {
+            let symbols = workspace.coloredSymbols
+            let plan = ColoredLayout.plan(forex: symbols.filter(ForexPair.isForex), stocks: symbols.filter { !ForexPair.isForex($0) },
+                                          rowColumns: Array(repeating: columns, count: rows))
+            let ordered = coloredOrder.compactMap { id in state.charts.first { $0.id == id } }
+            let charts = ordered + state.charts.filter { !coloredOrder.contains($0.id) }
+            coloredOrder = workspace.layOutColored(charts, plan: plan, timeframe: masterTimeframe, broker: broker).map(\.id)
+            return
+        }
         let pins = state.pins
         // Less the stocks the charts set by hand replaced.
         let displaced = Set(pins.keys.compactMap { state.displaced[$0] })
@@ -614,6 +649,9 @@ struct SecondaryChartsView: View {
 
     /// The charts in grid order: one set by hand in its own cell, the others in gainer rank order around them.
     private var items: [ChartModel] {
+        if state.list == .colored, !coloredOrder.isEmpty {
+            return coloredOrder.compactMap { id in state.charts.first { $0.id == id } }
+        }
         let pins = state.pins
         let pinned = Dictionary(pins.map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         var rest = workspace.ranked(state.charts.filter { pins[$0.id] == nil }, by: lastGainers)[...]

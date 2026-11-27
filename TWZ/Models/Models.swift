@@ -723,6 +723,8 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
     /// top `activeCount` stocks in its last charts; the main window, the stocks given a color, then the stocks
     /// (see `SecondaryChartsView.syncWithGainers`, `Workspace.mainGridSymbols`).
     case forexActive = "Forex + Active"
+    /// The tickers given a color, each as its chart and a 5m close-up beside it (see `ColoredLayout`). Not an IB scan.
+    case colored = "Colored"
     var id: String { rawValue }
 
     /// Charts a Charts window gives Most Active $'s stocks on Forex + Active, of the `slots` following its list:
@@ -749,7 +751,7 @@ nonisolated enum ScannerKind: String, CaseIterable, Codable, Identifiable {
         case .losers: "TOP_PERC_LOSE"
         case .afterHours: "TOP_AFTER_HOURS_PERC_GAIN"
         case .dollarVolume, .forexActive: "MOST_ACTIVE_USD"
-        case .forex: ""
+        case .forex, .colored: ""
         }
     }
 
