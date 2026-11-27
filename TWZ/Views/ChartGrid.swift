@@ -129,7 +129,10 @@ struct ChartGrid: View {
         }
         .onChange(of: forexByRange) { broker.setForexByRange(forexByRange, owner: MainGrid.scannerOwner) }
         // A list's load button, or Reset: the grid's scanner follows.
-        .onChange(of: workspace.gridScan) { broker.setScanner(scan, owner: MainGrid.scannerOwner) }
+        .onChange(of: workspace.gridScan) { old, new in
+            broker.setScanner(scan, owner: MainGrid.scannerOwner)
+            if old?.kind == .colored, new?.kind != .colored { workspace.leaveColored(workspace.mainCharts, timeframe: timeframe, broker: broker) }
+        }
         .onChange(of: [columns, rows]) {
             workspace.arrangeMainGrid(columns: columns, rows: rows, gainers: gainers, broker: broker)
             follow()
@@ -140,7 +143,13 @@ struct ChartGrid: View {
         .onChange(of: workspace.gainerResets) {
             follow()
             workspace.setMainTimeframe(timeframe, broker: broker)
-            workspace.resetViews(of: workspace.mainCharts, zoom: zoom, broker: broker, timeframe: timeframe)
+            workspace.resetViews(of: workspace.gridCharts(workspace.mainCharts, list: workspace.gridScan?.kind), zoom: zoom,
+                                 broker: broker, timeframe: timeframe)
+            // The Colored list's close-ups back to their own zoom.
+            if workspace.gridScan?.kind == .colored, let closeUpZoom = workspace.closeUpZoom {
+                workspace.resetViews(of: workspace.mainCharts.filter { workspace.closeUpChartIDs.contains($0.id) },
+                                     zoom: closeUpZoom, broker: broker)
+            }
         }
         .onChange(of: zoom) { old, new in
             // A swipe has zoomed the charts already (see `Workspace.zoomGrid`).
@@ -148,7 +157,7 @@ struct ChartGrid: View {
                 workspace.swipedGridZoom = nil
                 return
             }
-            workspace.setZoom(new, of: workspace.mainCharts, broker: broker, from: old)
+            workspace.setZoom(new, of: workspace.gridCharts(workspace.mainCharts, list: workspace.gridScan?.kind), broker: broker, from: old)
         }
         .onChange(of: workspace.gridScale(workspace.activeScale)) { workspace.syncGridScale(to: broker) }
         .onChange(of: workspace.manualZoom) { workspace.syncGridScale(to: broker) }
@@ -172,6 +181,7 @@ struct ChartGrid: View {
     }
 
     private func follow() {
+        if workspace.gridScan?.kind == .colored { return workspace.followColored(timeframe: timeframe, broker: broker) }
         workspace.followGainers(gainers, timeframe: timeframe, broker: broker)
     }
 
@@ -292,12 +302,17 @@ extension Workspace {
         broker.setScanner(spec, owner: MainGrid.scannerOwner)
         manualChartIDs = []
         handDisplaced = [:]
+        if spec.kind == .colored {
+            closeUpZoom = closeUpStartZoom(fallback: mainCharts.first?.defaultVisibleBars ?? ChartModel.initialVisibleBars)
+            return followColored(timeframe: timeframe, broker: broker)
+        }
         followGainers(mainGridSymbols(symbols, kind: spec.kind), timeframe: timeframe, broker: broker)
     }
 
     /// The symbols the main grid follows from its list's rows: on Forex + Active, the stocks and pairs given a color
     /// (in the colors' order), then the list's stocks; any other list's rows as they are.
     func mainGridSymbols(_ rows: [String], kind: ScannerKind?) -> [String] {
+        if kind == .colored { return coloredSymbols }
         guard kind == .forexActive else { return rows }
         let colored = StockColor.allCases.compactMap { color in stockColors.first { $0.value == color }?.key }
         return colored + rows.filter { !ForexPair.isForex($0) && !colored.contains($0) }
@@ -315,6 +330,10 @@ extension Workspace {
     /// The account bar's timeframe: every chart takes it, whatever its own switch was set to, but a
     /// chart showing the same stock as one that showed it first takes the other of 1m / 5m.
     func setMainTimeframe(_ timeframe: Timeframe, broker: Broker) {
+        // The Colored list's close-ups stay on 5m.
+        if gridScan?.kind == .colored {
+            return setTimeframe(timeframe, of: gridCharts(mainCharts, list: .colored), broker: broker)
+        }
         var shown: Set<String> = []
         for chart in mainCells.compactMap(chart(id:)).sorted(by: { $0.loadOrder < $1.loadOrder }) {
             let isSecond = !chart.symbol.isEmpty && !shown.insert(chart.symbol).inserted
@@ -382,25 +401,39 @@ extension Workspace {
     /// to all the bars the grid's charts have loaded (older ones load as the view reaches them), never
     /// jumping in from further out. The new zoom, for the Zoom slider.
     func zoomGrid(by factor: Double, from chart: ChartModel, sliderZoom: Double, broker: Broker) -> Double {
-        let split = gridScan?.kind == .forexActive
-        let shown = zoomSide(of: mainCells.compactMap(self.chart(id:)), from: chart, split: split)
+        let list = gridScan?.kind
+        let shown = zoomSide(of: mainCells.compactMap(self.chart(id:)), from: chart, list: list)
         let base = !GridZoom.resetsAdjusted && chart.adjustedByHand
             ? shown.first { !$0.adjustedByHand && !$0.symbol.isEmpty }?.visibleBars ?? sliderZoom
             : chart.visibleBars
         guard base > 0 else { return sliderZoom }
         let most = shown.map { Double($0.bars.count) }.max() ?? 0
         let zoom = min(max(ChartModel.maxVisibleBars, most, base), max(15, base * factor))
-        setZoom(zoom, of: zoomSide(of: mainCharts, from: chart, split: split), broker: broker, by: zoom / base)
+        setZoom(zoom, of: zoomSide(of: mainCharts, from: chart, list: list), broker: broker, by: zoom / base)
+        // The Colored list's close-ups zoom apart from the slider.
+        if list == .colored, closeUpChartIDs.contains(chart.id) {
+            closeUpZoom = zoom
+            return sliderZoom
+        }
         if zoom != sliderZoom { swipedGridZoom = zoom }
         return zoom
     }
 
-    /// The charts a swipe on `chart` zooms: all of `charts`; or on Forex + Active (`split`), the pairs when it shows
-    /// one, else the stocks (a chart showing nothing goes with neither).
-    func zoomSide(of charts: [ChartModel], from chart: ChartModel, split: Bool) -> [ChartModel] {
-        guard split, !chart.symbol.isEmpty else { return charts }
-        let forex = ForexPair.isForex(chart.symbol)
-        return charts.filter { !$0.symbol.isEmpty && ForexPair.isForex($0.symbol) == forex }
+    /// The charts a swipe or drag on `chart` zooms or moves, on `list`: all of `charts`; on Forex + Active, the pairs
+    /// when it shows one, else the stocks; on Colored, the close-ups when it's one, else the other charts (a chart
+    /// showing nothing goes with neither).
+    func zoomSide(of charts: [ChartModel], from chart: ChartModel, list: ScannerKind?) -> [ChartModel] {
+        guard !chart.symbol.isEmpty else { return charts }
+        switch list {
+        case .forexActive?:
+            let forex = ForexPair.isForex(chart.symbol)
+            return charts.filter { !$0.symbol.isEmpty && ForexPair.isForex($0.symbol) == forex }
+        case .colored?:
+            let closeUp = closeUpChartIDs.contains(chart.id)
+            return charts.filter { !$0.symbol.isEmpty && closeUpChartIDs.contains($0.id) == closeUp }
+        default:
+            return charts
+        }
     }
 
     /// Tells the broker what main charts loading now go by: the grid's list (each keeps its own views),
@@ -484,8 +517,8 @@ extension Workspace {
             ? bars[min(bars.count - 1, max(0, Int((Double(bars.count) - source.scrollBack).rounded()) - 1))].time : nil
         let win = sameWindow ? ChartsWin.of(chartID: source.id) : nil
         // On Forex + Active, only the pairs or only the stocks, as the source is one (see `zoomSide`).
-        let split = win.map { chartsWindow($0).list == .forexActive } ?? (gridScan?.kind == .forexActive)
-        let charts = zoomSide(of: win.map { chartsWindow($0).charts } ?? mainCells.compactMap(chart(id:)), from: source, split: split)
+        let list = win.map { chartsWindow($0).list } ?? gridScan?.kind
+        let charts = zoomSide(of: win.map { chartsWindow($0).charts } ?? mainCells.compactMap(chart(id:)), from: source, list: list)
         for chart in charts where chart !== source && !chart.symbol.isEmpty {
             let ratio = ChartScale.barRatio(from: source.timeframe, to: chart.timeframe)
             chart.visibleBars = min(max(ChartModel.maxVisibleBars, Double(chart.bars.count)), max(15, source.visibleBars * ratio))
