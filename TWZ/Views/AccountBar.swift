@@ -75,7 +75,7 @@ struct AccountBar: View {
                         GridLayoutButtons(window: .main, showsIcon: false)
                     }
                     if workspace.gridScan?.kind == .forex { MainForexButtons() }
-                    ColoredColorsButton()
+                    ColoredColorsButton(list: workspace.gridScan?.kind ?? .gainers)
                 }
                 .fixedSize()
             }

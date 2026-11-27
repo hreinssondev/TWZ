@@ -496,7 +496,7 @@ struct SecondaryChartsView: View {
                 GridLayoutButtons(window: win.layoutWindow, showsIcon: false)
             }
             if state.list == .forex { forexButtons }
-            ColoredColorsButton()
+            ColoredColorsButton(list: state.list)
             // A failed scanner isn't retried, so the charts would sit on its last list without this.
             if let error = broker.scans[win.scannerOwner]?.error {
                 Text(error).font(.system(size: 11)).foregroundStyle(.red).lineLimit(1).help(error)

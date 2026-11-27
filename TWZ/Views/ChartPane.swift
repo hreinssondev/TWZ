@@ -550,7 +550,7 @@ struct ChartHeaderInfo: View {
 struct ChartOutline: View {
     @Environment(Workspace.self) private var workspace
     @AppStorage(SelectedOutline.widthKey) private var outlineWidth = SelectedOutline.defaultWidth
-    @AppStorage(ColoredColorsButton.hidesKey) private var coloredHidesColors = false
+    @AppStorage(ColoredColorsButton.hiddenKey) private var colorsHiddenLists = ""
     let chart: ChartModel
 
     private var isSelected: Bool { workspace.isChartSelected && workspace.selectedChartID == chart.id }
@@ -564,15 +564,13 @@ struct ChartOutline: View {
         return colored && showsTarget && ChartsWin.of(chartID: workspace.selectedChartID) == win
     }
 
-    /// Its ticker's color, if it's outlined in it: none while the top bar's Colors is off; on the Colored list only the
-    /// ticker's own chart is, not its close-up.
+    /// Its ticker's color, if it's outlined in it: none while its view's (list's) Colors is off in the top bar; on the
+    /// Colored list only the ticker's own chart is, not its close-up.
     private var mark: Color? {
-        if coloredHidesColors { return nil }
         let win = ChartsWin.of(chartID: chart.id)
-        if win.map({ workspace.chartsWindow($0).list == .colored }) ?? (workspace.gridScan?.kind == .colored),
-           workspace.closeUpChartIDs.contains(chart.id) {
-            return nil
-        }
+        let list = win.map { workspace.chartsWindow($0).list } ?? workspace.gridScan?.kind ?? .gainers
+        if ColoredColorsButton.hides(list, in: colorsHiddenLists) { return nil }
+        if list == .colored, workspace.closeUpChartIDs.contains(chart.id) { return nil }
         return workspace.stockColors[chart.symbol]?.color
     }
 
