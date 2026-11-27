@@ -248,7 +248,7 @@ struct CandleChart: View {
     private var showSlowSMA: Bool { ChartSettings.shared.values.showSlowSMA }
     private var showTrades: Bool { ChartSettings.shared.values.showTrades }
     private var indicatorWidth: Double { ChartSettings.shared.values.indicatorWidth }
-    private var axisFontSize: Double { ChartSettings.shared.values.axisFontSize }
+    private var axisFontSize: Double { ChartSettings.shared.values.forWindow(chart.windowIndex).axisFontSize }
     private var labelSpacing: Double { ChartSettings.shared.values.labelSpacing }
     private var lastPriceOpacity: Double { ChartSettings.shared.values.lastPriceOpacity }
     /// The settings above are read once for every chart (see `ChartSettings`).

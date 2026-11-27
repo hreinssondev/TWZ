@@ -83,7 +83,8 @@ nonisolated struct ChartFrame {
     var axisWidth: CGFloat { Self.axisWidth(fontSize: settings.axisWidthFontSize) }
     /// The axis labels' size: a Charts window's own (see `ChartsAxisText`), else Settings' price axis size.
     var axisLabelSize: Double { settings.axisLabelSize ?? axisFontSize }
-    static func axisWidth(fontSize: Double) -> CGFloat { max(58, (fontSize * 5.8).rounded()) }
+    /// As wide as the text on it needs: narrower with smaller text, down to 30 pt.
+    static func axisWidth(fontSize: Double) -> CGFloat { max(30, (fontSize * 5.8).rounded()) }
     /// Height of the price boxes on the axis.
     var tagHeight: CGFloat { axisFontSize + 6 }
     static let timeAxisHeight: CGFloat = 16

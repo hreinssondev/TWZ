@@ -253,6 +253,8 @@ final class ChartSettings {
             guard let look = windowAxis[window] else { return self }
             var values = self
             values.axisLabelSize = look.size
+            // The axis follows its text's size: the price boxes on it too, and its width (see `ChartFrame.axisWidth`).
+            if let size = look.size { values.axisFontSize = size }
             values.axisLabelBrightness = look.brightness
             if let spacing = look.spacing { values.labelSpacing = spacing }
             return values
