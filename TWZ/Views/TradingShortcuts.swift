@@ -157,11 +157,10 @@ struct TradingShortcuts: ViewModifier {
                         }
                         return nil
                     }
-                    // ⌘⇧⌫ takes the selected chart's ⌃-click what-if off (as ⌘A and ⌘⌫ also do).
+                    // ⌘⇧⌫: as ⌘A, the selected chart's orders cancelled and its ⌃-click what-if taken off.
                     if modifiers == [.command, .shift], inMainWindow, event.keyCode == 51 {
                         if event.window?.firstResponder is NSTextView { return event }
-                        let symbol = workspace.targetSymbol
-                        if symbol.isEmpty || workspace.whatIfs.removeValue(forKey: symbol) == nil { NSSound.beep() }
+                        if !event.isARepeat { cancelSymbolOrders() }
                         return nil
                     }
                     // ⇧R (outside a text field), ⌥R, ⌃R or ⌘⇧R: the top bar's Reset, as ⌘R.
@@ -465,9 +464,10 @@ struct TradingShortcuts: ViewModifier {
                         workspace.setMainTimeframe(timeframe, broker: broker)
                         return nil
                     }
-                    // Hyper A or Hyper ⌫ (⌃⌥⇧⌘, Raycast's Caps Lock say, and A or ⌫): as ⌘A, also while typing.
-                    if modifiers == [.command, .option, .control, .shift], inMainWindow,
-                       event.keyCode == 51 || event.charactersIgnoringModifiers?.lowercased() == "a" {
+                    // Hyper A or Hyper ⌫ (⌃⌥⇧⌘, Raycast's Caps Lock say, and A or ⌫), or ⌘⌥A: as ⌘A, also while typing.
+                    if inMainWindow, modifiers == [.command, .option, .control, .shift]
+                        && (event.keyCode == 51 || event.charactersIgnoringModifiers?.lowercased() == "a")
+                        || modifiers == [.command, .option] && event.keyCode == 0 {
                         if !event.isARepeat { cancelSymbolOrders() }
                         return nil
                     }
@@ -593,12 +593,15 @@ extension KeyShortcut {
         if command, option, control, shift, k == "a" || keyCode == 51 {
             return "\(display) cancels the symbol's orders, as ⌘A"
         }
+        if command, option, !control, !shift, k == "a" {
+            return "⌘⌥A cancels the symbol's orders, as ⌘A"
+        }
         if command, !option, !control {
             if keyCode == 36 || keyCode == 76 {
                 return shift ? "⌘⇧↩ sends the selected hotkey" : "⌘↩ keeps the selected chart's tick-by-tick on or off"
             }
             if k == "a" { return "⌘A cancels the symbol's orders" }
-            if keyCode == 51 { return shift ? "⌘⇧⌫ removes the what-if" : "⌘⌫ closes the position" }
+            if keyCode == 51 { return shift ? "⌘⇧⌫ cancels the symbol's orders, as ⌘A" : "⌘⌫ closes the position" }
             if k == "z" { return "⌘Z cancels the last order" }
             if k == "r" { return "⌘R gives every chart the selected chart's view" }
             if ["q", "w", "h", "m", ",", "c", "v", "x"].contains(k) { return "\(display) is a standard macOS shortcut" }
