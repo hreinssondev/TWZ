@@ -131,7 +131,7 @@ final class ChartsWindowState {
     /// The next Reset on the Colored list: only the close-ups (true) or only the other charts (false), as the pointer
     /// was over one or the other when it was asked for; nil: all of them.
     @ObservationIgnored var resetsCloseUps: Bool?
-    /// The Forex list's second page (its top bar's 2/2, or ⌘→): the pairs past those the grid has room for.
+    /// The Forex list's second page (its top bar's 2/2, or ⌘↓): the pairs past those the grid has room for.
     var forexShowsRest = false
     /// The list and timeframe shown before, which ´ goes back to (see `noteView`).
     @ObservationIgnored var previousView: Workspace.GridView?
@@ -576,7 +576,7 @@ struct SecondaryChartsView: View {
         .padding(.vertical, 6)
         // Whole points, so the charts under it start on a whole pixel (see `SplitGrid`).
         .frame(height: headerHeight.rounded())
-        // 1/2 ↔ 2/2, from its button or ⌘← / ⌘→; 1D / 5D / %, from theirs or ⌘↑ / ⌘↓.
+        // 1/2 ↔ 2/2, from its button or ⌘↑ / ⌘↓; 1D / 5D / %, from theirs or ⌘← / ⌘→.
         .onChange(of: state.forexShowsRest) { lastGainers = []; syncWithGainers() }
         .onChange(of: [forexByRange, forexByDay, forexByVol]) { syncForexRange() }
         // A ticker given a color or its color taken off: the Colored list follows.
