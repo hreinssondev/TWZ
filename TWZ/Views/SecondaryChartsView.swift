@@ -177,7 +177,10 @@ extension Workspace {
         }
         let shown = Set(charts.map(\.symbol))
         var incoming = top.filter { !shown.contains($0) }[...]
-        for chart in charts where !top.contains(chart.symbol) {
+        // A symbol shown twice (a Colored list's close-up left behind, say) keeps only its first chart.
+        var kept: Set<String> = []
+        for chart in charts {
+            if top.contains(chart.symbol), kept.insert(chart.symbol).inserted { continue }
             if let symbol = incoming.popFirst() {
                 load(symbol, into: chart, broker: broker)
             } else {

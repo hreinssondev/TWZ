@@ -142,10 +142,14 @@ extension Workspace {
         return placed.compactMap { $0 }
     }
 
-    /// Leaving the Colored list: its close-ups among `charts` go back to `timeframe`, as charts like the others.
+    /// Leaving the Colored list: its close-ups among `charts` are emptied and go back to `timeframe`, for the next
+    /// list to fill as it does the others (only the Colored list shows a ticker twice).
     func leaveColored(_ charts: [ChartModel], timeframe: Timeframe, broker: Broker) {
         let closeUps = charts.filter { closeUpChartIDs.contains($0.id) }
-        for chart in closeUps { closeUpChartIDs.remove(chart.id) }
+        for chart in closeUps {
+            closeUpChartIDs.remove(chart.id)
+            clear(chart, broker: broker)
+        }
         setTimeframe(timeframe, of: closeUps, broker: broker)
     }
 
